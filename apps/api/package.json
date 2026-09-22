@@ -1,0 +1,28 @@
+{
+  "name": "@course-manager/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/dev.mjs",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "db:migrate": "node dist/db/migrate.js"
+  },
+  "dependencies": {
+    "@course-manager/application": "workspace:*",
+    "@course-manager/contracts": "workspace:*",
+    "@course-manager/domain": "workspace:*",
+    "fastify": "^5.12.5",
+    "jose": "^6.2.12",
+    "pg": "^8.23.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@course-manager/storage": "workspace:*",
+    "@electric-sql/pglite": "^0.5.8",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15"
+  }
+}

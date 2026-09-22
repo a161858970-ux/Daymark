@@ -1,0 +1,322 @@
+import { useState, type FormEvent } from "react";
+import {
+  preprocessCapture,
+  type ManualCaptureResolution,
+} from "@course-manager/application";
+import type { Course, RawCapture } from "@course-manager/domain";
+import { fromLocalInput, toLocalInput } from "./timeInputs.js";
+import type { CaptureInterpretation } from "./authSync.js";
+
+interface Props {
+  capture: RawCapture;
+  courses: Course[];
+  contextCourseId: string | null;
+  onResolve(
+    resolution: ManualCaptureResolution,
+    keepOne?: boolean,
+  ): Promise<void>;
+  onSplit(
+    resolutions: Extract<ManualCaptureResolution, { kind: "ITEM" }>[],
+  ): Promise<void>;
+  onInterpret?: (() => Promise<CaptureInterpretation>) | undefined;
+  onDefer(): Promise<void>;
+  onDelete(): Promise<void>;
+}
+
+export function PendingCapture({
+  capture,
+  courses,
+  contextCourseId,
+  onResolve,
+  onSplit,
+  onInterpret,
+  onDefer,
+  onDelete,
+}: Props) {
+  const splitCandidates = preprocessCapture({
+    rawText: capture.raw_text,
+    source: capture.source,
+    contextCourseId,
+    courses,
+  }).splitCandidates;
+  const [kind, setKind] = useState<
+    "ITEM" | "COURSE_INFORMATION" | "SPLIT" | null
+  >(null);
+  const [splitTitles, setSplitTitles] = useState(splitCandidates);
+  const [courseId, setCourseId] = useState(contextCourseId ?? "");
+  const [title, setTitle] = useState(capture.raw_text.trim());
+  const [detail, setDetail] = useState("");
+  const [startAt, setStartAt] = useState("");
+  const [occurrenceStartAt, setOccurrenceStartAt] = useState("");
+  const [occurrenceEndAt, setOccurrenceEndAt] = useState("");
+  const [dueAt, setDueAt] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [suggestion, setSuggestion] = useState<string | null>(null);
+
+  async function interpret() {
+    if (!onInterpret || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await onInterpret();
+      setSuggestion(
+        result.uncertainty ??
+          (result.classification === "MULTI_ITEM_CANDIDATE"
+            ? "这条记录可能包含多个事项。"
+            : "请核对下面的内容。"),
+      );
+      if (result.course_candidate) {
+        const matches = courses.filter(
+          (course) => course.name === result.course_candidate,
+        );
+        if (matches.length === 1) setCourseId(matches[0]!.id);
+      }
+      if (result.classification === "MULTI_ITEM_CANDIDATE") {
+        setSplitTitles(result.split_candidates);
+      } else if (result.classification === "ITEM") {
+        setTitle(result.title ?? capture.raw_text.trim());
+        setDetail(result.detail ?? "");
+        setStartAt(toLocalInput(result.start_at));
+        setOccurrenceStartAt(toLocalInput(result.occurrence_start_at));
+        setOccurrenceEndAt(toLocalInput(result.occurrence_end_at));
+        setDueAt(toLocalInput(result.due_at));
+        setKind("ITEM");
+      } else if (result.classification === "COURSE_INFORMATION") {
+        setTitle(result.course_information ?? capture.raw_text.trim());
+        setKind("COURSE_INFORMATION");
+      }
+    } catch (cause) {
+      setError(String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!kind || busy) return;
+    setError(null);
+    if (kind === "SPLIT") {
+      setBusy(true);
+      try {
+        await onSplit(
+          splitTitles.map((part) => ({
+            kind: "ITEM",
+            title: part.trim(),
+            detail: null,
+            course_id: courseId || null,
+            start_at: null,
+            occurrence_start_at: null,
+            occurrence_end_at: null,
+            due_at: null,
+            reminder_level: "NORMAL",
+          })),
+        );
+      } catch (cause) {
+        setError(String(cause));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    if (
+      kind === "ITEM" &&
+      capture.unresolved_reason === "需要确认时间语义" &&
+      !startAt &&
+      !occurrenceStartAt &&
+      !dueAt
+    ) {
+      setError("请确认这条记录对应的时间，或暂不处理。");
+      return;
+    }
+    if (kind === "COURSE_INFORMATION" && !courseId) {
+      setError("课程信息需要选择一门课程。");
+      return;
+    }
+    setBusy(true);
+    try {
+      const resolution: ManualCaptureResolution =
+        kind === "ITEM"
+          ? {
+              kind,
+              title: title.trim(),
+              detail: detail.trim() || null,
+              course_id: courseId || null,
+              start_at: fromLocalInput(startAt),
+              occurrence_start_at: fromLocalInput(occurrenceStartAt),
+              occurrence_end_at: fromLocalInput(occurrenceEndAt),
+              due_at: fromLocalInput(dueAt),
+              reminder_level: "NORMAL",
+            }
+          : { kind, course_id: courseId, content: title.trim() };
+      await onResolve(resolution, kind === "ITEM" && splitTitles.length > 1);
+    } catch (cause) {
+      setError(String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="pending-row">
+      <p>{capture.raw_text}</p>
+      <small>{capture.unresolved_reason}</small>
+      {suggestion && <p className="capture-suggestion">{suggestion}</p>}
+      {!kind ? (
+        <div className="pending-actions">
+          <button type="button" onClick={() => setKind("ITEM")}>
+            {splitTitles.length > 1 ? "保持一条事项" : "记为事项"}
+          </button>
+          {splitTitles.length > 1 && (
+            <button type="button" onClick={() => setKind("SPLIT")}>
+              拆为 {splitTitles.length} 条事项
+            </button>
+          )}
+          <button
+            type="button"
+            className="quiet-button"
+            onClick={() => setKind("COURSE_INFORMATION")}
+          >
+            记为课程信息
+          </button>
+          {onInterpret && (
+            <button
+              type="button"
+              className="quiet-button"
+              disabled={busy}
+              onClick={() => void interpret()}
+            >
+              尝试智能整理
+            </button>
+          )}
+        </div>
+      ) : (
+        <form
+          className="pending-resolution"
+          onSubmit={(event) => void submit(event)}
+        >
+          {kind === "SPLIT" ? (
+            splitTitles.map((part, index) => (
+              <label key={index}>
+                事项 {index + 1}
+                <input
+                  value={part}
+                  onChange={(event) =>
+                    setSplitTitles((previous) =>
+                      previous.map((value, position) =>
+                        position === index ? event.target.value : value,
+                      ),
+                    )
+                  }
+                  required
+                />
+              </label>
+            ))
+          ) : (
+            <label>
+              {kind === "ITEM" ? "事项标题" : "课程信息"}
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                required
+              />
+            </label>
+          )}
+          <label>
+            课程
+            <select
+              value={courseId}
+              onChange={(event) => setCourseId(event.target.value)}
+            >
+              <option value="">
+                {kind === "COURSE_INFORMATION" ? "请选择课程" : "无课程"}
+              </option>
+              {courses.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {kind === "ITEM" && (
+            <>
+              <label>
+                开始时间
+                <input
+                  type="datetime-local"
+                  value={startAt}
+                  onChange={(event) => setStartAt(event.target.value)}
+                />
+              </label>
+              <label>
+                发生开始
+                <input
+                  type="datetime-local"
+                  value={occurrenceStartAt}
+                  onChange={(event) => setOccurrenceStartAt(event.target.value)}
+                />
+              </label>
+              <label>
+                发生结束
+                <input
+                  type="datetime-local"
+                  value={occurrenceEndAt}
+                  onChange={(event) => setOccurrenceEndAt(event.target.value)}
+                />
+              </label>
+              <label>
+                截止时间
+                <input
+                  type="datetime-local"
+                  value={dueAt}
+                  onChange={(event) => setDueAt(event.target.value)}
+                />
+              </label>
+              <label>
+                补充内容
+                <textarea
+                  value={detail}
+                  onChange={(event) => setDetail(event.target.value)}
+                />
+              </label>
+            </>
+          )}
+          <div className="pending-actions">
+            <button type="submit" disabled={busy}>
+              确认保存
+            </button>
+            <button
+              type="button"
+              className="quiet-button"
+              onClick={() => setKind(null)}
+            >
+              返回
+            </button>
+          </div>
+        </form>
+      )}
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="pending-actions">
+        <button
+          type="button"
+          className="text-button"
+          onClick={() => void onDefer()}
+        >
+          暂不处理
+        </button>
+        <button
+          type="button"
+          className="text-button danger"
+          onClick={() => void onDelete()}
+        >
+          删除记录
+        </button>
+      </div>
+    </div>
+  );
+}

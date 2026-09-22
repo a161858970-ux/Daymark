@@ -1,0 +1,590 @@
+import "fake-indexeddb/auto";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  CourseManager,
+  preprocessCapture,
+  type Runtime,
+} from "@course-manager/application";
+import {
+  projectItemToCalendar,
+  semesterWeekForDate,
+} from "@course-manager/domain";
+import { CourseManagerDb, DexieLocalRepository } from "./index.js";
+
+const databases: CourseManagerDb[] = [];
+
+function setup() {
+  const name = `course-manager-test-${crypto.randomUUID()}`;
+  const db = new CourseManagerDb(name);
+  databases.push(db);
+  const repo = new DexieLocalRepository(db);
+  let time = "2026-09-22T08:00:00.000Z";
+  const runtime: Runtime = { now: () => time, id: () => crypto.randomUUID() };
+  return {
+    name,
+    db,
+    repo,
+    manager: new CourseManager(repo, runtime),
+    setTime: (value: string) => {
+      time = value;
+    },
+  };
+}
+
+afterEach(async () => {
+  for (const db of databases.splice(0)) {
+    db.close();
+    await db.delete();
+  }
+});
+
+it("preprocesses clear input without changing raw text or asking AI", () => {
+  const rawText = "  找学姐要笔记   ";
+  expect(
+    preprocessCapture({
+      rawText,
+      source: "QUICK_CAPTURE",
+      contextCourseId: null,
+      courses: [],
+    }),
+  ).toMatchObject({ classification: "ITEM", title: "找学姐要笔记" });
+  expect(rawText).toBe("  找学姐要笔记   ");
+  expect(
+    preprocessCapture({
+      rawText: "找学姐要笔记，提交报告",
+      source: "QUICK_CAPTURE",
+      contextCourseId: null,
+      courses: [],
+    }),
+  ).toMatchObject({
+    classification: "UNRESOLVED",
+    unresolvedReason: "可能包含多个事项",
+    splitCandidates: ["找学姐要笔记", "提交报告"],
+  });
+  const course = {
+    id: crypto.randomUUID(),
+    owner_id: crypto.randomUUID(),
+    semester_id: null,
+    name: "环境经济学",
+    instructor: null,
+    created_at: "2026-09-22T08:00:00.000Z",
+    updated_at: "2026-09-22T08:00:00.000Z",
+    deleted_at: null,
+    row_version: 1,
+  };
+  expect(
+    preprocessCapture({
+      rawText: "老师说下周讲第三章",
+      source: "COURSE_INFORMATION",
+      contextCourseId: course.id,
+      courses: [course],
+    }),
+  ).toMatchObject({ classification: "COURSE_INFORMATION" });
+});
+
+it("keeps one or splits only according to the recorded user decision", async () => {
+  const { manager, repo, db } = setup();
+  const one = await manager.capture("找学姐要笔记，提交报告");
+  expect(await manager.processClearCapture(one.id)).toBeNull();
+  const singleResolution = {
+    kind: "ITEM" as const,
+    title: one.raw_text,
+    detail: null,
+    course_id: null,
+    start_at: null,
+    occurrence_start_at: null,
+    occurrence_end_at: null,
+    due_at: null,
+    reminder_level: "NORMAL" as const,
+  };
+  const single = await manager.resolveRawCapture(
+    one.id,
+    singleResolution,
+    "KEEP_ONE",
+  );
+  expect(single.raw_capture_id).toBe(one.id);
+  expect(await repo.listOutputs(one.id)).toHaveLength(1);
+  expect((await repo.listDecisions(one.id)).at(-1)?.decision_type).toBe(
+    "KEEP_ONE",
+  );
+
+  const splitRaw = await manager.capture("找学姐要笔记，提交报告");
+  expect(await manager.processClearCapture(splitRaw.id)).toBeNull();
+  const resolutions = [
+    { ...singleResolution, title: "找学姐要笔记" },
+    { ...singleResolution, title: "提交报告" },
+  ];
+  const items = await manager.resolveSplitCapture(splitRaw.id, resolutions);
+  expect(items).toHaveLength(2);
+  expect(items.map((item) => item.raw_capture_id)).toEqual([
+    splitRaw.id,
+    splitRaw.id,
+  ]);
+  expect(await repo.listOutputs(splitRaw.id)).toHaveLength(2);
+  expect((await repo.listDecisions(splitRaw.id)).at(-1)?.decision_type).toBe(
+    "SPLIT",
+  );
+  expect(
+    (await manager.resolveSplitCapture(splitRaw.id, resolutions)).map(
+      (item) => item.id,
+    ),
+  ).toEqual(items.map((item) => item.id));
+  expect(await db.items.count()).toBe(3);
+  await expect(
+    manager.resolveSplitCapture(splitRaw.id, [...resolutions].reverse()),
+  ).rejects.toThrow("already been resolved");
+});
+
+describe("local-first persistence and Item identity", () => {
+  it("requires an explicit Course deletion strategy and preserves RawCapture", async () => {
+    const { manager, repo, db } = setup();
+    const keepCourse = await manager.createCourse("统计学");
+    const keepRaw = await manager.capture(
+      "准备讲稿",
+      "COURSE_ITEM",
+      keepCourse.id,
+    );
+    const keepItem = await manager.processClearCapture(keepRaw.id);
+    await expect(
+      manager.deleteCourseWithStrategy(
+        keepCourse.id,
+        "UNLINK_ASSOCIATED_ITEMS",
+        [],
+      ),
+    ).rejects.toThrow(/items changed/);
+    const unlinked = await manager.deleteCourseWithStrategy(
+      keepCourse.id,
+      "UNLINK_ASSOCIATED_ITEMS",
+      [keepItem!.id],
+    );
+    expect(unlinked.items[0]).toMatchObject({
+      id: keepItem!.id,
+      course_id: null,
+      deleted_at: null,
+    });
+    expect(
+      (await manager.listCourses()).some(
+        (course) => course.id === keepCourse.id,
+      ),
+    ).toBe(false);
+    expect(
+      (await manager.overview("2026-09-22", "2026-09-22T08:00:00Z")).map(
+        (item) => item.id,
+      ),
+    ).toContain(keepItem!.id);
+    expect((await repo.getRawCapture(keepRaw.id))?.raw_text).toBe("准备讲稿");
+
+    const removeCourse = await manager.createCourse("经济法");
+    const removeRaw = await manager.capture(
+      "交论文",
+      "COURSE_ITEM",
+      removeCourse.id,
+    );
+    const removeItem = await manager.processClearCapture(removeRaw.id);
+    const deleted = await manager.deleteCourseWithStrategy(
+      removeCourse.id,
+      "DELETE_ASSOCIATED_ITEMS",
+      [removeItem!.id],
+    );
+    expect(deleted.items[0]?.deleted_at).not.toBeNull();
+    expect(
+      (await manager.overview("2026-09-22", "2026-09-22T08:00:00Z")).map(
+        (item) => item.id,
+      ),
+    ).not.toContain(removeItem!.id);
+    expect((await repo.getRawCapture(removeRaw.id))?.raw_text).toBe("交论文");
+    expect(
+      (await new DexieLocalRepository(db).pendingMutations()).filter(
+        (value) =>
+          value.entity_type === "COURSE" && value.operation === "DELETE",
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("replaces CourseSchedule atomically without projecting classes into Calendar", async () => {
+    const { manager, db } = setup();
+    const course = await manager.createCourse("统计学");
+    const fields = {
+      weekday: 3,
+      start_time: "14:00",
+      end_time: "15:40",
+      week_start: 1,
+      week_end: 13,
+      classroom: "101",
+      stage_label: null,
+    };
+    const [first] = await manager.replaceCourseSchedules(course.id, [fields]);
+    expect(first).toMatchObject({
+      course_id: course.id,
+      start_time: "14:00:00",
+    });
+    expect(await manager.calendarItems()).toEqual([]);
+    await expect(
+      manager.replaceCourseSchedules(course.id, [
+        { ...fields, end_time: "13:00" },
+      ]),
+    ).rejects.toThrow(/schedule/);
+    expect(
+      (await manager.courseSchedules(course.id)).map((value) => value.id),
+    ).toEqual([first!.id]);
+    const [second] = await manager.replaceCourseSchedules(course.id, [
+      { ...fields, weekday: 4 },
+    ]);
+    expect(
+      (await manager.courseSchedules(course.id)).map((value) => value.id),
+    ).toEqual([second!.id]);
+    expect(
+      (await db.course_schedules.get(first!.id))?.deleted_at,
+    ).not.toBeNull();
+    expect(await manager.calendarItems()).toEqual([]);
+    expect(
+      (await new DexieLocalRepository(db).pendingMutations())
+        .filter((value) => value.entity_type === "COURSE_SCHEDULE")
+        .map((value) => value.operation),
+    ).toEqual(["CREATE", "DELETE", "CREATE"]);
+  });
+
+  it("binds Courses to active Semester and keeps historical completed Items out of daily Overview", async () => {
+    const { manager } = setup();
+    const spring = await manager.createSemester(
+      "2026 春季学期",
+      "2026-02-01",
+      "2026-06-30",
+    );
+    const autumn = await manager.createSemester(
+      "2026 秋季学期",
+      "2026-09-01",
+      "2026-12-31",
+    );
+    const current = await manager.createCourse("环境经济学");
+    const prior = await manager.createCourse("经济法", spring.id);
+    expect(current.semester_id).toBe(autumn.id);
+    expect(prior.semester_id).toBe(spring.id);
+    const currentRaw = await manager.capture(
+      "找学姐要笔记",
+      "COURSE_ITEM",
+      current.id,
+    );
+    const currentItem = await manager.processClearCapture(currentRaw.id);
+    const priorRaw = await manager.capture("交论文", "COURSE_ITEM", prior.id);
+    const priorItem = await manager.processClearCapture(priorRaw.id);
+    const oldDoneRaw = await manager.capture("看教材", "COURSE_ITEM", prior.id);
+    const oldDone = await manager.processClearCapture(oldDoneRaw.id);
+    await manager.completeItem(oldDone!.id);
+    const freeRaw = await manager.capture("整理文件");
+    const freeItem = await manager.processClearCapture(freeRaw.id);
+    const daily = await manager.overview("2026-09-22", "2026-09-22T08:00:00Z");
+    expect(daily.map((item) => item.id)).toEqual(
+      expect.arrayContaining([currentItem!.id, priorItem!.id, freeItem!.id]),
+    );
+    expect(daily.map((item) => item.id)).not.toContain(oldDone!.id);
+    const historical = await manager.overview(
+      "2026-09-22",
+      "2026-09-22T08:00:00Z",
+      spring.id,
+    );
+    expect(historical.map((item) => item.id)).toEqual(
+      expect.arrayContaining([priorItem!.id, oldDone!.id, freeItem!.id]),
+    );
+    expect(historical.map((item) => item.id)).not.toContain(currentItem!.id);
+    const weeks = await manager.replaceSemesterWeeks(autumn.id, [
+      { week_number: 1, start_date: "2026-09-01", end_date: "2026-09-06" },
+      { week_number: 2, start_date: "2026-09-07", end_date: "2026-09-13" },
+    ]);
+    expect(semesterWeekForDate("2026-09-08", autumn.id, weeks)).toBe(2);
+    await expect(
+      manager.replaceSemesterWeeks(autumn.id, [
+        { week_number: 1, start_date: "2026-09-01", end_date: "2026-09-08" },
+        { week_number: 2, start_date: "2026-09-08", end_date: "2026-09-14" },
+      ]),
+    ).rejects.toThrow(/week mapping/);
+  });
+
+  it("requires explicit same-course confirmation before inheriting prior CourseInformation", async () => {
+    const { manager } = setup();
+    const older = await manager.createSemester(
+      "2025 秋季",
+      "2025-09-01",
+      "2025-12-31",
+    );
+    const previous = await manager.createSemester(
+      "2026 春季",
+      "2026-02-01",
+      "2026-06-30",
+    );
+    const current = await manager.createSemester(
+      "2026 秋季",
+      "2026-09-01",
+      "2026-12-31",
+    );
+    await manager.createCourse("环境经济学", older.id);
+    const prior = await manager.createCourse("环境经济学", previous.id);
+    await manager.addCourseInformation(prior.id, "教材是第四版");
+    const raw = await manager.capture("找学姐要笔记", "COURSE_ITEM", prior.id);
+    await manager.processClearCapture(raw.id);
+    expect(
+      (await manager.priorCourseCandidate("环境经济学", current.id))?.id,
+    ).toBe(prior.id);
+    expect(await manager.priorCourseCandidate("经济法", current.id)).toBeNull();
+    const separate = await manager.createCourse("环境经济学", current.id);
+    expect(await manager.courseInformation(separate.id)).toEqual([]);
+    const inherited = await manager.createCourseWithInheritance(
+      "环境经济学",
+      current.id,
+      prior.id,
+    );
+    expect(inherited.id).not.toBe(prior.id);
+    expect(
+      (await manager.courseInformation(inherited.id)).map(
+        (value) => value.content,
+      ),
+    ).toEqual(["教材是第四版"]);
+    expect(
+      await manager.courseItems(inherited.id, "2026-09-22T08:00:00Z"),
+    ).toEqual([]);
+    await expect(
+      manager.createCourseWithInheritance("经济法", current.id, prior.id),
+    ).rejects.toThrow(/candidate/);
+  });
+  it("commits original RawCapture before processing and survives reopen", async () => {
+    const { name, db, repo, manager } = setup();
+    const rawText = "  找学姐要环境经济学笔记  ";
+    const capture = await manager.capture(rawText);
+    expect((await repo.getRawCapture(capture.id))?.raw_text).toBe(rawText);
+    expect(await db.outbox_mutations.count()).toBe(1);
+
+    db.close();
+    const reopened = new CourseManagerDb(name);
+    databases.push(reopened);
+    const reopenedRepo = new DexieLocalRepository(reopened);
+    expect((await reopenedRepo.getRawCapture(capture.id))?.raw_text).toBe(
+      rawText,
+    );
+    const processed = await new CourseManager(reopenedRepo).processClearCapture(
+      capture.id,
+    );
+    expect(processed?.status).toBe("INCOMPLETE");
+    expect(
+      (await reopenedRepo.listOutputs(capture.id)).map(
+        (output) => output.object_id,
+      ),
+    ).toEqual([processed?.id]);
+    expect((await reopenedRepo.getRawCapture(capture.id))?.raw_text).toBe(
+      rawText,
+    );
+    expect(
+      (await new CourseManager(reopenedRepo).processClearCapture(capture.id))
+        ?.id,
+    ).toBe(processed?.id);
+    expect(await reopenedRepo.listOutputs(capture.id)).toHaveLength(1);
+  });
+
+  it("uses one Item across Overview and Course and keeps raw provenance after edit/delete", async () => {
+    const { repo, manager } = setup();
+    const course = await manager.createCourse("环境经济学");
+    const capture = await manager.capture("找学姐要笔记", "COURSE_ITEM");
+    const created = await manager.processClearCapture(capture.id, course.id);
+    expect(created).not.toBeNull();
+    const item = created!;
+    expect(
+      (await manager.overview("2026-09-22", "2026-09-22T08:00:00.000Z")).map(
+        (value) => value.id,
+      ),
+    ).toContain(item.id);
+    expect(
+      (await manager.courseItems(course.id, "2026-09-22T08:00:00.000Z")).map(
+        (value) => value.id,
+      ),
+    ).toContain(item.id);
+    const edited = await manager.updateItem(item.id, {
+      title: "找学姐要课程笔记",
+    });
+    expect(edited.id).toBe(item.id);
+    expect(edited.created_at).toBe(item.created_at);
+    expect((await repo.getRawCapture(capture.id))?.raw_text).toBe(
+      "找学姐要笔记",
+    );
+
+    const timed = await manager.updateItem(item.id, {
+      start_at: "2026-09-23T08:00:00Z",
+      due_at: "2026-09-27T12:00:00Z",
+    });
+    expect(projectItemToCalendar(timed)).toEqual({
+      item_id: item.id,
+      start: "2026-09-23T08:00:00Z",
+      end: "2026-09-27T12:00:00Z",
+      kind: "RANGE",
+    });
+
+    const completed = await manager.completeItem(item.id);
+    expect(completed.status).toBe("COMPLETE");
+    expect(
+      (await manager.courseItems(course.id, "2026-09-22T08:00:00.000Z")).find(
+        (value) => value.id === item.id,
+      )?.status,
+    ).toBe("COMPLETE");
+    const deleted = await manager.deleteItem(item.id);
+    expect(
+      (await manager.overview("2026-09-22", "2026-09-22T08:00:00.000Z")).some(
+        (value) => value.id === item.id,
+      ),
+    ).toBe(false);
+    expect((await repo.getRawCapture(capture.id))?.raw_text).toBe(
+      "找学姐要笔记",
+    );
+    const restored = await manager.undoDelete(item.id, deleted.token);
+    expect(restored.id).toBe(item.id);
+    expect(restored.status).toBe("COMPLETE");
+    await expect(manager.undoDelete(item.id, deleted.token)).rejects.toThrow();
+  });
+
+  it("rejects delete Undo after the bounded window", async () => {
+    const { manager, setTime } = setup();
+    const capture = await manager.capture("准备讲稿");
+    const item = await manager.processClearCapture(capture.id);
+    const deleted = await manager.deleteItem(item!.id);
+    setTime("2026-09-22T08:00:11.000Z");
+    await expect(manager.undoDelete(item!.id, deleted.token)).rejects.toThrow(
+      "expired",
+    );
+  });
+
+  it("keeps time-bearing or uncertain text as unresolved RawCapture instead of dropping facts", async () => {
+    const { manager, repo } = setup();
+    const capture = await manager.capture("提交课程报告，9月28日前");
+    expect(await manager.processClearCapture(capture.id)).toBeNull();
+    expect(
+      (await manager.unresolvedCaptures()).map((value) => value.id),
+    ).toEqual([capture.id]);
+    expect(await repo.listOutputs(capture.id)).toHaveLength(0);
+    await manager.deleteUnresolvedCapture(capture.id);
+    expect(await manager.unresolvedCaptures()).toHaveLength(0);
+  });
+
+  it("stores course information independently of Item status and preserves edits", async () => {
+    const { manager, db } = setup();
+    const course = await manager.createCourse("环境经济学");
+    const information = await manager.addCourseInformation(
+      course.id,
+      "期末会画重点",
+    );
+    expect(
+      (await manager.courseInformation(course.id)).map(
+        (value) => value.content,
+      ),
+    ).toEqual(["期末会画重点"]);
+    expect(await db.items.count()).toBe(0);
+    await manager.updateCourseInformation(information.id, "期末考试会画重点");
+    expect((await manager.courseInformation(course.id))[0]?.content).toBe(
+      "期末考试会画重点",
+    );
+    await manager.deleteCourseInformation(information.id);
+    expect(await manager.courseInformation(course.id)).toHaveLength(0);
+    expect(
+      (await db.course_information.get(information.id))?.deleted_at,
+    ).not.toBeNull();
+  });
+
+  it("uses a unique exact course name in quick capture and asks when multiple course instances match", async () => {
+    const { manager } = setup();
+    const course = await manager.createCourse("环境经济学");
+    const first = await manager.capture("环境经济学，准备讲稿");
+    const item = await manager.processClearCapture(first.id);
+    expect(item?.course_id).toBe(course.id);
+    expect(item?.title).toBe("准备讲稿");
+    await manager.createCourse("环境经济学");
+    const second = await manager.capture("环境经济学，准备论文");
+    expect(await manager.processClearCapture(second.id)).toBeNull();
+    expect(
+      (await manager.unresolvedCaptures()).find(
+        (value) => value.id === second.id,
+      )?.unresolved_reason,
+    ).toBe("需要确认所属课程");
+  });
+
+  it("classifies clear course information without creating an Item", async () => {
+    const { manager, db, repo } = setup();
+    const course = await manager.createCourse("环境经济学");
+    const raw = await manager.capture("环境经济学，老师说期末会画重点");
+    const output = await manager.processClearCapture(raw.id);
+    expect(output).toMatchObject({
+      course_id: course.id,
+      content: "老师说期末会画重点",
+    });
+    expect(await db.items.count()).toBe(0);
+    expect((await repo.listOutputs(raw.id))[0]).toMatchObject({
+      object_type: "COURSE_INFORMATION",
+      object_id: output?.id,
+    });
+    expect((await repo.getRawCapture(raw.id))?.raw_text).toBe(
+      "环境经济学，老师说期末会画重点",
+    );
+  });
+
+  it("honors the explicit Course Item entry point over wording that resembles information", async () => {
+    const { manager, db } = setup();
+    const course = await manager.createCourse("环境经济学");
+    const raw = await manager.capture(
+      "老师说期末会画重点",
+      "COURSE_ITEM",
+      course.id,
+    );
+    const output = await manager.processClearCapture(raw.id);
+    expect(output).toMatchObject({
+      course_id: course.id,
+      title: "老师说期末会画重点",
+      status: "INCOMPLETE",
+    });
+    expect(await db.course_information.count()).toBe(0);
+  });
+
+  it("resumes a course-context capture after a restart without guessing the course", async () => {
+    const { manager, db, name } = setup();
+    const course = await manager.createCourse("经济法");
+    const raw = await manager.capture("准备期末讲稿", "COURSE_ITEM", course.id);
+    db.close();
+    const reopened = new CourseManagerDb(name);
+    databases.push(reopened);
+    const resumed = new CourseManager(new DexieLocalRepository(reopened));
+    await resumed.recoverPendingCaptures();
+    expect((await reopened.items.toArray())[0]?.course_id).toBe(course.id);
+    expect((await reopened.raw_captures.get(raw.id))?.processing_status).toBe(
+      "RESOLVED",
+    );
+    await resumed.recoverPendingCaptures();
+    expect(await reopened.items.count()).toBe(1);
+  });
+
+  it("records a user's resolution and preserves time rather than inventing a date", async () => {
+    const { manager, db, repo } = setup();
+    const raw = await manager.capture("第四周前交作业");
+    expect(await manager.processClearCapture(raw.id)).toBeNull();
+    await manager.deferRawCapture(raw.id);
+    expect(await manager.unresolvedCaptures()).toHaveLength(1);
+    const item = await manager.resolveRawCapture(raw.id, {
+      kind: "ITEM",
+      title: "交作业",
+      detail: null,
+      course_id: null,
+      start_at: null,
+      occurrence_start_at: null,
+      occurrence_end_at: null,
+      due_at: "2026-10-09T12:00:00.000Z",
+      reminder_level: "NORMAL",
+    });
+    expect(item).toMatchObject({
+      title: "交作业",
+      due_at: "2026-10-09T12:00:00.000Z",
+      raw_capture_id: raw.id,
+    });
+    expect(await db.raw_capture_decisions.count()).toBe(2);
+    expect(await repo.listOutputs(raw.id)).toHaveLength(1);
+    await expect(
+      manager.resolveRawCapture(raw.id, {
+        kind: "COURSE_INFORMATION",
+        course_id: crypto.randomUUID(),
+        content: "重复",
+      }),
+    ).rejects.toThrow("already been resolved");
+  });
+});
