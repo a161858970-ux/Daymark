@@ -8,7 +8,9 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "db:migrate": "node dist/db/migrate.js"
+    "test:postgres": "vitest run src/db/real-postgres.integration.test.ts",
+    "db:migrate": "node dist/db/migrate.js",
+    "db:seed": "node dist/db/seed.js"
   },
   "dependencies": {
     "@course-manager/application": "workspace:*",

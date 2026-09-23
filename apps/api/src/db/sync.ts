@@ -14,14 +14,17 @@ import {
   type CloudDatabase,
   type QueryPort,
 } from "./cloud.js";
+import { CloudCollectionSync, isCollectionSyncType } from "./collections.js";
 
 export const syncMutationSchema = z.object({
   mutation_id: uuidSchema,
   entity_type: z.enum([
     "SEMESTER",
     "SEMESTER_WEEK",
+    "SEMESTER_WEEK_COLLECTION",
     "COURSE",
     "COURSE_SCHEDULE",
+    "COURSE_SCHEDULE_COLLECTION",
     "COURSE_INFORMATION",
     "ITEM",
     "ITEM_ASSOCIATION",
@@ -31,7 +34,7 @@ export const syncMutationSchema = z.object({
   ]),
   entity_id: uuidSchema,
   operation: z.enum(["CREATE", "UPDATE", "DELETE"]),
-  base_version: z.number().int().positive().nullable(),
+  base_version: z.number().int().nonnegative().nullable(),
   changed_fields: z.record(z.string(), z.unknown()),
 });
 export type SyncMutationInput = z.infer<typeof syncMutationSchema>;
@@ -58,6 +61,11 @@ const decisionSchema = z.object({
   decision_payload: z.record(z.string(), z.unknown()).nullable(),
   decided_at: isoDateTimeSchema,
   device_id: uuidSchema,
+});
+const associationSchema = z.object({
+  item_id_a: uuidSchema,
+  item_id_b: uuidSchema,
+  created_at: isoDateTimeSchema,
 });
 
 type PushResult =
@@ -97,8 +105,10 @@ async function insertLog(
 /** Sync creates retain client UUIDs. Authentication, not changed_fields.owner_id, defines ownership. */
 export class CloudSync {
   private readonly items: CloudCourseManager;
+  private readonly collections: CloudCollectionSync;
   constructor(private readonly db: CloudDatabase) {
     this.items = new CloudCourseManager(db);
+    this.collections = new CloudCollectionSync(db);
   }
 
   private async owned(
@@ -363,6 +373,38 @@ export class CloudSync {
             row = result.rows[0]?.value;
             break;
           }
+          case "ITEM_ASSOCIATION": {
+            const value = associationSchema.parse(input);
+            if (value.item_id_a === value.item_id_b)
+              throw new CloudError(
+                "VALIDATION_ERROR",
+                400,
+                "An Item cannot be associated with itself",
+              );
+            const [itemA, itemB] = [value.item_id_a, value.item_id_b].sort();
+            await this.owned(q, "items", itemA!, ownerId);
+            await this.owned(q, "items", itemB!, ownerId);
+            const duplicate = await q.query<{ id: string }>(
+              `SELECT id FROM item_associations WHERE owner_id=$1 AND item_id_a=$2
+               AND item_id_b=$3 AND deleted_at IS NULL`,
+              [ownerId, itemA, itemB],
+            );
+            if (duplicate.rows[0])
+              throw new CloudError(
+                "VALIDATION_ERROR",
+                409,
+                "These Items are already associated",
+              );
+            const result = await q.query<{ value: Record<string, unknown> }>(
+              `WITH inserted AS (INSERT INTO item_associations
+               (id,owner_id,item_id_a,item_id_b,created_at,deleted_at,row_version)
+               VALUES ($1,$2,$3,$4,$5,NULL,1) RETURNING *)
+               SELECT row_to_json(inserted) AS value FROM inserted`,
+              [id, ownerId, itemA, itemB, value.created_at],
+            );
+            row = result.rows[0]?.value;
+            break;
+          }
           case "RAW_CAPTURE_OUTPUT": {
             const value = outputSchema.parse(input);
             await this.owned(q, "raw_captures", value.raw_capture_id, ownerId);
@@ -449,6 +491,13 @@ export class CloudSync {
       ) {
         const prior = await lookup(this.db);
         if (prior) return prior;
+        throw new CloudError(
+          "VALIDATION_ERROR",
+          409,
+          mutation.entity_type === "ITEM_ASSOCIATION"
+            ? "These Items are already associated"
+            : "Entity already exists",
+        );
       }
       throw error;
     }
@@ -574,6 +623,167 @@ export class CloudSync {
         };
       }
       await q.query(
+        "INSERT INTO idempotency_keys (owner_id,mutation_id,request_hash,response) VALUES ($1,$2,$3,$4::jsonb)",
+        [ownerId, mutation.mutation_id, hash, JSON.stringify(response)],
+      );
+      return response;
+    });
+  }
+
+  private async changeAcademicEntity(
+    ownerId: string,
+    mutation: SyncMutationInput,
+  ): Promise<PushResult> {
+    if (mutation.operation !== "UPDATE")
+      throw new CloudError(
+        "VALIDATION_ERROR",
+        400,
+        "This academic object only supports sync updates",
+      );
+    const baseVersion = mutation.base_version;
+    if (baseVersion === null || baseVersion < 1)
+      throw new CloudError(
+        "VALIDATION_ERROR",
+        400,
+        "Academic update needs a base version",
+      );
+    const semesterPatch = z
+      .object({
+        name: z.string().trim().min(1).optional(),
+        start_date: dateOnlySchema.optional(),
+        end_date: dateOnlySchema.optional(),
+      })
+      .strict();
+    const coursePatch = createCourseSchema.partial().strict();
+    const input = (
+      mutation.entity_type === "SEMESTER" ? semesterPatch : coursePatch
+    ).parse(mutation.changed_fields) as Record<string, unknown>;
+    const keys = Object.keys(input);
+    if (!keys.length)
+      throw new CloudError(
+        "VALIDATION_ERROR",
+        400,
+        "No academic fields changed",
+      );
+    const table = mutation.entity_type === "SEMESTER" ? "semesters" : "courses";
+    const hash = createHash("sha256")
+      .update(JSON.stringify(mutation))
+      .digest("hex");
+    return this.db.transaction(async (query) => {
+      const prior = await query.query<IdempotencyRow>(
+        "SELECT request_hash,response FROM idempotency_keys WHERE owner_id=$1 AND mutation_id=$2",
+        [ownerId, mutation.mutation_id],
+      );
+      if (prior.rows[0]) {
+        if (prior.rows[0].request_hash !== hash)
+          throw new CloudError(
+            "IDEMPOTENCY_REPLAY",
+            409,
+            "Mutation ID was used for different data",
+          );
+        return prior.rows[0].response;
+      }
+      const found = await query.query<{ value: Record<string, unknown> }>(
+        `SELECT row_to_json(e) AS value FROM ${table} e WHERE id=$1 AND owner_id=$2 FOR UPDATE`,
+        [mutation.entity_id, ownerId],
+      );
+      const current = found.rows[0]?.value;
+      if (!current || current.deleted_at)
+        throw new CloudError("NOT_FOUND", 404, "Academic object not found");
+      if (baseVersion > Number(current.row_version))
+        throw new CloudError(
+          "VALIDATION_ERROR",
+          400,
+          "Base version is newer than the stored object",
+        );
+      const same = keys.every((key) => current[key] === input[key]);
+      let response: PushResult;
+      if (same) {
+        response = {
+          mutation_id: mutation.mutation_id,
+          result: "ACK",
+          entity_version: Number(current.row_version),
+        };
+      } else {
+        const changedSinceBase = await query.query<{
+          changed_fields: Record<string, unknown>;
+        }>(
+          `SELECT changed_fields FROM change_log WHERE owner_id=$1 AND entity_type=$2
+           AND entity_id=$3 AND entity_version>$4 ORDER BY entity_version`,
+          [ownerId, mutation.entity_type, mutation.entity_id, baseVersion],
+        );
+        const remoteFields = new Set(
+          changedSinceBase.rows.flatMap((entry) =>
+            Object.keys(entry.changed_fields ?? {}),
+          ),
+        );
+        const conflicting =
+          Number(current.row_version) === baseVersion
+            ? []
+            : keys.filter((key) => remoteFields.has(key));
+        if (conflicting.length) {
+          const conflictId = randomUUID();
+          await query.query(
+            `INSERT INTO sync_conflicts
+             (id,owner_id,entity_type,entity_id,local_version,remote_version,
+              conflicting_fields,status,created_at)
+             VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,'OPEN',now())`,
+            [
+              conflictId,
+              ownerId,
+              mutation.entity_type,
+              mutation.entity_id,
+              JSON.stringify({ base_version: baseVersion, ...input }),
+              JSON.stringify(current),
+              JSON.stringify(conflicting),
+            ],
+          );
+          response = {
+            mutation_id: mutation.mutation_id,
+            result: "CONFLICT",
+            conflict_id: conflictId,
+          };
+        } else {
+          const merged = { ...current, ...input };
+          if (mutation.entity_type === "SEMESTER") {
+            if (String(merged.start_date) > String(merged.end_date))
+              throw new CloudError(
+                "VALIDATION_ERROR",
+                400,
+                "Invalid Semester dates",
+              );
+          } else if (merged.semester_id) {
+            const semester = await query.query<{ id: string }>(
+              "SELECT id FROM semesters WHERE id=$1 AND owner_id=$2 AND deleted_at IS NULL",
+              [merged.semester_id, ownerId],
+            );
+            if (!semester.rows[0])
+              throw new CloudError("NOT_FOUND", 404, "Semester not found");
+          }
+          const assignments = keys.map((key, index) => `${key}=$${index + 3}`);
+          assignments.push("updated_at=now()", "row_version=row_version+1");
+          const updated = await query.query<{ value: Record<string, unknown> }>(
+            `WITH changed AS (UPDATE ${table} SET ${assignments.join(",")}
+             WHERE id=$1 AND owner_id=$2 RETURNING *)
+             SELECT row_to_json(changed) AS value FROM changed`,
+            [mutation.entity_id, ownerId, ...keys.map((key) => input[key])],
+          );
+          const value = updated.rows[0]!.value;
+          await insertLog(
+            query,
+            ownerId,
+            mutation,
+            input,
+            Number(value.row_version),
+          );
+          response = {
+            mutation_id: mutation.mutation_id,
+            result: "ACK",
+            entity_version: Number(value.row_version),
+          };
+        }
+      }
+      await query.query(
         "INSERT INTO idempotency_keys (owner_id,mutation_id,request_hash,response) VALUES ($1,$2,$3,$4::jsonb)",
         [ownerId, mutation.mutation_id, hash, JSON.stringify(response)],
       );
@@ -741,7 +951,7 @@ export class CloudSync {
       .strict()
       .parse(mutation.changed_fields);
     const base = mutation.base_version;
-    if (base === null)
+    if (base === null || base < 1)
       throw new CloudError(
         "VALIDATION_ERROR",
         400,
@@ -798,10 +1008,85 @@ export class CloudSync {
     });
   }
 
+  private async deleteAssociation(
+    ownerId: string,
+    mutation: SyncMutationInput,
+  ): Promise<PushResult> {
+    const input = z
+      .object({ deleted_at: isoDateTimeSchema })
+      .strict()
+      .parse(mutation.changed_fields);
+    if (mutation.base_version === null || mutation.base_version < 1)
+      throw new CloudError(
+        "VALIDATION_ERROR",
+        400,
+        "Association deletion needs a base version",
+      );
+    const hash = createHash("sha256")
+      .update(JSON.stringify(mutation))
+      .digest("hex");
+    return this.db.transaction(async (q) => {
+      const previous = await q.query<IdempotencyRow>(
+        "SELECT request_hash,response FROM idempotency_keys WHERE owner_id=$1 AND mutation_id=$2",
+        [ownerId, mutation.mutation_id],
+      );
+      if (previous.rows[0]) {
+        if (previous.rows[0].request_hash !== hash)
+          throw new CloudError(
+            "IDEMPOTENCY_REPLAY",
+            409,
+            "Mutation ID was used for different data",
+          );
+        return previous.rows[0].response;
+      }
+      const found = await q.query<{
+        value: Record<string, unknown>;
+      }>(
+        "SELECT row_to_json(a) AS value FROM item_associations a WHERE id=$1 AND owner_id=$2 FOR UPDATE",
+        [mutation.entity_id, ownerId],
+      );
+      const current = found.rows[0]?.value;
+      if (!current)
+        throw new CloudError("NOT_FOUND", 404, "Item association not found");
+      let version = Number(current.row_version);
+      if (!current.deleted_at) {
+        if (version !== mutation.base_version)
+          throw new CloudError(
+            "VERSION_CONFLICT",
+            409,
+            "Item association changed on another device",
+          );
+        const changed = await q.query<{ value: Record<string, unknown> }>(
+          `WITH updated AS (UPDATE item_associations SET deleted_at=$3,
+           row_version=row_version+1 WHERE id=$1 AND owner_id=$2 RETURNING *)
+           SELECT row_to_json(updated) AS value FROM updated`,
+          [mutation.entity_id, ownerId, input.deleted_at],
+        );
+        version = Number(changed.rows[0]!.value.row_version);
+        await insertLog(q, ownerId, mutation, changed.rows[0]!.value, version);
+      }
+      const response: PushResult = {
+        mutation_id: mutation.mutation_id,
+        result: "ACK",
+        entity_version: version,
+      };
+      await q.query(
+        "INSERT INTO idempotency_keys (owner_id,mutation_id,request_hash,response) VALUES ($1,$2,$3,$4::jsonb)",
+        [ownerId, mutation.mutation_id, hash, JSON.stringify(response)],
+      );
+      return response;
+    });
+  }
+
   async pushOne(
     ownerId: string,
     mutation: SyncMutationInput,
   ): Promise<PushResult> {
+    if (isCollectionSyncType(mutation.entity_type))
+      return this.collections.replace(ownerId, {
+        ...mutation,
+        entity_type: mutation.entity_type,
+      });
     if (mutation.operation === "CREATE") {
       if (mutation.base_version !== null)
         throw new CloudError(
@@ -821,8 +1106,13 @@ export class CloudSync {
       mutation.operation === "DELETE"
     )
       return this.deleteCourseSchedule(ownerId, mutation);
+    if (
+      mutation.entity_type === "ITEM_ASSOCIATION" &&
+      mutation.operation === "DELETE"
+    )
+      return this.deleteAssociation(ownerId, mutation);
     const base = mutation.base_version;
-    if (base === null)
+    if (base === null || base < 1)
       throw new CloudError(
         "VALIDATION_ERROR",
         400,
@@ -863,6 +1153,11 @@ export class CloudSync {
     }
     if (mutation.entity_type === "RAW_CAPTURE")
       return this.changeRawCapture(ownerId, mutation);
+    if (
+      mutation.entity_type === "SEMESTER" ||
+      mutation.entity_type === "COURSE"
+    )
+      return this.changeAcademicEntity(ownerId, mutation);
     if (mutation.entity_type === "COURSE_INFORMATION")
       return this.changeInformation(ownerId, mutation);
     if (mutation.entity_type !== "ITEM")

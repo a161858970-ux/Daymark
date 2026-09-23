@@ -3,12 +3,14 @@ import type {
   CourseInformation,
   CourseSchedule,
   Item,
+  ItemAssociation,
   OutboxMutation,
   RawCapture,
   RawCaptureDecision,
   RawCaptureOutput,
   Semester,
   SemesterWeek,
+  SyncEntityType,
 } from "@course-manager/domain";
 
 export interface DeleteUndoRecord {
@@ -40,6 +42,9 @@ export interface LocalRepository {
   getItem(id: string): Promise<Item | undefined>;
   listItems(): Promise<Item[]>;
   putItem(item: Item): Promise<void>;
+  getItemAssociation(id: string): Promise<ItemAssociation | undefined>;
+  listItemAssociations(itemId: string): Promise<ItemAssociation[]>;
+  putItemAssociation(association: ItemAssociation): Promise<void>;
   getCourse(id: string): Promise<Course | undefined>;
   listCourses(): Promise<Course[]>;
   putCourse(course: Course): Promise<void>;
@@ -54,6 +59,7 @@ export interface LocalRepository {
   getCourseInformation(id: string): Promise<CourseInformation | undefined>;
   listCourseInformation(courseId: string): Promise<CourseInformation[]>;
   putCourseInformation(value: CourseInformation): Promise<void>;
+  knownSyncVersion(type: SyncEntityType, id: string): Promise<number | null>;
   putOutbox(mutation: OutboxMutation): Promise<void>;
   getDeleteUndo(itemId: string): Promise<DeleteUndoRecord | undefined>;
   putDeleteUndo(record: DeleteUndoRecord): Promise<void>;

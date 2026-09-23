@@ -8,6 +8,7 @@ import {
 import {
   projectItemToCalendar,
   semesterWeekForDate,
+  type Item,
 } from "@course-manager/domain";
 import { CourseManagerDb, DexieLocalRepository } from "./index.js";
 
@@ -237,11 +238,21 @@ describe("local-first persistence and Item identity", () => {
       (await db.course_schedules.get(first!.id))?.deleted_at,
     ).not.toBeNull();
     expect(await manager.calendarItems()).toEqual([]);
-    expect(
-      (await new DexieLocalRepository(db).pendingMutations())
-        .filter((value) => value.entity_type === "COURSE_SCHEDULE")
-        .map((value) => value.operation),
-    ).toEqual(["CREATE", "DELETE", "CREATE"]);
+    const replacements = (
+      await new DexieLocalRepository(db).pendingMutations()
+    ).filter((value) => value.entity_type === "COURSE_SCHEDULE_COLLECTION");
+    expect(replacements.map((value) => value.operation)).toEqual([
+      "UPDATE",
+      "UPDATE",
+    ]);
+    expect(replacements[0]?.changed_fields).toMatchObject({
+      previous_collection: [],
+      collection: [{ id: first!.id, course_id: course.id }],
+    });
+    expect(replacements[1]?.changed_fields).toMatchObject({
+      previous_collection: [{ id: first!.id, course_id: course.id }],
+      collection: [{ id: second!.id, course_id: course.id }],
+    });
   });
 
   it("binds Courses to active Semester and keeps historical completed Items out of daily Overview", async () => {
@@ -483,6 +494,41 @@ describe("local-first persistence and Item identity", () => {
     expect(
       (await db.course_information.get(information.id))?.deleted_at,
     ).not.toBeNull();
+  });
+
+  it("creates, lists and deletes a symmetric Item association without state propagation", async () => {
+    const { manager, repo } = setup();
+    const firstRaw = await manager.capture("准备课堂演讲");
+    const secondRaw = await manager.capture("准备演讲幻灯片");
+    const first = await manager.processClearCapture(firstRaw.id);
+    const second = await manager.processClearCapture(secondRaw.id);
+    expect(first && "status" in first ? first : null).toBeTruthy();
+    expect(second && "status" in second ? second : null).toBeTruthy();
+    const association = await manager.associateItems(
+      (second as Item).id,
+      (first as Item).id,
+    );
+    expect(association.item_id_a < association.item_id_b).toBe(true);
+    expect(
+      await manager.associateItems((first as Item).id, (second as Item).id),
+    ).toEqual(association);
+    expect(await manager.itemAssociations((first as Item).id)).toEqual([
+      association,
+    ]);
+    await manager.completeItem((first as Item).id);
+    expect((await manager.getItem((second as Item).id))?.status).toBe(
+      "INCOMPLETE",
+    );
+    await manager.deleteItemAssociation(association.id);
+    expect(await manager.itemAssociations((first as Item).id)).toEqual([]);
+    expect((await manager.getItem((first as Item).id))?.status).toBe(
+      "COMPLETE",
+    );
+    expect(
+      (await repo.pendingMutations())
+        .filter((value) => value.entity_type === "ITEM_ASSOCIATION")
+        .map((value) => value.operation),
+    ).toEqual(["CREATE", "DELETE"]);
   });
 
   it("uses a unique exact course name in quick capture and asks when multiple course instances match", async () => {

@@ -7,6 +7,7 @@ import type {
   SemesterWeek,
 } from "@course-manager/domain";
 import { CloudError, type CloudDatabase, type QueryPort } from "./cloud.js";
+import { recordExternalCollectionReplacement } from "./collections.js";
 
 export const semesterInputSchema = z.object({
   name: z.string().trim().min(1),
@@ -273,12 +274,10 @@ export class CloudAcademicManager {
             );
           numbers.add(week.week_number);
         }
-        const old = await q.query<{ id: string; semester_id: string }>(
+        await q.query(
           "DELETE FROM semester_weeks WHERE owner_id=$1 AND semester_id=$2 RETURNING id,semester_id",
           [ownerId, semesterId],
         );
-        for (const value of old.rows)
-          await log(q, ownerId, "SEMESTER_WEEK", value.id, "DELETE", value, 2);
         const created: SemesterWeek[] = [];
         for (const week of sorted) {
           const id = randomUUID();
@@ -296,8 +295,13 @@ export class CloudAcademicManager {
           );
           const value = inserted.rows[0]!.value;
           created.push(value);
-          await log(q, ownerId, "SEMESTER_WEEK", id, "CREATE", value, 1);
         }
+        await recordExternalCollectionReplacement(
+          q,
+          ownerId,
+          "SEMESTER_WEEK_COLLECTION",
+          semesterId,
+        );
         return created;
       },
     );
@@ -351,21 +355,11 @@ export class CloudAcademicManager {
               "Invalid course schedule",
             );
         }
-        const old = await q.query<{ value: CourseSchedule }>(
+        await q.query(
           `WITH changed AS (UPDATE course_schedules SET deleted_at=now(),updated_at=now(),row_version=row_version+1
          WHERE owner_id=$1 AND course_id=$2 AND deleted_at IS NULL RETURNING *) SELECT row_to_json(changed) AS value FROM changed`,
           [ownerId, courseId],
         );
-        for (const entry of old.rows)
-          await log(
-            q,
-            ownerId,
-            "COURSE_SCHEDULE",
-            entry.value.id,
-            "DELETE",
-            entry.value,
-            Number(entry.value.row_version),
-          );
         const created: CourseSchedule[] = [];
         for (const schedule of schedules) {
           const id = randomUUID();
@@ -389,8 +383,13 @@ export class CloudAcademicManager {
           );
           const value = result.rows[0]!.value;
           created.push(value);
-          await log(q, ownerId, "COURSE_SCHEDULE", id, "CREATE", value, 1);
         }
+        await recordExternalCollectionReplacement(
+          q,
+          ownerId,
+          "COURSE_SCHEDULE_COLLECTION",
+          courseId,
+        );
         return created;
       },
     );

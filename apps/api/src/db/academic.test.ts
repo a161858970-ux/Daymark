@@ -17,6 +17,13 @@ it("serves owner-scoped Semester weeks and atomic Course schedules on the canoni
     new URL("../../../../backend/migrations/001_initial.sql", import.meta.url),
   );
   await db.exec(await readFile(migration, "utf8"));
+  const collectionMigration = fileURLToPath(
+    new URL(
+      "../../../../backend/migrations/002_collection_sync.sql",
+      import.meta.url,
+    ),
+  );
+  await db.exec(await readFile(collectionMigration, "utf8"));
   const port: CloudDatabase = {
     query: async (sql, params) => db.query(sql, params),
     transaction: (work) =>
@@ -219,9 +226,14 @@ it("serves owner-scoped Semester weeks and atomic Course schedules on the canoni
       changes
         .json()
         .data.some(
-          (entry: { entity_type: string; operation: string }) =>
-            entry.entity_type === "COURSE_SCHEDULE" &&
-            entry.operation === "DELETE",
+          (entry: {
+            entity_type: string;
+            operation: string;
+            changed_fields: { collection?: unknown[] };
+          }) =>
+            entry.entity_type === "COURSE_SCHEDULE_COLLECTION" &&
+            entry.operation === "UPDATE" &&
+            entry.changed_fields.collection?.length === 0,
         ),
     ).toBe(true);
   } finally {

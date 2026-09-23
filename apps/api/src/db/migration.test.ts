@@ -13,6 +13,13 @@ it("applies the canonical schema and enforces two-state Item and provenance cons
       ),
     );
     await db.exec(await readFile(path, "utf8"));
+    const collectionPath = fileURLToPath(
+      new URL(
+        "../../../../backend/migrations/002_collection_sync.sql",
+        import.meta.url,
+      ),
+    );
+    await db.exec(await readFile(collectionPath, "utf8"));
     const tables = await db.query<{ tablename: string }>(
       "SELECT tablename FROM pg_tables WHERE schemaname = 'public'",
     );
@@ -20,6 +27,7 @@ it("applies the canonical schema and enforces two-state Item and provenance cons
     expect(names).toContain("items");
     expect(names).toContain("raw_capture_outputs");
     expect(names).toContain("sync_conflicts");
+    expect(names).toContain("sync_collection_revisions");
 
     const owner = "11111111-1111-4111-8111-111111111111";
     const rawId = "22222222-2222-4222-8222-222222222222";

@@ -65,7 +65,7 @@ export interface Item extends EntityBase {
   raw_capture_id: UUID | null;
 }
 
-export interface ItemAssociation extends EntityBase {
+export interface ItemAssociation extends Omit<EntityBase, "updated_at"> {
   item_id_a: UUID;
   item_id_b: UUID;
 }
@@ -108,8 +108,10 @@ export interface RawCaptureDecision {
 export type SyncEntityType =
   | "SEMESTER"
   | "SEMESTER_WEEK"
+  | "SEMESTER_WEEK_COLLECTION"
   | "COURSE"
   | "COURSE_SCHEDULE"
+  | "COURSE_SCHEDULE_COLLECTION"
   | "COURSE_INFORMATION"
   | "ITEM"
   | "ITEM_ASSOCIATION"
@@ -142,4 +144,16 @@ export interface SyncConflict {
   status: "OPEN" | "RESOLVED";
   created_at: IsoDateTime;
   resolved_at: IsoDateTime | null;
+}
+
+export interface SyncRepairDecision {
+  id: UUID;
+  owner_id: UUID;
+  mutation_id: UUID;
+  action: "RETRY_CURRENT" | "ABANDON_TO_SYNCED";
+  replacement_mutation_id: UUID | null;
+  superseded_mutation_ids: UUID[];
+  previous_error: string;
+  decided_at: IsoDateTime;
+  device_id: UUID;
 }

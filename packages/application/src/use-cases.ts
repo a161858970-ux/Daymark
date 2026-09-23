@@ -3,6 +3,7 @@ import type {
   CourseInformation,
   CourseSchedule,
   Item,
+  ItemAssociation,
   OutboxMutation,
   RawCapture,
   RawCaptureDecision,
@@ -709,6 +710,47 @@ export class CourseManager {
       );
   }
 
+  async updateSemester(
+    id: string,
+    fields: Partial<Pick<Semester, "name" | "start_date" | "end_date">>,
+  ): Promise<Semester> {
+    const semester = await this.repo.getSemester(id);
+    if (!semester || semester.deleted_at) throw new Error("Semester not found");
+    if (!Object.keys(fields).length)
+      throw new Error("No Semester fields changed");
+    const next: Semester = {
+      ...semester,
+      ...fields,
+      name: fields.name?.trim() ?? semester.name,
+      updated_at: this.runtime.now(),
+      row_version: semester.row_version + 1,
+    };
+    if (
+      !next.name ||
+      !validDateOnly(next.start_date) ||
+      !validDateOnly(next.end_date) ||
+      next.start_date > next.end_date
+    )
+      throw new Error("Invalid Semester");
+    const changed = Object.fromEntries(
+      Object.keys(fields).map((key) => [key, next[key as keyof Semester]]),
+    );
+    await this.repo.transaction(async () => {
+      await this.repo.putSemester(next);
+      await this.repo.putOutbox(
+        this.mutation(
+          semester.owner_id,
+          "SEMESTER",
+          semester.id,
+          "UPDATE",
+          semester.row_version,
+          changed,
+        ),
+      );
+    });
+    return next;
+  }
+
   async semesterWeeks(semesterId: string): Promise<SemesterWeek[]> {
     const semester = await this.repo.getSemester(semesterId);
     if (!semester || semester.deleted_at) throw new Error("Semester not found");
@@ -753,30 +795,38 @@ export class CourseManager {
     await this.repo.transaction(async () => {
       for (const week of old) {
         await this.repo.removeSemesterWeek(week.id);
-        await this.repo.putOutbox(
-          this.mutation(
-            semester.owner_id,
-            "SEMESTER_WEEK",
-            week.id,
-            "DELETE",
-            null,
-            { id: week.id },
-          ),
-        );
       }
       for (const week of result) {
         await this.repo.putSemesterWeek(week);
-        await this.repo.putOutbox(
-          this.mutation(
-            semester.owner_id,
-            "SEMESTER_WEEK",
-            week.id,
-            "CREATE",
-            null,
-            { ...week },
-          ),
-        );
       }
+      await this.repo.putOutbox(
+        this.mutation(
+          semester.owner_id,
+          "SEMESTER_WEEK_COLLECTION",
+          semesterId,
+          "UPDATE",
+          (await this.repo.knownSyncVersion(
+            "SEMESTER_WEEK_COLLECTION",
+            semesterId,
+          )) ?? 0,
+          {
+            previous_collection: old.map((week) => ({
+              id: week.id,
+              semester_id: week.semester_id,
+              week_number: week.week_number,
+              start_date: week.start_date,
+              end_date: week.end_date,
+            })),
+            collection: result.map((week) => ({
+              id: week.id,
+              semester_id: week.semester_id,
+              week_number: week.week_number,
+              start_date: week.start_date,
+              end_date: week.end_date,
+            })),
+          },
+        ),
+      );
     });
     return result;
   }
@@ -819,6 +869,50 @@ export class CourseManager {
       );
     });
     return course;
+  }
+
+  async updateCourse(
+    id: string,
+    fields: Partial<Pick<Course, "name" | "semester_id" | "instructor">>,
+  ): Promise<Course> {
+    const course = await this.repo.getCourse(id);
+    if (!course || course.deleted_at) throw new Error("Course not found");
+    if (!Object.keys(fields).length)
+      throw new Error("No Course fields changed");
+    const next: Course = {
+      ...course,
+      ...fields,
+      name: fields.name?.trim() ?? course.name,
+      updated_at: this.runtime.now(),
+      row_version: course.row_version + 1,
+    };
+    if (!next.name) throw new Error("Course name cannot be empty");
+    if (next.semester_id) {
+      const semester = await this.repo.getSemester(next.semester_id);
+      if (
+        !semester ||
+        semester.deleted_at ||
+        semester.owner_id !== course.owner_id
+      )
+        throw new Error("Semester not found");
+    }
+    const changed = Object.fromEntries(
+      Object.keys(fields).map((key) => [key, next[key as keyof Course]]),
+    );
+    await this.repo.transaction(async () => {
+      await this.repo.putCourse(next);
+      await this.repo.putOutbox(
+        this.mutation(
+          course.owner_id,
+          "COURSE",
+          course.id,
+          "UPDATE",
+          course.row_version,
+          changed,
+        ),
+      );
+    });
+    return next;
   }
 
   listCourses(): Promise<Course[]> {
@@ -1050,25 +1144,39 @@ export class CourseManager {
           updated_at: now,
           row_version: value.row_version + 1,
         });
-        await this.repo.putOutbox(
-          this.mutation(
-            ownerId,
-            "COURSE_SCHEDULE",
-            value.id,
-            "DELETE",
-            value.row_version,
-            { deleted_at: now },
-          ),
-        );
       }
       for (const value of created) {
         await this.repo.putCourseSchedule(value);
-        await this.repo.putOutbox(
-          this.mutation(ownerId, "COURSE_SCHEDULE", value.id, "CREATE", null, {
-            ...value,
-          }),
-        );
       }
+      const snapshot = (value: CourseSchedule) => ({
+        id: value.id,
+        course_id: value.course_id,
+        weekday: value.weekday,
+        start_time: value.start_time,
+        end_time: value.end_time,
+        week_start: value.week_start,
+        week_end: value.week_end,
+        classroom: value.classroom,
+        stage_label: value.stage_label,
+        created_at: value.created_at,
+        updated_at: value.updated_at,
+      });
+      await this.repo.putOutbox(
+        this.mutation(
+          ownerId,
+          "COURSE_SCHEDULE_COLLECTION",
+          courseId,
+          "UPDATE",
+          (await this.repo.knownSyncVersion(
+            "COURSE_SCHEDULE_COLLECTION",
+            courseId,
+          )) ?? 0,
+          {
+            previous_collection: old.map(snapshot),
+            collection: created.map(snapshot),
+          },
+        ),
+      );
     });
     return created;
   }
@@ -1174,6 +1282,100 @@ export class CourseManager {
 
   getItem(itemId: string): Promise<Item | undefined> {
     return this.repo.getItem(itemId);
+  }
+
+  async listItems(): Promise<Item[]> {
+    return (await this.repo.listItems()).filter(
+      (item) => item.deleted_at === null,
+    );
+  }
+
+  async itemAssociations(itemId: string): Promise<ItemAssociation[]> {
+    const item = await this.repo.getItem(itemId);
+    if (!item || item.deleted_at) throw new Error("Item not found");
+    return (await this.repo.listItemAssociations(itemId)).filter(
+      (value) => value.deleted_at === null,
+    );
+  }
+
+  async associateItems(
+    itemId: string,
+    associatedItemId: string,
+  ): Promise<ItemAssociation> {
+    if (itemId === associatedItemId)
+      throw new Error("An Item cannot be associated with itself");
+    const [first, second] = await Promise.all([
+      this.repo.getItem(itemId),
+      this.repo.getItem(associatedItemId),
+    ]);
+    if (
+      !first ||
+      !second ||
+      first.deleted_at ||
+      second.deleted_at ||
+      first.owner_id !== second.owner_id
+    )
+      throw new Error("Item not found");
+    const [itemA, itemB] = [itemId, associatedItemId].sort();
+    const existing = (await this.repo.listItemAssociations(itemId)).find(
+      (value) =>
+        value.deleted_at === null &&
+        value.item_id_a === itemA &&
+        value.item_id_b === itemB,
+    );
+    if (existing) return existing;
+    const now = this.runtime.now();
+    const association: ItemAssociation = {
+      id: this.runtime.id(),
+      owner_id: first.owner_id,
+      item_id_a: itemA!,
+      item_id_b: itemB!,
+      created_at: now,
+      deleted_at: null,
+      row_version: 1,
+    };
+    await this.repo.transaction(async () => {
+      await this.repo.putItemAssociation(association);
+      await this.repo.putOutbox(
+        this.mutation(
+          association.owner_id,
+          "ITEM_ASSOCIATION",
+          association.id,
+          "CREATE",
+          null,
+          {
+            item_id_a: association.item_id_a,
+            item_id_b: association.item_id_b,
+            created_at: association.created_at,
+          },
+        ),
+      );
+    });
+    return association;
+  }
+
+  async deleteItemAssociation(id: string): Promise<void> {
+    const association = await this.repo.getItemAssociation(id);
+    if (!association || association.deleted_at)
+      throw new Error("Item association not found");
+    const now = this.runtime.now();
+    await this.repo.transaction(async () => {
+      await this.repo.putItemAssociation({
+        ...association,
+        deleted_at: now,
+        row_version: association.row_version + 1,
+      });
+      await this.repo.putOutbox(
+        this.mutation(
+          association.owner_id,
+          "ITEM_ASSOCIATION",
+          association.id,
+          "DELETE",
+          association.row_version,
+          { deleted_at: now },
+        ),
+      );
+    });
   }
 
   async rawCaptureForItem(itemId: string): Promise<RawCapture | undefined> {

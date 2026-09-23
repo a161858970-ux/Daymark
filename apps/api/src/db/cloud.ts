@@ -4,6 +4,7 @@ import type {
   Course,
   CourseInformation,
   Item,
+  ItemAssociation,
   RawCapture,
 } from "@course-manager/domain";
 import {
@@ -17,7 +18,10 @@ import type {
   CreateItemInput,
   CreateRawCaptureInput,
 } from "@course-manager/contracts";
-import { updateItemSchema } from "@course-manager/contracts";
+import {
+  createCourseSchema,
+  updateItemSchema,
+} from "@course-manager/contracts";
 
 export interface QueryPort {
   query<Row extends object = Record<string, unknown>>(
@@ -685,10 +689,21 @@ export class CloudCourseManager {
       async (q) => {
         const item = await singleJson<Item>(
           q,
-          "SELECT row_to_json(i) AS value FROM items i WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL FOR UPDATE",
+          "SELECT row_to_json(i) AS value FROM items i WHERE id = $1 AND owner_id = $2 FOR UPDATE",
           [id, ownerId],
         );
         if (!item) throw new CloudError("NOT_FOUND", 404, "Item not found");
+        if (item.deleted_at)
+          return {
+            conflict_id: await this.conflict(
+              q,
+              ownerId,
+              item,
+              baseVersion,
+              fields,
+              changes,
+            ),
+          };
         if (baseVersion > item.row_version)
           throw new CloudError(
             "VALIDATION_ERROR",
@@ -976,6 +991,423 @@ export class CloudCourseManager {
           ],
         );
         return restored;
+      },
+    );
+  }
+
+  async updateCourse(
+    ownerId: string,
+    id: string,
+    key: string,
+    baseVersion: number,
+    input: {
+      name?: string | undefined;
+      semester_id?: string | null | undefined;
+      instructor?: string | null | undefined;
+    },
+  ): Promise<Course> {
+    if (!Object.keys(input).length)
+      throw new CloudError("VALIDATION_ERROR", 400, "No Course fields changed");
+    return this.idempotent(
+      ownerId,
+      key,
+      "course:update",
+      { id, baseVersion, input },
+      async (query) => {
+        const current = await singleJson<Course>(
+          query,
+          "SELECT row_to_json(c) AS value FROM courses c WHERE id=$1 AND owner_id=$2 AND deleted_at IS NULL FOR UPDATE",
+          [id, ownerId],
+        );
+        if (!current)
+          throw new CloudError("NOT_FOUND", 404, "Course not found");
+        if (Number(current.row_version) !== baseVersion)
+          throw new CloudError(
+            "VERSION_CONFLICT",
+            409,
+            "Course changed on another device",
+          );
+        const next = createCourseSchema.parse({ ...current, ...input });
+        if (next.semester_id) {
+          const semester = await query.query<{ id: string }>(
+            "SELECT id FROM semesters WHERE id=$1 AND owner_id=$2 AND deleted_at IS NULL",
+            [next.semester_id, ownerId],
+          );
+          if (!semester.rows[0])
+            throw new CloudError("NOT_FOUND", 404, "Semester not found");
+        }
+        const updated = await singleJson<Course>(
+          query,
+          `WITH changed AS (UPDATE courses SET name=$3,semester_id=$4,instructor=$5,
+           updated_at=now(),row_version=row_version+1 WHERE id=$1 AND owner_id=$2
+           RETURNING *) SELECT row_to_json(changed) AS value FROM changed`,
+          [id, ownerId, next.name, next.semester_id, next.instructor],
+        );
+        if (!updated)
+          throw new CloudError("SERVER_ERROR", 500, "Course update failed");
+        await query.query(
+          "INSERT INTO change_log (owner_id,entity_type,entity_id,operation,changed_fields,entity_version) VALUES ($1,'COURSE',$2,'UPDATE',$3::jsonb,$4)",
+          [ownerId, id, JSON.stringify(input), updated.row_version],
+        );
+        return updated;
+      },
+    );
+  }
+
+  async createCourseInformation(
+    ownerId: string,
+    courseId: string,
+    key: string,
+    content: string,
+  ): Promise<CourseInformation> {
+    const clean = content.trim();
+    if (!clean)
+      throw new CloudError(
+        "VALIDATION_ERROR",
+        400,
+        "Course information cannot be empty",
+      );
+    return this.idempotent(
+      ownerId,
+      key,
+      "course-information:create",
+      { courseId, content: clean },
+      async (query) => {
+        const course = await query.query<{ id: string }>(
+          "SELECT id FROM courses WHERE id=$1 AND owner_id=$2 AND deleted_at IS NULL",
+          [courseId, ownerId],
+        );
+        if (!course.rows[0])
+          throw new CloudError("NOT_FOUND", 404, "Course not found");
+        const id = randomUUID();
+        const value = await singleJson<CourseInformation>(
+          query,
+          `WITH inserted AS (INSERT INTO course_information
+           (id,owner_id,course_id,content,created_at,updated_at,deleted_at,row_version)
+           VALUES ($1,$2,$3,$4,now(),now(),NULL,1) RETURNING *)
+           SELECT row_to_json(inserted) AS value FROM inserted`,
+          [id, ownerId, courseId, clean],
+        );
+        if (!value)
+          throw new CloudError(
+            "SERVER_ERROR",
+            500,
+            "Course information create failed",
+          );
+        await query.query(
+          "INSERT INTO change_log (owner_id,entity_type,entity_id,operation,changed_fields,entity_version) VALUES ($1,'COURSE_INFORMATION',$2,'CREATE',$3::jsonb,1)",
+          [ownerId, id, JSON.stringify(value)],
+        );
+        return value;
+      },
+    );
+  }
+
+  async updateCourseInformation(
+    ownerId: string,
+    id: string,
+    key: string,
+    baseVersion: number,
+    content: string,
+  ): Promise<CourseInformation> {
+    const clean = content.trim();
+    if (!clean)
+      throw new CloudError(
+        "VALIDATION_ERROR",
+        400,
+        "Course information cannot be empty",
+      );
+    return this.idempotent(
+      ownerId,
+      key,
+      "course-information:update",
+      { id, baseVersion, content: clean },
+      async (query) => {
+        const current = await singleJson<CourseInformation>(
+          query,
+          "SELECT row_to_json(i) AS value FROM course_information i WHERE id=$1 AND owner_id=$2 AND deleted_at IS NULL FOR UPDATE",
+          [id, ownerId],
+        );
+        if (!current)
+          throw new CloudError(
+            "NOT_FOUND",
+            404,
+            "Course information not found",
+          );
+        if (Number(current.row_version) !== baseVersion)
+          throw new CloudError(
+            "VERSION_CONFLICT",
+            409,
+            "Course information changed on another device",
+          );
+        const value = await singleJson<CourseInformation>(
+          query,
+          `WITH changed AS (UPDATE course_information SET content=$3,updated_at=now(),
+           row_version=row_version+1 WHERE id=$1 AND owner_id=$2 RETURNING *)
+           SELECT row_to_json(changed) AS value FROM changed`,
+          [id, ownerId, clean],
+        );
+        if (!value)
+          throw new CloudError(
+            "SERVER_ERROR",
+            500,
+            "Course information update failed",
+          );
+        await query.query(
+          "INSERT INTO change_log (owner_id,entity_type,entity_id,operation,changed_fields,entity_version) VALUES ($1,'COURSE_INFORMATION',$2,'UPDATE',$3::jsonb,$4)",
+          [ownerId, id, JSON.stringify({ content: clean }), value.row_version],
+        );
+        return value;
+      },
+    );
+  }
+
+  async deleteCourseInformation(
+    ownerId: string,
+    id: string,
+    key: string,
+    baseVersion: number,
+  ): Promise<CourseInformation> {
+    return this.idempotent(
+      ownerId,
+      key,
+      "course-information:delete",
+      { id, baseVersion },
+      async (query) => {
+        const current = await singleJson<CourseInformation>(
+          query,
+          "SELECT row_to_json(i) AS value FROM course_information i WHERE id=$1 AND owner_id=$2 FOR UPDATE",
+          [id, ownerId],
+        );
+        if (!current)
+          throw new CloudError(
+            "NOT_FOUND",
+            404,
+            "Course information not found",
+          );
+        if (current.deleted_at) return current;
+        if (Number(current.row_version) !== baseVersion)
+          throw new CloudError(
+            "VERSION_CONFLICT",
+            409,
+            "Course information changed on another device",
+          );
+        const value = await singleJson<CourseInformation>(
+          query,
+          `WITH changed AS (UPDATE course_information SET deleted_at=now(),updated_at=now(),
+           row_version=row_version+1 WHERE id=$1 AND owner_id=$2 RETURNING *)
+           SELECT row_to_json(changed) AS value FROM changed`,
+          [id, ownerId],
+        );
+        if (!value)
+          throw new CloudError(
+            "SERVER_ERROR",
+            500,
+            "Course information deletion failed",
+          );
+        await query.query(
+          "INSERT INTO change_log (owner_id,entity_type,entity_id,operation,changed_fields,entity_version) VALUES ($1,'COURSE_INFORMATION',$2,'DELETE',$3::jsonb,$4)",
+          [
+            ownerId,
+            id,
+            JSON.stringify({ deleted_at: value.deleted_at }),
+            value.row_version,
+          ],
+        );
+        return value;
+      },
+    );
+  }
+
+  async createItemAssociation(
+    ownerId: string,
+    key: string,
+    itemIdA: string,
+    itemIdB: string,
+  ): Promise<ItemAssociation> {
+    if (itemIdA === itemIdB)
+      throw new CloudError(
+        "VALIDATION_ERROR",
+        400,
+        "An Item cannot be associated with itself",
+      );
+    const [itemA, itemB] = [itemIdA, itemIdB].sort();
+    return this.idempotent(
+      ownerId,
+      key,
+      "item-association:create",
+      { itemA, itemB },
+      async (query) => {
+        const items = await query.query<{ id: string }>(
+          "SELECT id FROM items WHERE owner_id=$1 AND id=ANY($2::uuid[]) AND deleted_at IS NULL",
+          [ownerId, [itemA, itemB]],
+        );
+        if (items.rows.length !== 2)
+          throw new CloudError("NOT_FOUND", 404, "Item not found");
+        const existing = await singleJson<ItemAssociation>(
+          query,
+          `SELECT row_to_json(a) AS value FROM item_associations a
+           WHERE owner_id=$1 AND item_id_a=$2 AND item_id_b=$3 AND deleted_at IS NULL`,
+          [ownerId, itemA, itemB],
+        );
+        if (existing) return existing;
+        const id = randomUUID();
+        const value = await singleJson<ItemAssociation>(
+          query,
+          `WITH inserted AS (INSERT INTO item_associations
+           (id,owner_id,item_id_a,item_id_b,created_at,deleted_at,row_version)
+           VALUES ($1,$2,$3,$4,now(),NULL,1)
+           ON CONFLICT (owner_id,item_id_a,item_id_b) WHERE deleted_at IS NULL
+           DO NOTHING RETURNING *)
+           SELECT row_to_json(inserted) AS value FROM inserted`,
+          [id, ownerId, itemA, itemB],
+        );
+        const association =
+          value ??
+          (await singleJson<ItemAssociation>(
+            query,
+            `SELECT row_to_json(a) AS value FROM item_associations a
+             WHERE owner_id=$1 AND item_id_a=$2 AND item_id_b=$3 AND deleted_at IS NULL`,
+            [ownerId, itemA, itemB],
+          ));
+        if (!association)
+          throw new CloudError(
+            "SERVER_ERROR",
+            500,
+            "Item association create failed",
+          );
+        if (value)
+          await query.query(
+            "INSERT INTO change_log (owner_id,entity_type,entity_id,operation,changed_fields,entity_version) VALUES ($1,'ITEM_ASSOCIATION',$2,'CREATE',$3::jsonb,1)",
+            [ownerId, id, JSON.stringify(value)],
+          );
+        return association;
+      },
+    );
+  }
+
+  async listItemAssociations(
+    ownerId: string,
+    itemId: string,
+  ): Promise<ItemAssociation[]> {
+    const item = await this.getItem(ownerId, itemId);
+    if (!item?.id || item.deleted_at)
+      throw new CloudError("NOT_FOUND", 404, "Item not found");
+    const result = await this.db.query<{ value: ItemAssociation }>(
+      `SELECT row_to_json(a) AS value FROM item_associations a
+       WHERE owner_id=$1 AND deleted_at IS NULL AND (item_id_a=$2 OR item_id_b=$2)
+       ORDER BY created_at,id`,
+      [ownerId, itemId],
+    );
+    return result.rows.map((row) => row.value);
+  }
+
+  async deleteItemAssociation(
+    ownerId: string,
+    id: string,
+    key: string,
+    baseVersion: number,
+  ): Promise<ItemAssociation> {
+    return this.idempotent(
+      ownerId,
+      key,
+      "item-association:delete",
+      { id, baseVersion },
+      async (query) => {
+        const current = await singleJson<ItemAssociation>(
+          query,
+          "SELECT row_to_json(a) AS value FROM item_associations a WHERE id=$1 AND owner_id=$2 FOR UPDATE",
+          [id, ownerId],
+        );
+        if (!current)
+          throw new CloudError("NOT_FOUND", 404, "Item association not found");
+        if (current.deleted_at) return current;
+        if (Number(current.row_version) !== baseVersion)
+          throw new CloudError(
+            "VERSION_CONFLICT",
+            409,
+            "Item association changed on another device",
+          );
+        const value = await singleJson<ItemAssociation>(
+          query,
+          `WITH changed AS (UPDATE item_associations SET deleted_at=now(),
+           row_version=row_version+1 WHERE id=$1 AND owner_id=$2 RETURNING *)
+           SELECT row_to_json(changed) AS value FROM changed`,
+          [id, ownerId],
+        );
+        if (!value)
+          throw new CloudError(
+            "SERVER_ERROR",
+            500,
+            "Item association deletion failed",
+          );
+        await query.query(
+          "INSERT INTO change_log (owner_id,entity_type,entity_id,operation,changed_fields,entity_version) VALUES ($1,'ITEM_ASSOCIATION',$2,'DELETE',$3::jsonb,$4)",
+          [ownerId, id, JSON.stringify(value), value.row_version],
+        );
+        return value;
+      },
+    );
+  }
+
+  async deleteRawCapture(
+    ownerId: string,
+    id: string,
+    key: string,
+    baseVersion: number,
+  ): Promise<RawCapture> {
+    return this.idempotent(
+      ownerId,
+      key,
+      "raw-capture:delete",
+      { id, baseVersion },
+      async (query) => {
+        const current = await singleJson<RawCapture>(
+          query,
+          "SELECT row_to_json(r) AS value FROM raw_captures r WHERE id=$1 AND owner_id=$2 FOR UPDATE",
+          [id, ownerId],
+        );
+        if (!current)
+          throw new CloudError("NOT_FOUND", 404, "Raw capture not found");
+        if (current.deleted_at) return current;
+        if (current.processing_status !== "UNRESOLVED")
+          throw new CloudError(
+            "VALIDATION_ERROR",
+            400,
+            "Only unresolved captures can be deleted",
+          );
+        if (Number(current.row_version) !== baseVersion)
+          throw new CloudError(
+            "VERSION_CONFLICT",
+            409,
+            "Raw capture changed on another device",
+          );
+        const value = await singleJson<RawCapture>(
+          query,
+          `WITH changed AS (UPDATE raw_captures SET processing_status='DELETED',
+           deleted_at=now(),row_version=row_version+1 WHERE id=$1 AND owner_id=$2
+           RETURNING *) SELECT row_to_json(changed) AS value FROM changed`,
+          [id, ownerId],
+        );
+        if (!value)
+          throw new CloudError(
+            "SERVER_ERROR",
+            500,
+            "Raw capture deletion failed",
+          );
+        await query.query(
+          "INSERT INTO change_log (owner_id,entity_type,entity_id,operation,changed_fields,entity_version) VALUES ($1,'RAW_CAPTURE',$2,'DELETE',$3::jsonb,$4)",
+          [
+            ownerId,
+            id,
+            JSON.stringify({
+              processing_status: "DELETED",
+              deleted_at: value.deleted_at,
+            }),
+            value.row_version,
+          ],
+        );
+        return value;
       },
     );
   }

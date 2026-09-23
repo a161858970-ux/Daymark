@@ -1,5 +1,13 @@
 import type { OutboxMutation, SyncEntityType } from "@course-manager/domain";
 
+export interface ActionRequiredSyncIssue {
+  mutation: OutboxMutation;
+  local_object: Record<string, unknown> | null;
+  error_code: string;
+  can_retry: boolean;
+  can_abandon: boolean;
+}
+
 export interface RemoteChange {
   id: string;
   entity_type: SyncEntityType;

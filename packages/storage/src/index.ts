@@ -13,6 +13,7 @@ import type {
   SemesterWeek,
   SyncConflict,
   SyncEntityType,
+  SyncRepairDecision,
 } from "@course-manager/domain";
 import type {
   CaptureContext,
@@ -21,6 +22,7 @@ import type {
   RemoteChange,
   LocalReminderRecord,
   ReminderRepository,
+  ActionRequiredSyncIssue,
   SyncRepository,
 } from "@course-manager/application";
 
@@ -43,6 +45,7 @@ export class CourseManagerDb extends Dexie {
   capture_contexts!: Table<CaptureContext, string>;
   outbox_mutations!: Table<StoredMutation, string>;
   sync_conflicts!: Table<SyncConflict, string>;
+  sync_repair_decisions!: Table<SyncRepairDecision, string>;
   delete_undos!: Table<DeleteUndoRecord, string>;
   local_notification_schedule!: Table<LocalReminderRecord, string>;
   settings!: Table<Setting, string>;
@@ -110,6 +113,9 @@ export class CourseManagerDb extends Dexie {
     this.version(4).stores({
       local_notification_schedule: "logical_key, item_id, state, scheduled_for",
     });
+    this.version(5).stores({
+      sync_repair_decisions: "id, owner_id, mutation_id, decided_at",
+    });
   }
 }
 
@@ -135,6 +141,7 @@ export class DexieLocalRepository
         this.db.capture_contexts,
         this.db.outbox_mutations,
         this.db.sync_conflicts,
+        this.db.sync_repair_decisions,
         this.db.delete_undos,
         this.db.local_notification_schedule,
         this.db.settings,
@@ -200,6 +207,19 @@ export class DexieLocalRepository
   }
   async putItem(value: Item): Promise<void> {
     await this.db.items.put(value);
+  }
+  getItemAssociation(id: string): Promise<ItemAssociation | undefined> {
+    return this.db.item_associations.get(id);
+  }
+  listItemAssociations(itemId: string): Promise<ItemAssociation[]> {
+    return this.db.item_associations
+      .filter(
+        (value) => value.item_id_a === itemId || value.item_id_b === itemId,
+      )
+      .toArray();
+  }
+  async putItemAssociation(value: ItemAssociation): Promise<void> {
+    await this.db.item_associations.put(value);
   }
   getCourse(id: string): Promise<Course | undefined> {
     return this.db.courses.get(id);
@@ -318,12 +338,318 @@ export class DexieLocalRepository
     return values;
   }
 
+  private actionRequiredCode(mutation: OutboxMutation): string | null {
+    return (
+      /^(VALIDATION_ERROR|FORBIDDEN|NOT_FOUND|IDEMPOTENCY_REPLAY):/.exec(
+        mutation.last_error ?? "",
+      )?.[1] ?? null
+    );
+  }
+
+  private async localSyncObject(
+    mutation: OutboxMutation,
+  ): Promise<Record<string, unknown> | null> {
+    switch (mutation.entity_type) {
+      case "SEMESTER":
+        return (
+          ((await this.db.semesters.get(
+            mutation.entity_id,
+          )) as unknown as Record<string, unknown>) ?? null
+        );
+      case "SEMESTER_WEEK":
+        return (
+          ((await this.db.semester_weeks.get(
+            mutation.entity_id,
+          )) as unknown as Record<string, unknown>) ?? null
+        );
+      case "COURSE":
+        return (
+          ((await this.db.courses.get(mutation.entity_id)) as unknown as Record<
+            string,
+            unknown
+          >) ?? null
+        );
+      case "COURSE_SCHEDULE":
+        return (
+          ((await this.db.course_schedules.get(
+            mutation.entity_id,
+          )) as unknown as Record<string, unknown>) ?? null
+        );
+      case "COURSE_INFORMATION":
+        return (
+          ((await this.db.course_information.get(
+            mutation.entity_id,
+          )) as unknown as Record<string, unknown>) ?? null
+        );
+      case "ITEM":
+        return (
+          ((await this.db.items.get(mutation.entity_id)) as unknown as Record<
+            string,
+            unknown
+          >) ?? null
+        );
+      case "ITEM_ASSOCIATION":
+        return (
+          ((await this.db.item_associations.get(
+            mutation.entity_id,
+          )) as unknown as Record<string, unknown>) ?? null
+        );
+      case "RAW_CAPTURE":
+        return (
+          ((await this.db.raw_captures.get(
+            mutation.entity_id,
+          )) as unknown as Record<string, unknown>) ?? null
+        );
+      case "RAW_CAPTURE_OUTPUT":
+        return (
+          ((await this.db.raw_capture_outputs.get(
+            mutation.entity_id,
+          )) as unknown as Record<string, unknown>) ?? null
+        );
+      case "RAW_CAPTURE_DECISION":
+        return (
+          ((await this.db.raw_capture_decisions.get(
+            mutation.entity_id,
+          )) as unknown as Record<string, unknown>) ?? null
+        );
+      case "SEMESTER_WEEK_COLLECTION":
+        return {
+          id: mutation.entity_id,
+          collection: await this.db.semester_weeks
+            .where("semester_id")
+            .equals(mutation.entity_id)
+            .toArray(),
+        };
+      case "COURSE_SCHEDULE_COLLECTION":
+        return {
+          id: mutation.entity_id,
+          collection: (
+            await this.db.course_schedules
+              .where("course_id")
+              .equals(mutation.entity_id)
+              .toArray()
+          ).filter((value) => value.deleted_at === null),
+        };
+    }
+  }
+
+  async listActionRequiredIssues(): Promise<ActionRequiredSyncIssue[]> {
+    const result: ActionRequiredSyncIssue[] = [];
+    for (const mutation of await this.pendingMutations()) {
+      const code = this.actionRequiredCode(mutation);
+      if (!code) continue;
+      const unsafeUndo =
+        mutation.entity_type === "ITEM" &&
+        mutation.operation === "UPDATE" &&
+        mutation.changed_fields.deleted_at === null &&
+        typeof mutation.changed_fields.undo_token === "string";
+      const complexCourseDelete =
+        mutation.entity_type === "COURSE" && mutation.operation === "DELETE";
+      result.push({
+        mutation,
+        local_object: await this.localSyncObject(mutation),
+        error_code: code,
+        can_retry:
+          (code === "VALIDATION_ERROR" || code === "IDEMPOTENCY_REPLAY") &&
+          !unsafeUndo &&
+          !complexCourseDelete,
+        can_abandon:
+          mutation.operation !== "CREATE" ||
+          mutation.entity_type === "ITEM_ASSOCIATION",
+      });
+    }
+    return result;
+  }
+
+  async retryActionRequired(mutationId: string): Promise<string> {
+    return this.transaction(async () => {
+      const mutation = await this.db.outbox_mutations.get(mutationId);
+      if (!mutation || mutation.acked_at)
+        throw new Error("Sync issue no longer needs repair");
+      const issue = (await this.listActionRequiredIssues()).find(
+        (value) => value.mutation.mutation_id === mutationId,
+      );
+      if (!issue?.can_retry)
+        throw new Error("This sync issue cannot be safely resubmitted");
+      if (!issue.local_object)
+        throw new Error("Local object is unavailable for resubmission");
+      const replacementId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const controlFields = new Set([
+        "undo_token",
+        "strategy",
+        "item_versions",
+      ]);
+      const changedFields = { ...mutation.changed_fields };
+      if (
+        mutation.entity_type === "SEMESTER_WEEK_COLLECTION" ||
+        mutation.entity_type === "COURSE_SCHEDULE_COLLECTION"
+      ) {
+        changedFields.collection = issue.local_object.collection;
+      } else {
+        for (const key of Object.keys(changedFields))
+          if (!controlFields.has(key) && Object.hasOwn(issue.local_object, key))
+            changedFields[key] = issue.local_object[key];
+      }
+      const superseded: string[] = [];
+      if (
+        mutation.entity_type === "SEMESTER_WEEK_COLLECTION" ||
+        mutation.entity_type === "COURSE_SCHEDULE_COLLECTION"
+      ) {
+        const later = (await this.pendingMutations()).filter(
+          (value) =>
+            value.mutation_id !== mutationId &&
+            value.entity_type === mutation.entity_type &&
+            value.entity_id === mutation.entity_id,
+        );
+        for (const value of later) {
+          superseded.push(value.mutation_id);
+          await this.db.outbox_mutations.update(value.mutation_id, {
+            acked_at: now,
+            last_error: null,
+          });
+        }
+      }
+      const known = await this.serverVersion(
+        mutation.entity_type,
+        mutation.entity_id,
+      );
+      await this.db.outbox_mutations.update(mutationId, {
+        acked_at: now,
+        last_error: null,
+      });
+      await this.db.outbox_mutations.put({
+        ...mutation,
+        mutation_id: replacementId,
+        base_version:
+          mutation.operation === "CREATE"
+            ? null
+            : (known ?? mutation.base_version),
+        changed_fields: changedFields,
+        created_at: now,
+        attempt_count: 0,
+        last_error: null,
+        acked_at: null,
+        ...(mutation.local_sequence === undefined
+          ? {}
+          : { local_sequence: mutation.local_sequence }),
+      });
+      await this.db.sync_repair_decisions.put({
+        id: crypto.randomUUID(),
+        owner_id: mutation.owner_id,
+        mutation_id: mutation.mutation_id,
+        action: "RETRY_CURRENT",
+        replacement_mutation_id: replacementId,
+        superseded_mutation_ids: superseded,
+        previous_error: mutation.last_error!,
+        decided_at: now,
+        device_id: await this.deviceId(),
+      });
+      return replacementId;
+    });
+  }
+
+  async abandonActionRequired(mutationId: string): Promise<void> {
+    await this.transaction(async () => {
+      const mutation = await this.db.outbox_mutations.get(mutationId);
+      if (!mutation || mutation.acked_at)
+        throw new Error("Sync issue no longer needs repair");
+      const issue = (await this.listActionRequiredIssues()).find(
+        (value) => value.mutation.mutation_id === mutationId,
+      );
+      if (!issue?.can_abandon)
+        throw new Error(
+          "A new local object must be repaired before it can sync",
+        );
+      const now = new Date().toISOString();
+      if (
+        mutation.entity_type === "ITEM_ASSOCIATION" &&
+        mutation.operation === "CREATE"
+      ) {
+        const association = await this.db.item_associations.get(
+          mutation.entity_id,
+        );
+        if (association)
+          await this.db.item_associations.put({
+            ...association,
+            deleted_at: now,
+            row_version: association.row_version + 1,
+          });
+      }
+      if (
+        mutation.entity_type === "SEMESTER_WEEK_COLLECTION" ||
+        mutation.entity_type === "COURSE_SCHEDULE_COLLECTION"
+      ) {
+        let previous: unknown = mutation.changed_fields.previous_collection;
+        if (mutation.entity_type === "COURSE_SCHEDULE_COLLECTION") {
+          if (!Array.isArray(previous))
+            throw new Error("Previous collection is unavailable");
+          const restored = [];
+          for (const entry of previous) {
+            if (typeof entry !== "object" || entry === null)
+              throw new Error("Previous collection is invalid");
+            const id = (entry as { id?: unknown }).id;
+            if (typeof id !== "string")
+              throw new Error("Previous collection is invalid");
+            const current = await this.db.course_schedules.get(id);
+            restored.push({
+              ...current,
+              ...entry,
+              id,
+              owner_id: mutation.owner_id,
+              course_id: mutation.entity_id,
+              deleted_at: null,
+              row_version: (current?.row_version ?? 0) + 1,
+            });
+          }
+          previous = restored;
+        }
+        await this.applyCollectionEnvelope(
+          mutation.entity_type,
+          mutation.entity_id,
+          mutation.owner_id,
+          previous,
+          now,
+        );
+      }
+      await this.db.outbox_mutations.update(mutationId, {
+        acked_at: now,
+        last_error: null,
+      });
+      if (
+        mutation.entity_type === "ITEM" &&
+        typeof mutation.changed_fields.undo_token === "string"
+      )
+        await this.db.delete_undos.delete(mutation.entity_id);
+      await this.db.settings.delete("sync_pull_cursor");
+      await this.db.sync_repair_decisions.put({
+        id: crypto.randomUUID(),
+        owner_id: mutation.owner_id,
+        mutation_id: mutation.mutation_id,
+        action: "ABANDON_TO_SYNCED",
+        replacement_mutation_id: null,
+        superseded_mutation_ids: [],
+        previous_error: mutation.last_error!,
+        decided_at: now,
+        device_id: await this.deviceId(),
+      });
+    });
+  }
+
+  listSyncRepairDecisions(): Promise<SyncRepairDecision[]> {
+    return this.db.sync_repair_decisions.orderBy("decided_at").toArray();
+  }
+
   async serverVersion(
     type: SyncEntityType,
     id: string,
   ): Promise<number | null> {
     const setting = await this.db.settings.get(`sync_version:${type}:${id}`);
     return setting ? Number(setting.value) : null;
+  }
+
+  knownSyncVersion(type: SyncEntityType, id: string): Promise<number | null> {
+    return this.serverVersion(type, id);
   }
 
   async acknowledge(mutationId: string, version: number): Promise<void> {
@@ -350,6 +676,60 @@ export class DexieLocalRepository
     });
   }
 
+  private async applyCollectionEnvelope(
+    type: "SEMESTER_WEEK_COLLECTION" | "COURSE_SCHEDULE_COLLECTION",
+    parentId: string,
+    ownerId: string,
+    collection: unknown,
+    deletedAt: string,
+  ): Promise<void> {
+    if (!Array.isArray(collection))
+      throw new Error("Remote collection is invalid");
+    if (type === "SEMESTER_WEEK_COLLECTION") {
+      const weeks = collection.map((entry) => {
+        if (
+          typeof entry !== "object" ||
+          entry === null ||
+          typeof (entry as { id?: unknown }).id !== "string" ||
+          (entry as { semester_id?: unknown }).semester_id !== parentId
+        )
+          throw new Error("Remote semester week collection is invalid");
+        return { ...(entry as SemesterWeek), owner_id: ownerId };
+      });
+      await this.db.semester_weeks
+        .where("semester_id")
+        .equals(parentId)
+        .delete();
+      if (weeks.length) await this.db.semester_weeks.bulkPut(weeks);
+      return;
+    }
+    const schedules = collection.map((entry) => {
+      if (
+        typeof entry !== "object" ||
+        entry === null ||
+        typeof (entry as { id?: unknown }).id !== "string" ||
+        (entry as { course_id?: unknown }).course_id !== parentId
+      )
+        throw new Error("Remote course schedule collection is invalid");
+      return { ...(entry as CourseSchedule), owner_id: ownerId };
+    });
+    const ids = new Set(schedules.map((entry) => entry.id));
+    const current = await this.db.course_schedules
+      .where("course_id")
+      .equals(parentId)
+      .toArray();
+    for (const entry of current) {
+      if (!ids.has(entry.id) && entry.deleted_at === null)
+        await this.db.course_schedules.put({
+          ...entry,
+          deleted_at: deletedAt,
+          updated_at: deletedAt,
+          row_version: entry.row_version + 1,
+        });
+    }
+    if (schedules.length) await this.db.course_schedules.bulkPut(schedules);
+  }
+
   /** Finalize an explicitly resolved conflict without replaying its rejected mutation. */
   async acceptResolvedConflict(
     conflict: SyncConflict,
@@ -360,12 +740,15 @@ export class DexieLocalRepository
       const bound = await this.db.settings.get("sync_bound_owner_id");
       if (!bound || bound.value !== conflict.owner_id)
         throw new OwnerBindingError("Conflict belongs to another account");
+      const collectionConflict =
+        conflict.entity_type === "SEMESTER_WEEK_COLLECTION" ||
+        conflict.entity_type === "COURSE_SCHEDULE_COLLECTION";
       if (
         conflict.status !== "RESOLVED" ||
         entity.id !== conflict.entity_id ||
         entity.owner_id !== conflict.owner_id ||
         !Number.isSafeInteger(Number(entity.row_version)) ||
-        Number(entity.row_version) < 1
+        Number(entity.row_version) < (collectionConflict ? 0 : 1)
       )
         throw new Error("Resolved conflict response is inconsistent");
       const table = (
@@ -373,9 +756,12 @@ export class DexieLocalRepository
           ITEM: this.db.items,
           COURSE_INFORMATION: this.db.course_information,
           RAW_CAPTURE: this.db.raw_captures,
+          SEMESTER: this.db.semesters,
+          COURSE: this.db.courses,
         } as Record<string, Table<object, string> | undefined>
       )[conflict.entity_type];
-      if (!table) throw new Error("Unsupported conflict entity");
+      if (!table && !collectionConflict)
+        throw new Error("Unsupported conflict entity");
       const pending = await this.db.outbox_mutations
         .filter((value) => value.acked_at === null)
         .toArray();
@@ -403,14 +789,25 @@ export class DexieLocalRepository
       const knownVersion = Number(
         (await this.db.settings.get(versionKey))?.value ?? "0",
       );
-      const currentEntity = (await table.get(conflict.entity_id)) as
-        { row_version?: number } | undefined;
+      const currentEntity = table
+        ? ((await table.get(conflict.entity_id)) as
+            { row_version?: number } | undefined)
+        : undefined;
       if (
         !otherPending &&
         knownVersion <= Number(entity.row_version) &&
         Number(currentEntity?.row_version ?? 0) <= Number(entity.row_version)
       )
-        await table.put(entity);
+        if (collectionConflict)
+          await this.applyCollectionEnvelope(
+            conflict.entity_type as
+              "SEMESTER_WEEK_COLLECTION" | "COURSE_SCHEDULE_COLLECTION",
+            conflict.entity_id,
+            conflict.owner_id,
+            entity.collection,
+            new Date().toISOString(),
+          );
+        else await table!.put(entity);
       if (undo && conflict.entity_type === "ITEM" && entity.deleted_at)
         await this.db.delete_undos.put({
           item_id: conflict.entity_id,
@@ -452,6 +849,28 @@ export class DexieLocalRepository
         );
       for (const change of changes) {
         if (
+          change.entity_type === "SEMESTER_WEEK_COLLECTION" ||
+          change.entity_type === "COURSE_SCHEDULE_COLLECTION"
+        ) {
+          if (
+            change.operation !== "UPDATE" ||
+            change.changed_fields.parent_id !== change.entity_id
+          )
+            throw new Error("Remote collection envelope is invalid");
+          await this.applyCollectionEnvelope(
+            change.entity_type,
+            change.entity_id,
+            ownerId,
+            change.changed_fields.collection,
+            change.server_time,
+          );
+          await this.db.settings.put({
+            key: `sync_version:${change.entity_type}:${change.entity_id}`,
+            value: String(change.entity_version),
+          });
+          continue;
+        }
+        if (
           change.entity_type === "SEMESTER_WEEK" &&
           change.operation === "DELETE"
         ) {
@@ -470,6 +889,7 @@ export class DexieLocalRepository
             COURSE_SCHEDULE: this.db.course_schedules,
             COURSE_INFORMATION: this.db.course_information,
             ITEM: this.db.items,
+            ITEM_ASSOCIATION: this.db.item_associations,
             RAW_CAPTURE: this.db.raw_captures,
             RAW_CAPTURE_OUTPUT: this.db.raw_capture_outputs,
             RAW_CAPTURE_DECISION: this.db.raw_capture_decisions,

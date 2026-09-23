@@ -1,5 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { Course, Item, RawCapture } from "@course-manager/domain";
+import type {
+  Course,
+  Item,
+  ItemAssociation,
+  RawCapture,
+} from "@course-manager/domain";
 import { fromLocalInput, toLocalInput } from "./timeInputs.js";
 
 export type EditableItemFields = Partial<
@@ -20,26 +25,35 @@ interface Props {
   item: Item;
   courses: Course[];
   rawCapture: RawCapture | null;
+  associations: { association: ItemAssociation; item: Item }[];
+  associationCandidates: Item[];
   onClose(): void;
   onComplete(item: Item): void;
   onRestore(item: Item): void;
   onDelete(item: Item): void;
   onSave(item: Item, fields: EditableItemFields): Promise<void>;
+  onAssociate(itemId: string): Promise<void>;
+  onRemoveAssociation(associationId: string): Promise<void>;
 }
 
 export function ItemDetail({
   item,
   courses,
   rawCapture,
+  associations,
+  associationCandidates,
   onClose,
   onComplete,
   onRestore,
   onDelete,
   onSave,
+  onAssociate,
+  onRemoveAssociation,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
+  const [associationId, setAssociationId] = useState("");
   const [title, setTitle] = useState(item.title);
   const [detail, setDetail] = useState(item.detail ?? "");
   const [courseId, setCourseId] = useState(item.course_id ?? "");
@@ -58,6 +72,7 @@ export function ItemDetail({
     setEditing(false);
     setConfirmDelete(false);
     setShowRaw(false);
+    setAssociationId("");
     setTitle(item.title);
     setDetail(item.detail ?? "");
     setCourseId(item.course_id ?? "");
@@ -226,6 +241,56 @@ export function ItemDetail({
               {{ OFF: "关闭", NORMAL: "普通", HIGH: "高" }[item.reminder_level]}
             </p>
             {item.detail && <p className="detail-content">{item.detail}</p>}
+            <section className="item-associations" aria-label="关联事项">
+              <h3>关联事项</h3>
+              {associations.length ? (
+                <ul>
+                  {associations.map((value) => (
+                    <li key={value.association.id}>
+                      <span>{value.item.title}</span>
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() =>
+                          void onRemoveAssociation(value.association.id)
+                        }
+                      >
+                        移除关联
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="detail-meta">暂无关联事项</p>
+              )}
+              {associationCandidates.length > 0 && (
+                <div className="association-add">
+                  <select
+                    aria-label="选择关联事项"
+                    value={associationId}
+                    onChange={(event) => setAssociationId(event.target.value)}
+                  >
+                    <option value="">选择事项…</option>
+                    {associationCandidates.map((value) => (
+                      <option key={value.id} value={value.id}>
+                        {value.title}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={!associationId}
+                    onClick={() => {
+                      const target = associationId;
+                      setAssociationId("");
+                      void onAssociate(target);
+                    }}
+                  >
+                    添加关联
+                  </button>
+                </div>
+              )}
+            </section>
             <div className="detail-actions">
               {item.status === "INCOMPLETE" ? (
                 <button type="button" onClick={() => onComplete(item)}>

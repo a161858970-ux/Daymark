@@ -23,6 +23,13 @@ it("round-trips local capture through authenticated API without changing Item id
     new URL("../../../../backend/migrations/001_initial.sql", import.meta.url),
   );
   await postgres.exec(await readFile(migration, "utf8"));
+  const collectionMigration = fileURLToPath(
+    new URL(
+      "../../../../backend/migrations/002_collection_sync.sql",
+      import.meta.url,
+    ),
+  );
+  await postgres.exec(await readFile(collectionMigration, "utf8"));
   const port: CloudDatabase = {
     query: async (sql, params) => postgres.query(sql, params),
     transaction: (work) =>

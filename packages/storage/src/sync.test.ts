@@ -193,6 +193,114 @@ it("retains rejected mutations with diagnostics instead of acknowledging them", 
   expect(await repo.syncCursor()).toBeNull();
 });
 
+it("repairs an ACTION_REQUIRED edit with current local data and a new idempotency identity", async () => {
+  const db = new CourseManagerDb(`sync-repair-${crypto.randomUUID()}`);
+  openDbs.push(db);
+  const repo = new DexieLocalRepository(db);
+  const manager = new CourseManager(repo);
+  const raw = await manager.capture("提交报告");
+  const item = await manager.processClearCapture(raw.id);
+  expect(item).toBeTruthy();
+  await repo.bindOwner(ownerId);
+  for (const mutation of await repo.pendingMutations())
+    await repo.acknowledge(mutation.mutation_id, 1);
+  await manager.updateItem(item!.id, { title: "待修复标题" });
+  const rejected = (await repo.pendingMutations())[0]!;
+  await repo.recordSyncFailure(
+    rejected.mutation_id,
+    "VALIDATION_ERROR: title needs repair",
+  );
+  await manager.updateItem(item!.id, { title: "已修复标题" });
+  const issues = await repo.listActionRequiredIssues();
+  expect(issues).toHaveLength(1);
+  expect(issues[0]).toMatchObject({
+    error_code: "VALIDATION_ERROR",
+    can_retry: true,
+    can_abandon: true,
+    local_object: { id: item!.id, title: "已修复标题" },
+  });
+  const replacementId = await repo.retryActionRequired(rejected.mutation_id);
+  expect(replacementId).not.toBe(rejected.mutation_id);
+  const pending = await repo.pendingMutations();
+  expect(pending[0]).toMatchObject({
+    mutation_id: replacementId,
+    entity_type: "ITEM",
+    base_version: 1,
+    changed_fields: { title: "已修复标题" },
+    attempt_count: 0,
+    last_error: null,
+  });
+  expect(pending.map((value) => value.mutation_id)).not.toContain(
+    rejected.mutation_id,
+  );
+  expect(await repo.listSyncRepairDecisions()).toMatchObject([
+    {
+      mutation_id: rejected.mutation_id,
+      action: "RETRY_CURRENT",
+      replacement_mutation_id: replacementId,
+      previous_error: "VALIDATION_ERROR: title needs repair",
+    },
+  ]);
+});
+
+it("abandons an expired Undo only by accepting synced state and preserving repair provenance", async () => {
+  const db = new CourseManagerDb(`sync-abandon-${crypto.randomUUID()}`);
+  openDbs.push(db);
+  const repo = new DexieLocalRepository(db);
+  const manager = new CourseManager(repo);
+  const raw = await manager.capture("提交报告");
+  const item = await manager.processClearCapture(raw.id);
+  expect(item).toBeTruthy();
+  await repo.bindOwner(ownerId);
+  for (const mutation of await repo.pendingMutations())
+    await repo.acknowledge(mutation.mutation_id, 1);
+  const deletion = await manager.deleteItem(item!.id);
+  const deleteMutation = (await repo.pendingMutations())[0]!;
+  await repo.acknowledge(deleteMutation.mutation_id, 2);
+  await manager.undoDelete(item!.id, deletion.token);
+  const rejectedUndo = (await repo.pendingMutations())[0]!;
+  await repo.recordSyncFailure(
+    rejectedUndo.mutation_id,
+    "FORBIDDEN: Undo window expired",
+  );
+  await db.settings.put({ key: "sync_pull_cursor", value: "cursor-before" });
+  const issue = (await repo.listActionRequiredIssues())[0]!;
+  expect(issue).toMatchObject({
+    error_code: "FORBIDDEN",
+    can_retry: false,
+    can_abandon: true,
+  });
+  await repo.abandonActionRequired(rejectedUndo.mutation_id);
+  expect(await repo.pendingMutations()).toHaveLength(0);
+  expect(await repo.syncCursor()).toBeNull();
+  expect(await repo.getDeleteUndo(item!.id)).toBeUndefined();
+  expect((await repo.getItem(item!.id))?.deleted_at).toBeNull();
+  await repo.applyRemoteChanges(
+    ownerId,
+    [
+      {
+        id: "30",
+        entity_type: "ITEM",
+        entity_id: item!.id,
+        operation: "DELETE",
+        changed_fields: { deleted_at: "2026-09-23T08:00:00.000Z" },
+        entity_version: 2,
+        server_time: "2026-09-23T08:00:00.000Z",
+      },
+    ],
+    "cursor-30",
+  );
+  expect((await repo.getItem(item!.id))?.deleted_at).not.toBeNull();
+  expect(await repo.listSyncRepairDecisions()).toMatchObject([
+    {
+      mutation_id: rejectedUndo.mutation_id,
+      action: "ABANDON_TO_SYNCED",
+      replacement_mutation_id: null,
+      previous_error: "FORBIDDEN: Undo window expired",
+    },
+  ]);
+});
+
 it("acknowledges a resolved conflict while preserving a later local edit", async () => {
   const db = new CourseManagerDb(`sync-resolution-${crypto.randomUUID()}`);
   openDbs.push(db);
@@ -238,6 +346,138 @@ it("acknowledges a resolved conflict while preserving a later local edit", async
   ).toEqual([mutations[1]!.mutation_id]);
   expect((await repo.getItem(item!.id))?.detail).toBe("后来补充的内容");
   expect(await repo.serverVersion("ITEM", item!.id)).toBe(4);
+});
+
+it("applies a collection envelope atomically and leaves its cursor unchanged on invalid data", async () => {
+  const db = new CourseManagerDb(`sync-collection-${crypto.randomUUID()}`);
+  openDbs.push(db);
+  const repo = new DexieLocalRepository(db);
+  const manager = new CourseManager(repo);
+  const course = await manager.createCourse("统计学");
+  await repo.bindOwner(ownerId);
+  for (const mutation of await repo.pendingMutations())
+    await repo.acknowledge(mutation.mutation_id, 1);
+  const firstId = crypto.randomUUID();
+  const secondId = crypto.randomUUID();
+  const member = (id: string, weekday: number, courseId = course.id) => ({
+    id,
+    owner_id: ownerId,
+    course_id: courseId,
+    weekday,
+    start_time: "14:00:00",
+    end_time: "15:40:00",
+    week_start: 1,
+    week_end: 13,
+    classroom: "101",
+    stage_label: null,
+    created_at: "2026-09-23T08:00:00.000Z",
+    updated_at: "2026-09-23T08:00:00.000Z",
+    deleted_at: null,
+    row_version: 1,
+  });
+  await repo.applyRemoteChanges(
+    ownerId,
+    [
+      {
+        id: "20",
+        entity_type: "COURSE_SCHEDULE_COLLECTION",
+        entity_id: course.id,
+        operation: "UPDATE",
+        changed_fields: {
+          parent_id: course.id,
+          collection: [member(firstId, 3)],
+        },
+        entity_version: 1,
+        server_time: "2026-09-23T08:00:00.000Z",
+      },
+    ],
+    "cursor-20",
+  );
+  expect((await manager.courseSchedules(course.id))[0]?.id).toBe(firstId);
+  await expect(
+    repo.applyRemoteChanges(
+      ownerId,
+      [
+        {
+          id: "21",
+          entity_type: "COURSE_SCHEDULE_COLLECTION",
+          entity_id: course.id,
+          operation: "UPDATE",
+          changed_fields: {
+            parent_id: course.id,
+            collection: [member(secondId, 4, crypto.randomUUID())],
+          },
+          entity_version: 2,
+          server_time: "2026-09-23T08:01:00.000Z",
+        },
+      ],
+      "cursor-21",
+    ),
+  ).rejects.toThrow(/invalid/);
+  expect(await repo.syncCursor()).toBe("cursor-20");
+  expect((await manager.courseSchedules(course.id))[0]?.id).toBe(firstId);
+  expect(
+    await repo.serverVersion("COURSE_SCHEDULE_COLLECTION", course.id),
+  ).toBe(1);
+});
+
+it("accepts a resolved collection conflict without overwriting a later local replacement", async () => {
+  const db = new CourseManagerDb(
+    `sync-collection-resolution-${crypto.randomUUID()}`,
+  );
+  openDbs.push(db);
+  const repo = new DexieLocalRepository(db);
+  const manager = new CourseManager(repo);
+  const course = await manager.createCourse("统计学");
+  await repo.bindOwner(ownerId);
+  for (const mutation of await repo.pendingMutations())
+    await repo.acknowledge(mutation.mutation_id, 1);
+  const fields = {
+    weekday: 3,
+    start_time: "14:00",
+    end_time: "15:40",
+    week_start: 1,
+    week_end: 13,
+    classroom: "101",
+    stage_label: null,
+  };
+  const [first] = await manager.replaceCourseSchedules(course.id, [fields]);
+  const conflictMutation = (await repo.pendingMutations())[0]!;
+  const conflictId = crypto.randomUUID();
+  await repo.recordSyncFailure(
+    conflictMutation.mutation_id,
+    `VERSION_CONFLICT:${conflictId}`,
+  );
+  const [later] = await manager.replaceCourseSchedules(course.id, [
+    { ...fields, weekday: 5 },
+  ]);
+  await repo.acceptResolvedConflict(
+    {
+      id: conflictId,
+      owner_id: ownerId,
+      entity_type: "COURSE_SCHEDULE_COLLECTION",
+      entity_id: course.id,
+      local_version: { collection: [first] },
+      remote_version: { collection: [] },
+      conflicting_fields: ["collection"],
+      status: "RESOLVED",
+      created_at: "2026-09-23T08:00:00.000Z",
+      resolved_at: "2026-09-23T08:01:00.000Z",
+    },
+    {
+      id: course.id,
+      owner_id: ownerId,
+      row_version: 4,
+      collection: [],
+    },
+  );
+  expect(
+    (await repo.pendingMutations()).map((value) => value.entity_id),
+  ).toEqual([course.id]);
+  expect((await manager.courseSchedules(course.id))[0]?.id).toBe(later!.id);
+  expect(
+    await repo.serverVersion("COURSE_SCHEDULE_COLLECTION", course.id),
+  ).toBe(4);
 });
 
 it("upgrades a version 2 outbox without dropping unsent capture mutations", async () => {

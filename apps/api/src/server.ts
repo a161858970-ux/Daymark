@@ -37,6 +37,16 @@ const pageSchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
+const coursePatchSchema = createCourseSchema
+  .partial()
+  .refine((value) => Object.keys(value).length > 0);
+const courseInformationInputSchema = z.object({
+  content: z.string().trim().min(1).max(20000),
+});
+const associationInputSchema = z.object({
+  item_id_a: uuidSchema,
+  item_id_b: uuidSchema,
+});
 
 function readCursor(value: string | undefined, scope: string) {
   if (!value) return { after: null, asOf: null };
@@ -132,9 +142,9 @@ export function buildServer(dependencies?: ServerDependencies) {
         );
       return uuidSchema.parse(value);
     }
-    function ifMatch(value: string | undefined) {
+    function ifMatch(value: string | undefined, minimum = 1) {
       const parsed = Number(value);
-      if (!value || !Number.isSafeInteger(parsed) || parsed < 1)
+      if (!value || !Number.isSafeInteger(parsed) || parsed < minimum)
         throw new CloudError(
           "VALIDATION_ERROR",
           400,
@@ -208,7 +218,7 @@ export function buildServer(dependencies?: ServerDependencies) {
         const ownerId = await owner(request.headers.authorization);
         const id = uuidSchema.parse((request.params as { id: string }).id);
         const key = mutationKey(request.headers["idempotency-key"]);
-        const version = ifMatch(request.headers["if-match"]);
+        const version = ifMatch(request.headers["if-match"], 0);
         const input = conflictResolutionSchema.parse(request.body);
         return {
           data: await dependencies.conflicts!.resolve(
@@ -359,6 +369,19 @@ export function buildServer(dependencies?: ServerDependencies) {
         throw new CloudError("NOT_FOUND", 404, "Raw capture not found");
       return { data: capture, meta: {} };
     });
+    server.delete("/api/v1/raw-captures/:id", async (request) => {
+      const ownerId = await owner(request.headers.authorization);
+      const id = uuidSchema.parse((request.params as { id: string }).id);
+      return {
+        data: await dependencies.cloud.deleteRawCapture(
+          ownerId,
+          id,
+          mutationKey(request.headers["idempotency-key"]),
+          ifMatch(request.headers["if-match"]),
+        ),
+        meta: {},
+      };
+    });
     server.post("/api/v1/courses", async (request) => {
       const ownerId = await owner(request.headers.authorization);
       const key = mutationKey(request.headers["idempotency-key"]);
@@ -392,6 +415,20 @@ export function buildServer(dependencies?: ServerDependencies) {
       const course = await dependencies.cloud.getCourse(ownerId, id);
       if (!course) throw new CloudError("NOT_FOUND", 404, "Course not found");
       return { data: course, meta: {} };
+    });
+    server.patch("/api/v1/courses/:id", async (request) => {
+      const ownerId = await owner(request.headers.authorization);
+      const id = uuidSchema.parse((request.params as { id: string }).id);
+      return {
+        data: await dependencies.cloud.updateCourse(
+          ownerId,
+          id,
+          mutationKey(request.headers["idempotency-key"]),
+          ifMatch(request.headers["if-match"]),
+          coursePatchSchema.parse(request.body),
+        ),
+        meta: {},
+      };
     });
     server.post("/api/v1/courses/:id/delete-with-strategy", async (request) => {
       const ownerId = await owner(request.headers.authorization);
@@ -441,6 +478,48 @@ export function buildServer(dependencies?: ServerDependencies) {
       return {
         data: result.data,
         meta: { next_cursor: nextCursor(result.next_cursor, scope) },
+      };
+    });
+    server.post("/api/v1/courses/:id/information", async (request) => {
+      const ownerId = await owner(request.headers.authorization);
+      const courseId = uuidSchema.parse((request.params as { id: string }).id);
+      const input = courseInformationInputSchema.parse(request.body);
+      return {
+        data: await dependencies.cloud.createCourseInformation(
+          ownerId,
+          courseId,
+          mutationKey(request.headers["idempotency-key"]),
+          input.content,
+        ),
+        meta: {},
+      };
+    });
+    server.patch("/api/v1/course-information/:id", async (request) => {
+      const ownerId = await owner(request.headers.authorization);
+      const id = uuidSchema.parse((request.params as { id: string }).id);
+      const input = courseInformationInputSchema.parse(request.body);
+      return {
+        data: await dependencies.cloud.updateCourseInformation(
+          ownerId,
+          id,
+          mutationKey(request.headers["idempotency-key"]),
+          ifMatch(request.headers["if-match"]),
+          input.content,
+        ),
+        meta: {},
+      };
+    });
+    server.delete("/api/v1/course-information/:id", async (request) => {
+      const ownerId = await owner(request.headers.authorization);
+      const id = uuidSchema.parse((request.params as { id: string }).id);
+      return {
+        data: await dependencies.cloud.deleteCourseInformation(
+          ownerId,
+          id,
+          mutationKey(request.headers["idempotency-key"]),
+          ifMatch(request.headers["if-match"]),
+        ),
+        meta: {},
       };
     });
     server.post("/api/v1/items", async (request) => {
@@ -522,6 +601,40 @@ export function buildServer(dependencies?: ServerDependencies) {
       const item = await dependencies.cloud.getItem(ownerId, id);
       if (!item) throw new CloudError("NOT_FOUND", 404, "Item not found");
       return { data: item, meta: {} };
+    });
+    server.post("/api/v1/item-associations", async (request) => {
+      const ownerId = await owner(request.headers.authorization);
+      const input = associationInputSchema.parse(request.body);
+      return {
+        data: await dependencies.cloud.createItemAssociation(
+          ownerId,
+          mutationKey(request.headers["idempotency-key"]),
+          input.item_id_a,
+          input.item_id_b,
+        ),
+        meta: {},
+      };
+    });
+    server.get("/api/v1/items/:id/associations", async (request) => {
+      const ownerId = await owner(request.headers.authorization);
+      const itemId = uuidSchema.parse((request.params as { id: string }).id);
+      return {
+        data: await dependencies.cloud.listItemAssociations(ownerId, itemId),
+        meta: {},
+      };
+    });
+    server.delete("/api/v1/item-associations/:id", async (request) => {
+      const ownerId = await owner(request.headers.authorization);
+      const id = uuidSchema.parse((request.params as { id: string }).id);
+      return {
+        data: await dependencies.cloud.deleteItemAssociation(
+          ownerId,
+          id,
+          mutationKey(request.headers["idempotency-key"]),
+          ifMatch(request.headers["if-match"]),
+        ),
+        meta: {},
+      };
     });
     server.patch("/api/v1/items/:id", async (request) => {
       const ownerId = await owner(request.headers.authorization);

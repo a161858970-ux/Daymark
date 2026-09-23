@@ -5,6 +5,7 @@ import {
   type CaptureInterpretation,
   type ConflictResolution,
 } from "@course-manager/contracts";
+import type { ActionRequiredSyncIssue } from "@course-manager/application";
 import { OwnerBindingError } from "@course-manager/storage";
 import { createSyncWorker, localRepository } from "./services.js";
 import { HttpSyncTransport, type ConflictDetail } from "./syncTransport.js";
@@ -84,6 +85,30 @@ const SYNC_RECHECK_INTERVAL_MS = 30_000;
 export function retryAuthenticatedSync(): void {
   actionRequired = false;
   retryRun?.();
+}
+
+export function openActionRequiredIssues(): Promise<ActionRequiredSyncIssue[]> {
+  return localRepository.listActionRequiredIssues();
+}
+
+export async function retryActionRequiredIssue(
+  mutationId: string,
+): Promise<ActionRequiredSyncIssue[]> {
+  if (activeRun) await activeRun;
+  await localRepository.retryActionRequired(mutationId);
+  actionRequired = false;
+  retryRun?.();
+  return localRepository.listActionRequiredIssues();
+}
+
+export async function abandonActionRequiredIssue(
+  mutationId: string,
+): Promise<ActionRequiredSyncIssue[]> {
+  if (activeRun) await activeRun;
+  await localRepository.abandonActionRequired(mutationId);
+  actionRequired = false;
+  retryRun?.();
+  return localRepository.listActionRequiredIssues();
 }
 
 async function authenticatedTransport(): Promise<HttpSyncTransport | null> {
@@ -195,7 +220,7 @@ export function startAuthenticatedSync(
   onApplied: () => void,
   onAccountMismatch: () => void,
   onConflicts: (conflicts: ConflictDetail[]) => void,
-  onNeedsAttention: () => void,
+  onNeedsAttention: (issues: ActionRequiredSyncIssue[]) => void,
 ): () => void {
   if (!authClient) return () => {};
   const client = authClient;
@@ -225,7 +250,8 @@ export function startAuthenticatedSync(
       if (actionRequired) return;
       const result = await worker.runOnce();
       if (result.stopped === "ACTION_REQUIRED") actionRequired = true;
-      if (result.stopped === "ACTION_REQUIRED" && !stopped) onNeedsAttention();
+      if (!stopped)
+        onNeedsAttention(await localRepository.listActionRequiredIssues());
       const conflicts = await conflictDetails(transport);
       if (!stopped) onConflicts(conflicts);
       if (!stopped && result.pulled > 0) onApplied();

@@ -2,6 +2,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import {
   createItemSchema,
+  createCourseSchema,
+  dateOnlySchema,
   isoDateTimeSchema,
   itemStatusSchema,
   rawCaptureStatusSchema,
@@ -10,17 +12,25 @@ import {
 } from "@course-manager/contracts";
 import type { SyncConflict } from "@course-manager/domain";
 import { CloudError, type CloudDatabase, type QueryPort } from "./cloud.js";
+import {
+  currentCollectionDescriptor,
+  isCollectionSyncType,
+  resolveCollectionWithinTransaction,
+} from "./collections.js";
 
 export { conflictResolutionSchema };
 
 type ConflictRow = SyncConflict & {
   resolution?: Record<string, unknown> | null;
 };
-type SupportedType = "ITEM" | "COURSE_INFORMATION" | "RAW_CAPTURE";
+type SupportedType =
+  "ITEM" | "COURSE_INFORMATION" | "RAW_CAPTURE" | "SEMESTER" | "COURSE";
 const tables: Record<SupportedType, string> = {
   ITEM: "items",
   COURSE_INFORMATION: "course_information",
   RAW_CAPTURE: "raw_captures",
+  SEMESTER: "semesters",
+  COURSE: "courses",
 };
 const allowedFields: Record<SupportedType, Set<string>> = {
   ITEM: new Set([
@@ -41,6 +51,8 @@ const allowedFields: Record<SupportedType, Set<string>> = {
     "unresolved_reason",
     "deleted_at",
   ]),
+  SEMESTER: new Set(["name", "start_date", "end_date"]),
+  COURSE: new Set(["name", "semester_id", "instructor"]),
 };
 
 export class CloudConflictManager {
@@ -83,23 +95,37 @@ export class CloudConflictManager {
   }
 
   async get(ownerId: string, id: string) {
-    const conflict = await this.conflict(this.db, ownerId, id);
-    if (!conflict) throw new CloudError("NOT_FOUND", 404, "Conflict not found");
-    if (!(conflict.entity_type in tables))
-      throw new CloudError(
-        "VALIDATION_ERROR",
-        400,
-        "Conflict type cannot be resolved here",
+    return this.db.transaction(async (query) => {
+      const conflict = await this.conflict(query, ownerId, id, true);
+      if (!conflict)
+        throw new CloudError("NOT_FOUND", 404, "Conflict not found");
+      if (isCollectionSyncType(conflict.entity_type))
+        return {
+          conflict,
+          current_entity: await currentCollectionDescriptor(
+            query,
+            ownerId,
+            conflict.entity_type,
+            conflict.entity_id,
+            true,
+          ),
+        };
+      if (!(conflict.entity_type in tables))
+        throw new CloudError(
+          "VALIDATION_ERROR",
+          400,
+          "Conflict type cannot be resolved here",
+        );
+      const current_entity = await this.entity(
+        query,
+        ownerId,
+        conflict.entity_type as SupportedType,
+        conflict.entity_id,
       );
-    const current_entity = await this.entity(
-      this.db,
-      ownerId,
-      conflict.entity_type as SupportedType,
-      conflict.entity_id,
-    );
-    if (!current_entity)
-      throw new CloudError("NOT_FOUND", 404, "Conflicting object not found");
-    return { conflict, current_entity };
+      if (!current_entity)
+        throw new CloudError("NOT_FOUND", 404, "Conflicting object not found");
+      return { conflict, current_entity };
+    });
   }
 
   async resolve(
@@ -141,6 +167,46 @@ export class CloudConflictManager {
           409,
           "Conflict was already resolved",
         );
+      if (isCollectionSyncType(conflict.entity_type)) {
+        const fields = conflict.conflicting_fields;
+        const choice = request.field_resolutions.collection;
+        if (
+          fields.length !== 1 ||
+          fields[0] !== "collection" ||
+          Object.keys(request.field_resolutions).length !== 1 ||
+          (choice !== "LOCAL" && choice !== "REMOTE")
+        )
+          throw new CloudError(
+            "VALIDATION_ERROR",
+            400,
+            "Choose the local or synced collection",
+          );
+        const entity = await resolveCollectionWithinTransaction(
+          query,
+          ownerId,
+          conflict.entity_type,
+          conflict.entity_id,
+          observedVersion,
+          choice,
+          conflict.local_version.collection,
+        );
+        const resolution = {
+          ...request,
+          selected: { collection: choice },
+          observed_version: observedVersion,
+        };
+        await query.query(
+          "UPDATE sync_conflicts SET status='RESOLVED',resolved_at=now(),resolution=$3::jsonb WHERE id=$1 AND owner_id=$2",
+          [id, ownerId, JSON.stringify(resolution)],
+        );
+        const resolved = await this.conflict(query, ownerId, id);
+        const response = { conflict: resolved!, entity };
+        await query.query(
+          "INSERT INTO idempotency_keys (owner_id,mutation_id,request_hash,response) VALUES ($1,$2,$3,$4::jsonb)",
+          [ownerId, mutationId, hash, JSON.stringify(response)],
+        );
+        return response;
+      }
       if (!(conflict.entity_type in tables))
         throw new CloudError(
           "VALIDATION_ERROR",
@@ -237,7 +303,7 @@ export class CloudConflictManager {
       } else if (type === "COURSE_INFORMATION") {
         if ("content" in selected)
           z.string().trim().min(1).max(20000).parse(selected.content);
-      } else {
+      } else if (type === "RAW_CAPTURE") {
         if ("processing_status" in selected)
           rawCaptureStatusSchema.parse(selected.processing_status);
         if ("unresolved_reason" in selected)
@@ -258,6 +324,30 @@ export class CloudConflictManager {
             400,
             "Only unresolved captures can be deleted",
           );
+      } else if (type === "SEMESTER") {
+        const nextSemester = { ...current, ...selected };
+        z.string().trim().min(1).parse(nextSemester.name);
+        dateOnlySchema.parse(nextSemester.start_date);
+        dateOnlySchema.parse(nextSemester.end_date);
+        if (String(nextSemester.start_date) > String(nextSemester.end_date))
+          throw new CloudError(
+            "VALIDATION_ERROR",
+            400,
+            "Invalid Semester dates",
+          );
+      } else {
+        const nextCourse = createCourseSchema.parse({
+          ...current,
+          ...selected,
+        });
+        if (nextCourse.semester_id) {
+          const semester = await query.query<{ id: string }>(
+            "SELECT id FROM semesters WHERE id=$1 AND owner_id=$2 AND deleted_at IS NULL",
+            [nextCourse.semester_id, ownerId],
+          );
+          if (!semester.rows[0])
+            throw new CloudError("NOT_FOUND", 404, "Semester not found");
+        }
       }
       if ("deleted_at" in selected) {
         if (selected.deleted_at !== null)

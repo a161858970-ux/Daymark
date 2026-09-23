@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { ConflictResolution } from "@course-manager/contracts";
-import type { ManualCaptureResolution } from "@course-manager/application";
+import type {
+  ActionRequiredSyncIssue,
+  ManualCaptureResolution,
+} from "@course-manager/application";
 import { semesterForDate } from "@course-manager/domain";
 import type {
   Course,
   CourseInformation,
   CourseSchedule,
   Item,
+  ItemAssociation,
   RawCapture,
   Semester,
   SemesterWeek,
@@ -19,8 +23,11 @@ import { CourseInformationList } from "./CourseInformationList.js";
 import { PendingCapture } from "./PendingCapture.js";
 import {
   authClient,
+  abandonActionRequiredIssue,
+  openActionRequiredIssues,
   requestCaptureInterpretation,
   resolveSyncConflict,
+  retryActionRequiredIssue,
   startAuthenticatedSync,
 } from "./authSync.js";
 import { ConflictPanel } from "./ConflictPanel.js";
@@ -36,6 +43,7 @@ import {
 import { SemesterSwitcher } from "./SemesterSwitcher.js";
 import type { WeekFields } from "./SemesterWeekEditor.js";
 import { localDate } from "./timeInputs.js";
+import { SyncRepairPanel } from "./SyncRepairPanel.js";
 
 type Page = "overview" | "courses" | "calendar";
 type Feedback = {
@@ -50,6 +58,7 @@ export function App() {
   const [showCourseDelete, setShowCourseDelete] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
   const [overviewItems, setOverviewItems] = useState<Item[]>([]);
+  const [allItems, setAllItems] = useState<Item[]>([]);
   const [courseItems, setCourseItems] = useState<Item[]>([]);
   const [calendarItems, setCalendarItems] = useState<Item[]>([]);
   const [semesters, setSemesters] = useState<Semester[]>([]);
@@ -73,6 +82,9 @@ export function App() {
   );
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [selectedRaw, setSelectedRaw] = useState<RawCapture | null>(null);
+  const [itemAssociations, setItemAssociations] = useState<ItemAssociation[]>(
+    [],
+  );
   const [pendingMoveIds, setPendingMoveIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -80,12 +92,14 @@ export function App() {
   const [courseItemText, setCourseItemText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [syncConflicts, setSyncConflicts] = useState<ConflictDetail[]>([]);
+  const [syncIssues, setSyncIssues] = useState<ActionRequiredSyncIssue[]>([]);
 
   const refresh = useCallback(async () => {
     const now = new Date().toISOString();
     const today = localDate();
     const [
       courseData,
+      allItemData,
       overviewData,
       unresolvedData,
       courseItemData,
@@ -93,8 +107,10 @@ export function App() {
       courseScheduleData,
       calendarData,
       semesterData,
+      selectedAssociationData,
     ] = await Promise.all([
       courseManager.listCourses(),
+      courseManager.listItems(),
       courseManager.overview(today, now, selectedSemesterId ?? undefined),
       courseManager.unresolvedCaptures(),
       currentCourseId
@@ -108,11 +124,15 @@ export function App() {
         : Promise.resolve([]),
       courseManager.calendarItems(),
       courseManager.listSemesters(),
+      selectedItem
+        ? courseManager.itemAssociations(selectedItem.id)
+        : Promise.resolve([]),
     ]);
     const weekGroups = await Promise.all(
       semesterData.map((semester) => courseManager.semesterWeeks(semester.id)),
     );
     setCourses(courseData);
+    setAllItems(allItemData);
     setOverviewItems(overviewData);
     setUnresolved(unresolvedData);
     setUnresolvedContexts(
@@ -131,6 +151,7 @@ export function App() {
     setCalendarItems(calendarData);
     setSemesters(semesterData);
     setSemesterWeeks(weekGroups.flat());
+    setItemAssociations(selectedAssociationData);
     if (selectedItem) {
       const next = await courseManager.getItem(selectedItem.id);
       if (next?.deleted_at) setSelectedItem(null);
@@ -146,6 +167,7 @@ export function App() {
       .recoverPendingCaptures()
       .then(refresh)
       .catch((cause: unknown) => setError(String(cause)));
+    void openActionRequiredIssues().then(setSyncIssues);
   }, []);
   useEffect(
     () =>
@@ -155,10 +177,7 @@ export function App() {
         },
         () => setError("本机记录已关联另一账户，请使用原账户。"),
         setSyncConflicts,
-        () =>
-          setError(
-            "有记录暂时无法同步，原始内容仍保存在本机。请检查后在账户面板重试同步。",
-          ),
+        setSyncIssues,
       ),
     [refresh],
   );
@@ -192,6 +211,19 @@ export function App() {
   async function openItem(item: Item) {
     setSelectedItem(item);
     setSelectedRaw((await courseManager.rawCaptureForItem(item.id)) ?? null);
+    setItemAssociations(await courseManager.itemAssociations(item.id));
+  }
+
+  async function addItemAssociation(associatedItemId: string) {
+    if (!selectedItem) return;
+    await courseManager.associateItems(selectedItem.id, associatedItemId);
+    setItemAssociations(await courseManager.itemAssociations(selectedItem.id));
+  }
+
+  async function removeItemAssociation(associationId: string) {
+    if (!selectedItem) return;
+    await courseManager.deleteItemAssociation(associationId);
+    setItemAssociations(await courseManager.itemAssociations(selectedItem.id));
   }
 
   async function complete(item: Item) {
@@ -391,6 +423,51 @@ export function App() {
     await refresh();
   }
 
+  async function inspectSyncIssue(issue: ActionRequiredSyncIssue) {
+    const object = issue.local_object;
+    switch (issue.mutation.entity_type) {
+      case "ITEM": {
+        const item = await courseManager.getItem(issue.mutation.entity_id);
+        if (item) await openItem(item);
+        return;
+      }
+      case "COURSE_INFORMATION":
+        setPage("courses");
+        setCurrentCourseId(String(object?.course_id ?? "") || null);
+        setCourseTab("information");
+        return;
+      case "COURSE_SCHEDULE_COLLECTION":
+        setPage("courses");
+        setCurrentCourseId(issue.mutation.entity_id);
+        setCourseTab("schedule");
+        return;
+      case "SEMESTER_WEEK_COLLECTION":
+      case "SEMESTER":
+        setPage("courses");
+        setCurrentCourseId(null);
+        setSelectedSemesterId(issue.mutation.entity_id);
+        return;
+      case "COURSE":
+        setPage("courses");
+        setCurrentCourseId(issue.mutation.entity_id);
+        return;
+      default:
+        setPage("overview");
+    }
+  }
+
+  async function retrySyncIssue(mutationId: string) {
+    setSyncIssues(await retryActionRequiredIssue(mutationId));
+    setFeedback({ message: "已重新提交当前内容", duration: 3500 });
+    await refresh();
+  }
+
+  async function abandonSyncIssue(mutationId: string) {
+    setSyncIssues(await abandonActionRequiredIssue(mutationId));
+    setFeedback({ message: "正在恢复已同步状态", duration: 3500 });
+    await refresh();
+  }
+
   const activeCourse = courses.find((course) => course.id === currentCourseId);
   const activeSemesterId = semesterForDate(localDate(), semesters)?.id ?? null;
   const targetSemesterId = selectedSemesterId ?? activeSemesterId;
@@ -434,7 +511,15 @@ export function App() {
         <ConflictPanel
           conflicts={syncConflicts}
           courses={courses}
+          semesters={semesters}
           onResolve={resolveConflict}
+        />
+        <SyncRepairPanel
+          issues={syncIssues}
+          courses={courses}
+          onInspect={(issue) => void inspectSyncIssue(issue)}
+          onRetry={retrySyncIssue}
+          onAbandon={abandonSyncIssue}
         />
         {page === "overview" && (
           <>
@@ -688,11 +773,34 @@ export function App() {
           item={selectedItem}
           courses={courses}
           rawCapture={selectedRaw}
-          onClose={() => setSelectedItem(null)}
+          associations={itemAssociations.flatMap((association) => {
+            const otherId =
+              association.item_id_a === selectedItem.id
+                ? association.item_id_b
+                : association.item_id_a;
+            const item = allItems.find((value) => value.id === otherId);
+            return item ? [{ association, item }] : [];
+          })}
+          associationCandidates={allItems.filter(
+            (item) =>
+              item.deleted_at === null &&
+              item.id !== selectedItem.id &&
+              !itemAssociations.some(
+                (association) =>
+                  association.item_id_a === item.id ||
+                  association.item_id_b === item.id,
+              ),
+          )}
+          onClose={() => {
+            setSelectedItem(null);
+            setItemAssociations([]);
+          }}
           onComplete={(item) => void complete(item)}
           onRestore={(item) => void restore(item)}
           onDelete={(item) => void remove(item)}
           onSave={saveEdit}
+          onAssociate={addItemAssociation}
+          onRemoveAssociation={removeItemAssociation}
         />
       )}
       {feedback && (
