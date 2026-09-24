@@ -2,15 +2,15 @@
 
 **审计日期**：2026-09-24  
 **规格基线**：`11_UX_VISUAL_SPEC.md`、`12_MOTION_SPEC.md`、`13_RESPONSIVE_SPEC.md`  
-**代码基线**：Phase 6 implementation closure 后、Phase 7 视觉改造前
+**代码基线**：`ba9fad8 Complete Phase 7H responsive refinement`
 
 ## 总体判断
 
-当前 Web 已具备大部分产品流程和基础响应式骨架，但视觉仍是工程基线：层级、页面宽度、导航语义、状态反馈与键盘行为尚未形成统一系统。Phase 7 保留现有 domain/application 行为，以 design tokens、共享 surface component 和明确的 desktop/mobile wrapper 收敛表现。
+Phase 7A–7H 已把原工程基线收敛为统一视觉、响应式和动效系统；产品 domain/application 行为保持不变。最终 breakpoint、触控、键盘、屏幕阅读语义与跨断点状态连续性已在本地浏览器通过，物理设备与辅助技术实机验收保留给 Phase 8 / release validation。
 
 ## Phase 7 progress — 2026-09-24
 
-以下状态记录基线审计之后的实施结果。后续 20 个 surface 条目保留改造前证据，7A–7G 的当前状态以本节为准。
+以下状态记录基线审计之后的实施结果。后续 20 个 surface 条目保留改造前证据，7A–7H 的当前状态以本节为准。
 
 ### 7A — Shell / Navigation / Tokens — PASS locally
 
@@ -73,9 +73,22 @@
 - desktop 与 390×844 手工验证页面/课程/tab/Completed/Quick Capture/Detail/Search/Account；日程事项从 9 月 30 日移至 9 月 29 日后捕获 `calendar-item-relocated`，再恢复原日期。移动端捕获 `sheet-out` 280ms 和向下位移；焦点返回通过。
 - 全仓 build/test/lint/format 通过：**87 passed，1 个真实 PostgreSQL gate skipped**；Web 为 **22 passed**。Vite 仅保留主 bundle 约 544 kB 的非阻塞 warning。
 
-### Remaining
+### 7H — Responsive / Accessibility refinement — PASS locally
 
-- **7H**：完整 responsive/accessibility matrix 与最终视觉 acceptance。
+- 在 `360×800`、`390×844`、`430×932`、`768×900`、`1023×900`、`1024×900`、`1100×900`、`1101×900`、`1366×768` 与 `1440×900` 完成断点矩阵；所有宽度均无文档级水平溢出。
+- Mobile 可见交互目标在最小 `360px` 基线上达到约 `44×44px`；Quick Capture 与底部导航保持 18px 安全间距，账户 popover 保持至少 18px 边界。
+- Mobile Bottom Sheet 现在声明 modal、隐藏纯 pointer backdrop 的辅助技术重复项并循环 Tab；Windows Detail 保持非 modal 的持久/overlay side container 语义。
+- Escape 只关闭最上层 Quick Capture、Search、Account 或 Detail，不再同时退出底层 Calendar Single Day；关闭后焦点返回原 trigger。
+- 页面/课程切换会复位文档滚动，避免从长列表进入 Course detail 后把返回入口留在视口外。
+- 窄桌面 Detail 为右下 Quick Capture 预留安全列和底部滚动空间；删除确认与浮动按钮实测无交叠。
+- 从 desktop → mobile → compact desktop → desktop 调整 viewport 时保持同一 Item id，详情只改变空间容器与 modal 语义。
+- 完整证据见 `docs/RESPONSIVE_ACCEPTANCE_MATRIX.md`。全仓 gate 为 **88 passed，1 个真实 PostgreSQL gate skipped**；Web 为 **23 passed**，build/lint/format 均通过。
+
+### Phase 7 result
+
+> **PHASE 7 VISUAL / RESPONSIVE / MOTION: COMPLETE LOCALLY**
+
+物理手机、Windows 触屏设备、屏幕阅读器与移动软键盘实机验收尚未执行，不写成 PASS。
 
 ## 1. Desktop Navigation — Stage 7A
 
@@ -286,4 +299,4 @@
 - **7E — PASS locally**：Calendar month/week/day、连续 range、移动日视图、方向 motion 与焦点返回。
 - **7F — PASS locally**：全局 Search、unresolved、Conflict、ACTION_REQUIRED、Account/Sync 与状态 surface。
 - **7G — PASS locally**：统一 timing/exit presence、页面与 tab 连续性、Quick Capture 成功反馈、Calendar 改期、desktop/mobile detail exit 与 reduced-motion gate。
-- **7H — PENDING**：完整 breakpoint、键盘、触控、屏幕阅读语义与最终视觉 acceptance matrix。
+- **7H — PASS locally**：完整 breakpoint matrix、44px mobile targets、分层 Escape、Mobile modal/focus loop、滚动复位、窄桌面安全区与跨断点 identity continuity。

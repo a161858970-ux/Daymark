@@ -2,9 +2,9 @@
 
 **更新日期**：2026-09-24
 
-**审计范围**：Specification 00–21；Phase 6 implementation closure；Phase 7A–7G
+**审计范围**：Specification 00–21；Phase 6 implementation closure；Phase 7A–7H
 
-**当前结论**：**PHASE 6 ENGINEERING IMPLEMENTATION: COMPLETE**；**PHASE 7A–7G: PASS LOCALLY**；真实基础设施验收仍为 **BLOCKED BY EXTERNAL CONFIGURATION**，不计为 PASS
+**当前结论**：**PHASE 6 ENGINEERING IMPLEMENTATION: COMPLETE**；**PHASE 7A–7H: PASS LOCALLY**；真实基础设施验收仍为 **BLOCKED BY EXTERNAL CONFIGURATION**，不计为 PASS
 
 本审计把“代码存在”“本机执行通过”“模拟基础设施通过”和“真实外部基础设施通过”分开记录。旧审计中的 26/35/44/48 项测试及同步缺口描述是历史快照，已由本文替换。
 
@@ -189,7 +189,7 @@
 
 > **RELEASE INFRASTRUCTURE VERIFICATION: BLOCKED BY EXTERNAL CONFIGURATION**
 
-## 8. Phase 7A–7G — Visual / Responsive / Motion
+## 8. Phase 7A–7H — Visual / Responsive / Motion
 
 ### 8.1 Implemented
 
@@ -200,6 +200,7 @@
 - 7E 完成 Calendar month/week/day：传统七列结构、单一范围导航、today/selected/overflow 状态、连续多日 range、按时间排序的 Single Day 和移动端日期钻取流程。
 - 7F 完成全局 Search、unresolved/Conflict/ACTION_REQUIRED attention surfaces、账户与同步状态，以及这些 surface 的 desktop/mobile 空间与键盘行为。
 - 7G 完成统一 motion timing、reduced-motion aware exit presence、页面与课程内容过渡、Quick Capture 成功浮层、transient notice 离场、desktop/mobile detail exit 和 Calendar 改期到达提示。
+- 7H 完成 `360–1440px` breakpoint matrix、Mobile 44px 操作目标、Bottom Sheet modal/Tab loop、分层 Escape、页面滚动复位、窄桌面浮动控件安全区与跨断点 Item identity continuity。
 - Search 使用确定性本地关键词匹配和轻量对象分组；Windows 固定入口与 header shortcut、Mobile header 入口共享一个 surface，结果直接打开 canonical Item/Course/CourseInformation。
 - attention surfaces 默认只占一行摘要；展开后沿用既有解析决定、字段/整组冲突与 repair 权限，不暴露 mutation、版本、SQL 或队列内部状态。
 - Calendar 继续只投影 Item；多日与完成状态都保留同一 Item identity，CourseSchedule 没有进入 Calendar。
@@ -219,14 +220,17 @@
 - Attention/account desktop/mobile：待确认摘要、仅本机状态、账户 popover 边界与键盘关闭已人工验证；Conflict/ACTION_REQUIRED 的选择边界继续由静态 surface 与 sync 集成测试覆盖。
 - Motion desktop/mobile：捕获 page/content/completed transition、Quick Capture 成功浮层、Windows `detail-out`、Mobile `sheet-out`、关闭后焦点返回与 reduced-motion stylesheet gate；Search/Account 退出后均返回原 trigger。
 - Calendar 改期：手工将测试事项从 9 月 30 日移动到 9 月 29 日，捕获同一 id 的 `calendar-item-relocated` 360ms，再恢复原日期；整张月历未重挂。
-- `pnpm build`、`pnpm test`、`pnpm lint`、`pnpm format:check` 全部通过；当前全仓为 **87 passed，1 externally gated skip**，其中 Web 为 **22 passed**。
+- Responsive/accessibility：`360×800`、`390×844`、`430×932`、`768×900`、`1023×900`、`1024×900`、`1100×900`、`1101×900`、`1366×768`、`1440×900` 无水平溢出；Mobile 可见操作目标无小于约 44px 的命中区。
+- Keyboard/screen reader：导航焦点可见；Enter 激活；Search/Account/Quick Capture/Detail 分层 Escape；Mobile Detail `aria-modal` + Tab loop；desktop Detail 保持非 modal；关闭后焦点返回。
+- Resize：同一 Item 在 desktop → mobile → compact desktop → desktop 间保持 identity，详情只切换 Side Container / Bottom Sheet 表达。
+- `pnpm build`、`pnpm test`、`pnpm lint`、`pnpm format:check` 全部通过；当前全仓为 **88 passed，1 externally gated skip**，其中 Web 为 **23 passed**。
 - `pnpm --filter @course-manager/web dev` 已启动并由 HTTP 200 验证。Vite 仍仅报告单 bundle 大于 500 kB 的非阻塞 warning，当前主 bundle 约 544 kB。
 
-### 8.3 Remaining in Phase 7
+### 8.3 Phase 7 result
 
-- 7H 完整 desktop/mobile breakpoint、键盘、触控、屏幕阅读语义和最终视觉 acceptance matrix。
+> **PHASE 7 VISUAL / RESPONSIVE / MOTION: COMPLETE LOCALLY**
 
-当前 surface 缺口与每阶段 gate 见根目录 `UI_SURFACE_AUDIT.md`。
+完整断点与可访问性证据见 `RESPONSIVE_ACCEPTANCE_MATRIX.md`。物理手机、Windows 触屏设备、屏幕阅读器和移动软键盘仍需 Phase 8 / release validation 实机验收。
 
 ## 9. Current test evidence
 
@@ -239,14 +243,14 @@
 - `apps/api/src/db/multi-device.test.ts`：A–I/K。
 - `apps/api/src/db/resource-coverage.test.ts`：正式 REST 资源覆盖。
 - `apps/api/src/db/real-postgres.integration.test.ts`：真实 PostgreSQL gate；当前 skipped。
-- `apps/web/src/*.test.tsx` 与 `motion.test.ts`：导航、Course/Item 层级、Quick Capture 单控件 identity、Detail surface、删除/恢复 motion class、Calendar range/day/position semantics、Search 分组、attention/account 状态、transient notice、reduced-motion timing、Conflict 与 SyncRepair 安全展示。
+- `apps/web/src/*.test.tsx` 与 `motion.test.ts`：导航、Course/Item 层级、Quick Capture 单控件 identity、Detail surface/mobile modal、删除/恢复 motion class、Calendar range/day/position semantics、Search 分组、attention/account 状态、transient notice、reduced-motion timing、Conflict 与 SyncRepair 安全展示。
 
 ## 10. Known limitations and release blockers
 
 1. **External sync validation**：真实 PostgreSQL/Supabase/双浏览器尚未执行。
 2. **Reminder release**：R-01、云端 lease、平台通知和后台能力未完成。
 3. **AI release**：真实 provider 未验收，完整时间语义仍走保守确认。
-4. **Feature scope**：课程表导入、Phase 7H、Phase 8 未实施。
+4. **Feature scope**：课程表导入与 Phase 8 全量 acceptance 未实施；物理设备、屏幕阅读器和移动软键盘未实机验证。
 5. **Bundle**：Web 主 bundle 约 541 kB，构建通过但有 Vite size warning；可在后续阶段做按路由/功能拆分。
 
 ## 11. Spec deviations
@@ -257,4 +261,4 @@
 
 ## 12. Next gate
 
-产品开发路线下一步进入 Phase 7H，并以 `UI_SURFACE_AUDIT.md` 为界完成 breakpoint、键盘、触控、屏幕阅读语义与最终 responsive/visual acceptance。发布基础设施路线独立保留：拿到外部配置后按 `REAL_POSTGRES_VERIFICATION.md` 完成真实 PostgreSQL、Supabase 与双浏览器验收，再更新本文的 real infrastructure 证据。
+产品开发路线下一步进入 Phase 8，逐条执行 `19_TEST_ACCEPTANCE_SPEC.md` 的 acceptance/hardening，并生成最终实现审计。发布基础设施路线独立保留：拿到外部配置后按 `REAL_POSTGRES_VERIFICATION.md` 完成真实 PostgreSQL、Supabase 与双浏览器验收，再更新本文的 real infrastructure 证据。
