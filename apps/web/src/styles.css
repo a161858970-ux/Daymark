@@ -683,49 +683,131 @@ h2 {
 }
 .quick-capture {
   position: fixed;
-  right: 36px;
-  bottom: 34px;
-  z-index: 8;
+  right: 34px;
+  bottom: 32px;
+  z-index: 16;
+  --capture-size: 58px;
 }
 .quick-capture form {
-  height: 58px;
-  width: 58px;
+  height: var(--capture-size);
+  width: var(--capture-size);
   display: flex;
   justify-content: flex-end;
   align-items: center;
   overflow: hidden;
   background: var(--accent);
   color: white;
-  border-radius: 29px;
-  box-shadow: 0 9px 24px #233a3128;
-  transition: width var(--motion-medium) ease;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: calc(var(--capture-size) / 2);
+  box-shadow: 0 12px 32px rgb(35 58 49 / 22%);
+  transition:
+    width var(--motion-medium) ease-out,
+    background-color var(--motion-short) ease-out,
+    box-shadow var(--motion-short) ease-out;
 }
 .quick-capture.expanded form {
-  width: min(460px, calc(100vw - 265px));
+  width: min(480px, calc(100vw - var(--nav-width) - 76px));
+  box-shadow: 0 16px 42px rgb(35 58 49 / 25%);
+}
+.quick-capture.error form {
+  background: #7d4843;
+}
+.quick-capture-field {
+  min-width: 0;
+  flex: 1 1 auto;
+  opacity: 0;
+  transform: translateX(8px);
+  transition:
+    opacity var(--motion-short) ease-out 40ms,
+    transform var(--motion-medium) ease-out;
+}
+.quick-capture.expanded .quick-capture-field {
+  opacity: 1;
+  transform: translateX(0);
 }
 .quick-capture input {
-  min-width: 0;
-  flex: 1;
+  width: 100%;
+  min-width: 120px;
+  height: calc(var(--capture-size) - 2px);
   background: transparent;
   border: 0;
   outline: none;
   color: white;
-  padding-left: 21px;
+  padding: 0 8px 0 21px;
+  caret-color: white;
 }
 .quick-capture input::placeholder {
-  color: #dce6df;
+  color: rgb(237 243 238 / 78%);
 }
 .quick-capture button {
+  position: relative;
   border: 0;
   color: white;
   background: transparent;
-  width: 58px;
-  height: 58px;
-  flex: 0 0 58px;
-  font-size: 27px;
+  width: var(--capture-size);
+  height: var(--capture-size);
+  flex: 0 0 var(--capture-size);
+  border-radius: 50%;
+  transition: background-color var(--motion-fast) ease-out;
 }
 .quick-capture button:hover {
-  background: #406459;
+  background: rgb(255 255 255 / 9%);
+}
+.capture-idle-symbol,
+.capture-idle-symbol::after,
+.capture-idle-symbol::before {
+  position: absolute;
+  display: block;
+  width: 16px;
+  height: 1.5px;
+  border-radius: 2px;
+  background: currentColor;
+  content: "";
+}
+.capture-idle-symbol {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition:
+    opacity var(--motion-fast) ease-out,
+    transform var(--motion-medium) ease-out;
+}
+.capture-idle-symbol::before {
+  transform: rotate(90deg);
+}
+.capture-idle-symbol::after {
+  display: none;
+}
+.capture-submit-symbol {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transform: translateX(5px);
+  font-size: 21px;
+  transition:
+    opacity var(--motion-fast) ease-out,
+    transform var(--motion-medium) ease-out;
+}
+.quick-capture.expanded .capture-idle-symbol {
+  opacity: 0;
+  transform: translate(-58%, -50%) rotate(45deg) scale(0.7);
+}
+.quick-capture.expanded .capture-submit-symbol {
+  opacity: 1;
+  transform: translateX(0);
+}
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 .course-create,
 .course-item-form {
@@ -1286,6 +1368,12 @@ h2 {
   padding: 13px 4px;
 }
 
+@media (min-width: 1101px) {
+  .app-shell:has(.detail-panel) .quick-capture {
+    right: calc(var(--detail-width) + 28px);
+  }
+}
+
 @media (min-width: 768px) and (max-width: 1100px) {
   :root {
     --nav-width: 184px;
@@ -1421,11 +1509,11 @@ h2 {
     width: 48px;
   }
   .quick-capture {
-    right: 20px;
-    bottom: calc(83px + env(safe-area-inset-bottom));
+    right: clamp(18px, 5vw, 28px);
+    bottom: calc(90px + env(safe-area-inset-bottom));
   }
   .quick-capture.expanded form {
-    width: min(390px, calc(100vw - 40px));
+    width: min(430px, calc(100vw - 36px));
   }
   .detail-backdrop {
     display: block;

@@ -620,7 +620,6 @@ export function App() {
               onOpen={(item) => void openItem(item)}
               onComplete={(item) => void complete(item)}
             />
-            <QuickCapture onSave={(text) => saveCapture(text)} />
           </>
         )}
         {!initializing && page === "courses" && (
@@ -822,6 +821,7 @@ export function App() {
           </>
         )}
       </main>
+      {!initializing && <QuickCapture onSave={(text) => saveCapture(text)} />}
       {selectedItem && (
         <ItemDetail
           item={selectedItem}
