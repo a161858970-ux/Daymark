@@ -161,7 +161,7 @@ export function ItemList({
           />
         </button>
         {completedOpen && (
-          <ul>
+          <ul className="completed-list-reveal">
             {completed.map((item) => (
               <Row
                 key={item.id}

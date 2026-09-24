@@ -170,7 +170,10 @@ export function CalendarView({
     >
       <div className="calendar-toolbar">
         <div className="calendar-title-block" aria-live="polite">
-          <p className="calendar-context">
+          <p
+            key={month.semester?.id ?? "no-semester"}
+            className="calendar-context context-transition"
+          >
             当前学期：{month.semester?.name ?? "无"}
           </p>
           <strong>{title}</strong>

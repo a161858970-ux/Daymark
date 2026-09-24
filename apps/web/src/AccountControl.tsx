@@ -6,6 +6,7 @@ import {
   type AuthenticatedSyncState,
   type AuthenticatedSyncStatus,
 } from "./authSync.js";
+import { motionDuration, useExitTransition } from "./motion.js";
 
 const labels: Record<AuthenticatedSyncState, string> = {
   LOCAL_ONLY: "仅本机",
@@ -44,6 +45,20 @@ export function AccountControl({
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const restoreFocusAfterCloseRef = useRef(false);
+  const { exiting, beginExit, cancelExit } = useExitTransition(
+    () => {
+      setOpen(false);
+      if (restoreFocusAfterCloseRef.current) buttonRef.current?.focus();
+    },
+    motionDuration.short,
+    open ? "open" : "closed",
+  );
+
+  function closePopover(restoreFocus: boolean) {
+    restoreFocusAfterCloseRef.current = restoreFocus;
+    beginExit();
+  }
 
   useEffect(() => {
     if (!authClient) return;
@@ -64,13 +79,12 @@ export function AccountControl({
     if (!open) return;
     headingRef.current?.focus();
     function closeOutside(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(event.target as Node)) closePopover(false);
     }
     function closeWithEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       event.preventDefault();
-      setOpen(false);
-      buttonRef.current?.focus();
+      closePopover(true);
     }
     window.addEventListener("pointerdown", closeOutside);
     window.addEventListener("keydown", closeWithEscape);
@@ -122,7 +136,13 @@ export function AccountControl({
         type="button"
         className={`sync-status-trigger state-${effectiveState.toLowerCase()}`}
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          if (open) closePopover(true);
+          else {
+            cancelExit();
+            setOpen(true);
+          }
+        }}
       >
         <span className="sync-status-dot" aria-hidden="true" />
         <span>{labels[effectiveState]}</span>
@@ -131,7 +151,10 @@ export function AccountControl({
         )}
       </button>
       {open && (
-        <section className="account-popover" aria-label="账户与同步">
+        <section
+          className={`account-popover ${exiting ? "closing" : ""}`}
+          aria-label="账户与同步"
+        >
           <header>
             <div>
               <p className="eyebrow">ACCOUNT &amp; SYNC</p>
@@ -143,10 +166,7 @@ export function AccountControl({
               type="button"
               className="detail-close"
               aria-label="关闭账户与同步"
-              onClick={() => {
-                setOpen(false);
-                buttonRef.current?.focus();
-              }}
+              onClick={() => closePopover(true)}
             >
               ×
             </button>

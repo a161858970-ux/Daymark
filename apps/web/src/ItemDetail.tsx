@@ -7,6 +7,7 @@ import type {
 } from "@course-manager/domain";
 import { ItemEditForm, type EditableItemFields } from "./ItemEditForm.js";
 import { ItemDetailView } from "./ItemDetailView.js";
+import { motionDuration, useExitTransition } from "./motion.js";
 
 export type { EditableItemFields } from "./ItemEditForm.js";
 
@@ -19,7 +20,7 @@ interface Props {
   onClose(): void;
   onComplete(item: Item): void;
   onRestore(item: Item): void;
-  onDelete(item: Item): void;
+  onDelete(item: Item): Promise<boolean>;
   onSave(item: Item, fields: EditableItemFields): Promise<void>;
   onAssociate(itemId: string): Promise<void>;
   onRemoveAssociation(associationId: string): Promise<void>;
@@ -51,6 +52,11 @@ export function ItemDetail({
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [confirmDeleteItemId, setConfirmDeleteItemId] = useState<string | null>(
     null,
+  );
+  const { exiting, beginExit } = useExitTransition(
+    onClose,
+    motionDuration.panel,
+    item.id,
   );
   const editing = editingItemId === item.id;
   const confirmDelete = confirmDeleteItemId === item.id;
@@ -117,24 +123,24 @@ export function ItemDetail({
         cancelEditing();
         return;
       }
-      onClose();
+      beginExit();
     }
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [confirmDelete, editing, item.id, onClose]);
+  }, [beginExit, confirmDelete, editing, item.id]);
 
   return (
     <>
       <button
         type="button"
-        className="detail-backdrop"
+        className={`detail-backdrop ${exiting ? "closing" : ""}`}
         aria-label="关闭事项详情"
         tabIndex={-1}
-        onClick={onClose}
+        onClick={beginExit}
       />
       <aside
         ref={panelRef}
-        className="detail-panel"
+        className={`detail-panel ${exiting ? "closing" : ""}`}
         role="dialog"
         aria-labelledby={headingId}
         tabIndex={-1}
@@ -145,7 +151,7 @@ export function ItemDetail({
           <button
             ref={closeButtonRef}
             type="button"
-            onClick={onClose}
+            onClick={beginExit}
             aria-label="关闭事项详情"
           >
             ×
@@ -177,7 +183,11 @@ export function ItemDetail({
                 onEdit={() => setEditingItemId(item.id)}
                 onComplete={onComplete}
                 onRestore={onRestore}
-                onDelete={onDelete}
+                onDelete={(deletedItem) => {
+                  void onDelete(deletedItem).then((deleted) => {
+                    if (deleted) beginExit();
+                  });
+                }}
                 onRequestDelete={() => setConfirmDeleteItemId(item.id)}
                 onCancelDelete={cancelDelete}
                 onAssociate={onAssociate}

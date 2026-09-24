@@ -56,12 +56,12 @@ import { SyncRepairPanel } from "./SyncRepairPanel.js";
 import { AppNavigation, type PrimaryPage } from "./AppNavigation.js";
 import { GlobalSearchButton, SearchSurface } from "./SearchSurface.js";
 import { AttentionSummary } from "./AttentionSummary.js";
-
-type Feedback = {
-  message: string;
-  action?: () => Promise<void>;
-  duration: number;
-};
+import {
+  ErrorNotice,
+  TransientFeedback,
+  type FeedbackNotice,
+} from "./TransientNotice.js";
+import { motionDuration } from "./motion.js";
 
 export function App() {
   const [page, setPage] = useState<PrimaryPage>("overview");
@@ -112,7 +112,7 @@ export function App() {
   const [enteringItemIds, setEnteringItemIds] = useState<Set<string>>(
     () => new Set(),
   );
-  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [feedback, setFeedback] = useState<FeedbackNotice | null>(null);
   const [courseItemText, setCourseItemText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [syncConflicts, setSyncConflicts] = useState<ConflictDetail[]>([]);
@@ -132,6 +132,7 @@ export function App() {
   const completionTimersRef = useRef<Map<string, number>>(new Map());
   const deletionTimersRef = useRef<Map<string, number>>(new Map());
   const enteringTimersRef = useRef<Map<string, number>>(new Map());
+  const feedbackIdRef = useRef(0);
 
   const refresh = useCallback(async () => {
     const now = new Date().toISOString();
@@ -245,14 +246,6 @@ export function App() {
       ),
     [refresh],
   );
-  useEffect(() => {
-    if (!feedback) return;
-    const timeout = window.setTimeout(
-      () => setFeedback(null),
-      feedback.duration,
-    );
-    return () => window.clearTimeout(timeout);
-  }, [feedback]);
   useEffect(
     () => () => {
       for (const timer of completionTimersRef.current.values())
@@ -273,6 +266,11 @@ export function App() {
     setCalendarItems(replace);
     setAllItems(replace);
     if (selectedItem?.id === nextItem.id) setSelectedItem(nextItem);
+  }
+
+  function showFeedback(value: Omit<FeedbackNotice, "id">) {
+    feedbackIdRef.current += 1;
+    setFeedback({ ...value, id: feedbackIdRef.current });
   }
 
   function clearMotionTimer(
@@ -296,7 +294,7 @@ export function App() {
           next.delete(itemId);
           return next;
         });
-      }, 360),
+      }, motionDuration.slow),
     );
   }
 
@@ -315,7 +313,11 @@ export function App() {
         courseId ? "COURSE_ITEM" : "QUICK_CAPTURE",
         courseId,
       );
-      setFeedback({ message: "✓ 已记录", duration: 2200 });
+      if (courseId)
+        showFeedback({
+          message: "✓ 已记录",
+          duration: motionDuration.feedback,
+        });
       void courseManager
         .processClearCapture(raw.id, courseId)
         .then(refresh)
@@ -359,9 +361,9 @@ export function App() {
       clearMotionTimer(completionTimersRef, item.id);
       setPendingMoveIds((ids) => new Set(ids).add(item.id));
       replaceItemLocally(completed);
-      setFeedback({
+      showFeedback({
         message: "✓ 已标记为完成",
-        duration: 2200,
+        duration: motionDuration.feedback,
         action: async () => {
           clearMotionTimer(completionTimersRef, item.id);
           const restored = await courseManager.restoreItem(item.id);
@@ -385,7 +387,7 @@ export function App() {
             return next;
           });
           void refresh().then(() => markItemEntering(item.id));
-        }, 420),
+        }, motionDuration.completionHold + motionDuration.medium),
       );
     } catch (cause) {
       setError(String(cause));
@@ -403,15 +405,14 @@ export function App() {
     }
   }
 
-  async function remove(item: Item) {
+  async function remove(item: Item): Promise<boolean> {
     try {
       const deleted = await courseManager.deleteItem(item.id);
-      closeItemDetail();
       clearMotionTimer(deletionTimersRef, item.id);
       setPendingDeleteIds((ids) => new Set(ids).add(item.id));
-      setFeedback({
+      showFeedback({
         message: `已删除“${item.title}”`,
-        duration: 2200,
+        duration: motionDuration.feedback,
         action: async () => {
           clearMotionTimer(deletionTimersRef, item.id);
           setPendingDeleteIds((ids) => {
@@ -438,10 +439,12 @@ export function App() {
             return next;
           });
           void refresh();
-        }, 240),
+        }, motionDuration.panel),
       );
+      return true;
     } catch (cause) {
       setError(String(cause));
+      return false;
     }
   }
 
@@ -495,7 +498,7 @@ export function App() {
     setCurrentCourseId(null);
     setShowCourseDelete(false);
     setSelectedItem(null);
-    setFeedback({ message: "课程已删除", duration: 4000 });
+    showFeedback({ message: "课程已删除", duration: 4000 });
   }
 
   async function editInformation(id: string, content: string) {
@@ -565,7 +568,7 @@ export function App() {
     setSyncConflicts(result.conflicts);
     retryAuthenticatedSync();
     if (result.undo)
-      setFeedback({
+      showFeedback({
         message: "已删除事项",
         duration: 5000,
         action: async () => {
@@ -614,13 +617,13 @@ export function App() {
 
   async function retrySyncIssue(mutationId: string) {
     setSyncIssues(await retryActionRequiredIssue(mutationId));
-    setFeedback({ message: "已重新提交当前内容", duration: 3500 });
+    showFeedback({ message: "已重新提交当前内容", duration: 3500 });
     await refresh();
   }
 
   async function abandonSyncIssue(mutationId: string) {
     setSyncIssues(await abandonActionRequiredIssue(mutationId));
-    setFeedback({ message: "正在恢复已同步状态", duration: 3500 });
+    showFeedback({ message: "正在恢复已同步状态", duration: 3500 });
     await refresh();
   }
 
@@ -723,7 +726,10 @@ export function App() {
           </section>
         )}
         {!initializing && page === "overview" && (
-          <>
+          <div
+            key={`overview:${selectedSemesterId ?? "current"}`}
+            className="page-transition"
+          >
             <header className="page-header">
               <div className="page-title-block">
                 <p className="eyebrow">ITEMS</p>
@@ -809,10 +815,13 @@ export function App() {
               onOpen={(item) => void openItem(item)}
               onComplete={(item) => void complete(item)}
             />
-          </>
+          </div>
         )}
         {!initializing && page === "courses" && (
-          <>
+          <div
+            key={`courses:${activeCourse?.id ?? "index"}:${selectedSemesterId ?? "current"}`}
+            className="page-transition"
+          >
             <header
               className={`page-header ${activeCourse ? "course-page-header" : ""}`}
             >
@@ -903,48 +912,50 @@ export function App() {
                     课程安排
                   </button>
                 </div>
-                {courseTab === "items" ? (
-                  <>
-                    <form
-                      className="course-item-form"
-                      onSubmit={(event) => void addCourseItem(event)}
-                    >
-                      <input
-                        value={courseItemText}
-                        onChange={(event) =>
-                          setCourseItemText(event.target.value)
-                        }
-                        placeholder="添加这门课的事项……"
-                        aria-label="添加课程事项"
+                <div key={courseTab} className="course-tab-content">
+                  {courseTab === "items" ? (
+                    <>
+                      <form
+                        className="course-item-form"
+                        onSubmit={(event) => void addCourseItem(event)}
+                      >
+                        <input
+                          value={courseItemText}
+                          onChange={(event) =>
+                            setCourseItemText(event.target.value)
+                          }
+                          placeholder="添加这门课的事项……"
+                          aria-label="添加课程事项"
+                        />
+                        <button type="submit">添加事项</button>
+                      </form>
+                      <ItemList
+                        items={courseItems}
+                        courses={courses}
+                        pendingMoveIds={pendingMoveIds}
+                        pendingDeleteIds={pendingDeleteIds}
+                        enteringItemIds={enteringItemIds}
+                        selectedItemId={selectedItem?.id ?? null}
+                        emptyLabel="这门课还没有未完成事项"
+                        onOpen={(item) => void openItem(item)}
+                        onComplete={(item) => void complete(item)}
                       />
-                      <button type="submit">添加事项</button>
-                    </form>
-                    <ItemList
-                      items={courseItems}
-                      courses={courses}
-                      pendingMoveIds={pendingMoveIds}
-                      pendingDeleteIds={pendingDeleteIds}
-                      enteringItemIds={enteringItemIds}
-                      selectedItemId={selectedItem?.id ?? null}
-                      emptyLabel="这门课还没有未完成事项"
-                      onOpen={(item) => void openItem(item)}
-                      onComplete={(item) => void complete(item)}
+                    </>
+                  ) : courseTab === "information" ? (
+                    <CourseInformationList
+                      information={courseInformation}
+                      highlightedId={highlightedInformationId}
+                      onAdd={addInformation}
+                      onEdit={editInformation}
+                      onDelete={deleteInformation}
                     />
-                  </>
-                ) : courseTab === "information" ? (
-                  <CourseInformationList
-                    information={courseInformation}
-                    highlightedId={highlightedInformationId}
-                    onAdd={addInformation}
-                    onEdit={editInformation}
-                    onDelete={deleteInformation}
-                  />
-                ) : (
-                  <CourseScheduleList
-                    schedules={courseSchedules}
-                    onReplace={replaceSchedules}
-                  />
-                )}
+                  ) : (
+                    <CourseScheduleList
+                      schedules={courseSchedules}
+                      onReplace={replaceSchedules}
+                    />
+                  )}
+                </div>
               </>
             ) : (
               <CourseIndex
@@ -995,10 +1006,10 @@ export function App() {
                 }}
               />
             )}
-          </>
+          </div>
         )}
         {!initializing && page === "calendar" && (
-          <>
+          <div key="calendar" className="page-transition">
             <header className="page-header">
               <div className="page-title-block">
                 <p className="eyebrow">CALENDAR</p>
@@ -1016,7 +1027,7 @@ export function App() {
               semesterWeeks={semesterWeeks}
               onOpen={(item) => void openItem(item)}
             />
-          </>
+          </div>
         )}
       </main>
       {searchOpen && (
@@ -1060,42 +1071,26 @@ export function App() {
           onClose={closeItemDetail}
           onComplete={(item) => void complete(item)}
           onRestore={(item) => void restore(item)}
-          onDelete={(item) => void remove(item)}
+          onDelete={remove}
           onSave={saveEdit}
           onAssociate={addItemAssociation}
           onRemoveAssociation={removeItemAssociation}
         />
       )}
       {feedback && (
-        <div className="feedback" role="status">
-          <span>{feedback.message}</span>
-          {feedback.action && (
-            <button
-              type="button"
-              onClick={() => {
-                const action = feedback.action;
-                setFeedback(null);
-                void action?.().catch((cause: unknown) =>
-                  setError(String(cause)),
-                );
-              }}
-            >
-              撤销
-            </button>
-          )}
-        </div>
+        <TransientFeedback
+          key={feedback.id}
+          feedback={feedback}
+          onDismiss={() => setFeedback(null)}
+          onError={(cause) => setError(String(cause))}
+        />
       )}
       {error && (
-        <div className="error-banner" role="alert">
-          <span>{error}</span>
-          <button
-            type="button"
-            aria-label="关闭错误"
-            onClick={() => setError(null)}
-          >
-            ×
-          </button>
-        </div>
+        <ErrorNotice
+          key={error}
+          message={error}
+          onDismiss={() => setError(null)}
+        />
       )}
     </div>
   );

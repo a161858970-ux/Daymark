@@ -1,5 +1,12 @@
-import { useMemo, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import type { CalendarWeekRow, Item } from "@course-manager/domain";
+import { motionDuration } from "./motion.js";
 
 interface Props {
   weeks: CalendarWeekRow[];
@@ -14,6 +21,22 @@ interface Props {
 const weekdays = ["一", "二", "三", "四", "五", "六", "日"];
 const monthSegmentLimit = 4;
 
+export function calendarPositionSignatures(weeks: CalendarWeekRow[]) {
+  const positions = new Map<string, string[]>();
+  for (const week of weeks) {
+    for (const segment of week.segments) {
+      const values = positions.get(segment.item_id) ?? [];
+      values.push(
+        `${week.start_date}:${segment.start_column}-${segment.end_column}`,
+      );
+      positions.set(segment.item_id, values);
+    }
+  }
+  return new Map(
+    [...positions].map(([itemId, values]) => [itemId, values.join("|")]),
+  );
+}
+
 export function CalendarGrid({
   weeks,
   items,
@@ -26,6 +49,38 @@ export function CalendarGrid({
   const itemById = useMemo(
     () => new Map(items.map((item) => [item.id, item])),
     [items],
+  );
+  const positions = useMemo(() => calendarPositionSignatures(weeks), [weeks]);
+  const previousPositionsRef = useRef(positions);
+  const relocationTimerRef = useRef<number | null>(null);
+  const [relocatedItemIds, setRelocatedItemIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  useEffect(() => {
+    const previous = previousPositionsRef.current;
+    previousPositionsRef.current = positions;
+    const relocated = new Set<string>();
+    for (const [itemId, position] of positions) {
+      const priorPosition = previous.get(itemId);
+      if (priorPosition && priorPosition !== position) relocated.add(itemId);
+    }
+    if (relocated.size === 0) return;
+    if (relocationTimerRef.current !== null)
+      window.clearTimeout(relocationTimerRef.current);
+    setRelocatedItemIds(relocated);
+    relocationTimerRef.current = window.setTimeout(() => {
+      relocationTimerRef.current = null;
+      setRelocatedItemIds(new Set());
+    }, motionDuration.slow);
+  }, [positions]);
+
+  useEffect(
+    () => () => {
+      if (relocationTimerRef.current !== null)
+        window.clearTimeout(relocationTimerRef.current);
+    },
+    [],
   );
 
   return (
@@ -109,7 +164,9 @@ export function CalendarGrid({
                           : "continues-before",
                         segment.ends_here ? "ends-here" : "continues-after",
                         item.status === "COMPLETE" ? "complete" : "",
+                        relocatedItemIds.has(item.id) ? "relocated" : "",
                       ].join(" ")}
+                      data-calendar-item-id={item.id}
                       style={style}
                       onClick={() => onOpen(item)}
                       title={item.title}

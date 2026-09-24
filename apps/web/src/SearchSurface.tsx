@@ -6,6 +6,7 @@ import {
   type CourseManagerSearchResults,
   type Item,
 } from "@course-manager/domain";
+import { motionDuration, useExitTransition } from "./motion.js";
 
 export function SearchGlyph() {
   return (
@@ -156,6 +157,10 @@ export function SearchSurface({
   const panelRef = useRef<HTMLElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const restoreFocusRef = useRef(true);
+  const { exiting, beginExit } = useExitTransition(
+    onClose,
+    motionDuration.short,
+  );
   const results = useMemo(
     () =>
       searchCourseManagerRecords(query, { items, courses, courseInformation }),
@@ -168,7 +173,7 @@ export function SearchSurface({
 
   function close(restoreFocus: boolean) {
     restoreFocusRef.current = restoreFocus;
-    onClose();
+    beginExit();
   }
 
   function choose(action: () => void) {
@@ -214,7 +219,7 @@ export function SearchSurface({
 
   return (
     <div
-      className="search-backdrop"
+      className={`search-backdrop ${exiting ? "closing" : ""}`}
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) close(true);
       }}

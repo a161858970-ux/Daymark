@@ -230,6 +230,19 @@ select:focus-visible {
 .app-shell:has(.detail-panel) .main-content {
   margin-right: var(--detail-width);
 }
+.page-transition {
+  animation: page-content-in var(--motion-medium) ease-out both;
+}
+@keyframes page-content-in {
+  from {
+    opacity: 0.58;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -610,7 +623,8 @@ h2 {
   background: rgb(223 231 224 / 58%);
 }
 .item-row.leaving {
-  animation: item-leave 420ms ease both;
+  animation: item-leave calc(var(--motion-short) + var(--motion-medium)) ease
+    both;
 }
 .item-row.deleting {
   pointer-events: none;
@@ -758,6 +772,15 @@ h2 {
 .section-chevron.open {
   transform: translateY(4px) rotate(225deg);
 }
+.completed-list-reveal {
+  animation: completed-list-reveal var(--motion-medium) ease-out both;
+}
+@keyframes completed-list-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
 .empty-state {
   color: var(--muted);
   font-size: 14px;
@@ -848,6 +871,43 @@ h2 {
 }
 .quick-capture button:hover {
   background: rgb(255 255 255 / 9%);
+}
+.quick-capture-feedback {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  display: grid;
+  gap: 3px;
+  max-width: min(300px, calc(100vw - 36px));
+  padding: 10px 13px;
+  border: 1px solid rgb(199 200 191 / 75%);
+  border-radius: var(--radius-small);
+  background: rgb(255 253 248 / 96%);
+  box-shadow: var(--shadow-soft);
+  color: var(--ink);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(5px);
+  transition:
+    opacity var(--motion-short) ease-in,
+    transform var(--motion-short) ease-in;
+}
+.quick-capture-feedback strong {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 680;
+}
+.quick-capture-feedback > span {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quick-capture.saved .quick-capture-feedback {
+  opacity: 1;
+  transform: translateY(0);
+  transition-timing-function: ease-out;
 }
 .capture-idle-symbol,
 .capture-idle-symbol::after,
@@ -1078,6 +1138,15 @@ h2 {
 .course-tabs button.selected {
   color: var(--accent);
   border-bottom: 2px solid var(--accent);
+}
+.course-tab-content {
+  animation: content-switch-in var(--motion-short) ease-out both;
+}
+@keyframes content-switch-in {
+  from {
+    opacity: 0.55;
+    transform: translateY(3px);
+  }
 }
 .information-list {
   list-style: none;
@@ -1338,6 +1407,10 @@ h2 {
   box-shadow: -12px 0 35px rgb(38 53 44 / 6%);
   animation: detail-in var(--motion-panel) ease-out;
 }
+.detail-panel.closing {
+  pointer-events: none;
+  animation: detail-out var(--motion-panel) ease-in both;
+}
 .detail-panel:focus {
   outline: none;
 }
@@ -1349,6 +1422,16 @@ h2 {
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+@keyframes detail-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(10px);
   }
 }
 .sheet-handle {
@@ -1616,6 +1699,21 @@ h2 {
     transform: translate(-50%, 0);
   }
 }
+.feedback.closing,
+.error-banner.closing {
+  pointer-events: none;
+  animation: feedback-out var(--motion-short) ease-in both;
+}
+@keyframes feedback-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+}
 .feedback button,
 .error-banner button {
   border: 0;
@@ -1656,6 +1754,14 @@ h2 {
   font-size: clamp(21px, 2.4vw, 28px);
   font-weight: 610;
   line-height: 1.2;
+}
+.context-transition {
+  animation: context-change-in var(--motion-short) ease-out both;
+}
+@keyframes context-change-in {
+  from {
+    opacity: 0.45;
+  }
 }
 .calendar-context {
   margin: 0;
@@ -1825,6 +1931,19 @@ h2 {
     opacity var(--motion-short) ease,
     color var(--motion-short) ease,
     background-color var(--motion-short) ease;
+}
+.calendar-segment.relocated {
+  animation: calendar-item-relocated var(--motion-slow) ease-out both;
+}
+@keyframes calendar-item-relocated {
+  from {
+    opacity: 0.35;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .calendar-segment > span:last-child {
   overflow: hidden;
@@ -2103,6 +2222,7 @@ h2 {
     border: 0;
     background: #14201966;
     z-index: 20;
+    animation: detail-backdrop-in var(--motion-short) ease-out both;
   }
   .detail-panel {
     top: auto;
@@ -2115,7 +2235,14 @@ h2 {
     padding: 15px clamp(20px, 6vw, 30px)
       calc(34px + env(safe-area-inset-bottom));
     z-index: 21;
-    animation: sheet-in 280ms ease-out;
+    animation: sheet-in var(--motion-panel) ease-out;
+  }
+  .detail-backdrop.closing {
+    pointer-events: none;
+    animation: detail-backdrop-out var(--motion-short) ease-in both;
+  }
+  .detail-panel.closing {
+    animation: sheet-out var(--motion-panel) ease-in both;
   }
   .sheet-handle {
     display: block;
@@ -2147,6 +2274,26 @@ h2 {
     to {
       transform: translateY(0);
       opacity: 1;
+    }
+  }
+  @keyframes sheet-out {
+    from {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+  }
+  @keyframes detail-backdrop-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes detail-backdrop-out {
+    to {
+      opacity: 0;
     }
   }
   .feedback {
@@ -2293,6 +2440,24 @@ h2 {
   background: rgb(255 253 248 / 98%);
   box-shadow: 0 28px 90px rgb(23 31 26 / 22%);
   animation: search-surface-in var(--motion-panel) ease-out both;
+}
+.search-backdrop.closing {
+  pointer-events: none;
+  animation: search-backdrop-out var(--motion-short) ease-in both;
+}
+.search-backdrop.closing .search-surface {
+  animation: search-surface-out var(--motion-short) ease-in both;
+}
+@keyframes search-backdrop-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes search-surface-out {
+  to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.995);
+  }
 }
 @keyframes search-surface-in {
   from {
@@ -2505,10 +2670,20 @@ h2 {
   box-shadow: var(--shadow-soft);
   animation: account-popover-in var(--motion-medium) ease-out both;
 }
+.account-popover.closing {
+  pointer-events: none;
+  animation: account-popover-out var(--motion-short) ease-in both;
+}
 @keyframes account-popover-in {
   from {
     opacity: 0;
     transform: translateY(6px);
+  }
+}
+@keyframes account-popover-out {
+  to {
+    opacity: 0;
+    transform: translateY(4px);
   }
 }
 .account-popover > header {

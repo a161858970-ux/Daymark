@@ -6,7 +6,7 @@ import {
   calendarDayHeading,
   calendarItemTimeLabel,
 } from "./CalendarDayView.js";
-import { CalendarGrid } from "./CalendarGrid.js";
+import { CalendarGrid, calendarPositionSignatures } from "./CalendarGrid.js";
 
 const ownerId = "22222222-2222-4222-8222-222222222222";
 const course: Course = {
@@ -117,4 +117,10 @@ it("presents day items with time, course, and non-color completion meaning", () 
   expect(markup).toContain("9月24日 · 星期四");
   expect(markup).toContain("环境经济学 · 已完成");
   expect(markup).toContain('class="calendar-day-status"');
+});
+
+it("tracks one calendar identity by its projected position", () => {
+  const positions = calendarPositionSignatures([week]);
+  expect(positions.get(range.id)).toBe("2026-09-21:1-5");
+  expect(positions.get(point.id)).toBe("2026-09-21:2-2");
 });

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { motionDuration } from "./motion.js";
 
 type SaveState = "IDLE" | "SAVING" | "SAVED" | "ERROR";
 
@@ -9,6 +10,7 @@ export function QuickCapture({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [text, setText] = useState("");
+  const [lastSavedText, setLastSavedText] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("IDLE");
   const container = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -42,7 +44,10 @@ export function QuickCapture({
 
   useEffect(() => {
     if (saveState !== "SAVED") return;
-    const timeout = window.setTimeout(() => setSaveState("IDLE"), 900);
+    const timeout = window.setTimeout(
+      () => setSaveState("IDLE"),
+      motionDuration.feedback,
+    );
     return () => window.clearTimeout(timeout);
   }, [saveState]);
 
@@ -56,6 +61,7 @@ export function QuickCapture({
     setSaveState("SAVING");
     try {
       await onSave(text);
+      setLastSavedText(text.trim());
       setText("");
       setSaveState("SAVED");
       input.current?.focus();
@@ -117,6 +123,10 @@ export function QuickCapture({
           </span>
         </button>
       </form>
+      <span className="quick-capture-feedback" aria-hidden="true">
+        <strong>✓ 已记录</strong>
+        <span>{lastSavedText}</span>
+      </span>
       <span className="sr-only" aria-live="polite">
         {saveState === "SAVED"
           ? "已记录，可以继续输入下一条"

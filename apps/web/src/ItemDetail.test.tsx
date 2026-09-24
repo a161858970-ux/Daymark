@@ -59,7 +59,7 @@ it("keeps view, edit, status, provenance, and delete actions in one detail conta
       onClose={() => undefined}
       onComplete={() => undefined}
       onRestore={() => undefined}
-      onDelete={() => undefined}
+      onDelete={async () => true}
       onSave={async () => undefined}
       onAssociate={async () => undefined}
       onRemoveAssociation={async () => undefined}
