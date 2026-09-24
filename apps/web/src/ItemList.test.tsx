@@ -77,3 +77,25 @@ it("exposes the short delete and same-identity re-entry motion states", () => {
   expect(deleting).toContain("disabled");
   expect(entering).toContain("item-row entering");
 });
+
+it("keeps the completed section collapsed by default with a readable count", () => {
+  const completed = {
+    ...item,
+    id: "44444444-4444-4444-8444-444444444444",
+    title: "已经提交的报告",
+    status: "COMPLETE" as const,
+    completed_at: "2026-09-24T09:00:00.000Z",
+  };
+  const markup = renderToStaticMarkup(
+    <ItemList
+      items={[item, completed]}
+      courses={[course]}
+      pendingMoveIds={new Set()}
+      onOpen={() => undefined}
+      onComplete={() => undefined}
+    />,
+  );
+  expect(markup).toContain("已完成 · 1");
+  expect(markup).toContain('aria-expanded="false"');
+  expect(markup).not.toContain("已经提交的报告");
+});

@@ -59,6 +59,11 @@ it("derives month semester and week labels without turning CourseSchedule into e
       week.days.some((day) => day.date === "2026-09-01"),
     )?.semester_week,
   ).toBe(1);
+  expect(
+    september.weeks.find((week) =>
+      week.days.some((day) => day.date === "2026-09-08"),
+    )?.semester_week,
+  ).toBeNull();
   expect(september.weeks.every((week) => week.segments.length === 0)).toBe(
     true,
   );
@@ -71,6 +76,24 @@ it("derives month semester and week labels without turning CourseSchedule into e
     "Asia/Hong_Kong",
   );
   expect(february.semester).toBeNull();
+
+  const crossing = buildCalendarMonth(
+    2027,
+    1,
+    [],
+    [
+      {
+        ...semester,
+        id: "winter",
+        name: "冬季学期",
+        start_date: "2026-10-01",
+        end_date: "2027-01-03",
+      },
+    ],
+    [],
+    "Asia/Hong_Kong",
+  );
+  expect(crossing.semester?.name).toBe("冬季学期");
 });
 
 it("projects occurrence and start/due ranges as segments of the same Item identity", () => {

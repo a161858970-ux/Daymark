@@ -45,6 +45,24 @@ describe("Item projections", () => {
     ).toEqual(["newer", "older", "timed"]);
   });
 
+  it("keeps every incomplete Item before the completed section", () => {
+    const values = [
+      item("done-new", {
+        status: "COMPLETE",
+        completed_at: "2026-09-22T09:00:00Z",
+      }),
+      item("timed", { due_at: "2026-09-23T10:00:00Z" }),
+      item("no-time"),
+      item("done-old", {
+        status: "COMPLETE",
+        completed_at: "2026-09-22T08:00:00Z",
+      }),
+    ];
+    expect(
+      sortOverview(values, "2026-09-22T00:00:00Z").map((value) => value.id),
+    ).toEqual(["no-time", "timed", "done-new", "done-old"]);
+  });
+
   it("uses the earliest future time, or the most recent past time", () => {
     expect(
       overviewSortAt(

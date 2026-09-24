@@ -392,3 +392,85 @@ it("K: a committed mutation with a lost response retries the same ID without dup
     await postgres.close();
   }
 });
+
+it("T-SYNC-005..008 covers concurrent complete, due conflict, safe merge, and tombstone propagation", async () => {
+  const { postgres, server, conflicts, local } = await harness();
+  const a = local();
+  const b = local();
+
+  async function createShared(text: string) {
+    const raw = await a.manager.capture(text);
+    const item = await a.manager.processClearCapture(raw.id);
+    expect((await a.worker.runOnce()).stopped).toBeNull();
+    expect((await b.worker.runOnce()).stopped).toBeNull();
+    return item!;
+  }
+
+  try {
+    const completed = await createShared("提交同步验收报告");
+    await a.manager.completeItem(completed.id);
+    await b.manager.completeItem(completed.id);
+    expect((await a.worker.runOnce()).stopped).toBeNull();
+    expect((await b.worker.runOnce()).stopped).toBeNull();
+    expect((await a.worker.runOnce()).stopped).toBeNull();
+    expect((await b.worker.runOnce()).stopped).toBeNull();
+    expect((await a.manager.getItem(completed.id))?.status).toBe("COMPLETE");
+    expect((await b.manager.getItem(completed.id))?.status).toBe("COMPLETE");
+    expect(await conflicts.list(owner)).toEqual([]);
+
+    const conflicting = await createShared("准备冲突验收");
+    await a.manager.updateItem(conflicting.id, {
+      due_at: "2026-09-30T12:00:00.000Z",
+    });
+    await b.manager.updateItem(conflicting.id, {
+      due_at: "2026-10-01T12:00:00.000Z",
+    });
+    expect((await a.worker.runOnce()).stopped).toBeNull();
+    expect((await b.worker.runOnce()).stopped).toBe("VERSION_CONFLICT");
+    const rejected = (await b.repo.pendingMutations())[0]!;
+    const conflictId = rejected.last_error!.split(":")[1]!;
+    const dueConflict = await conflicts.get(owner, conflictId);
+    expect(dueConflict.conflict.conflicting_fields).toEqual(["due_at"]);
+    const keptRemote = await conflicts.resolve(
+      owner,
+      conflictId,
+      randomUUID(),
+      Number(dueConflict.current_entity.row_version),
+      {
+        strategy: "USE_REMOTE",
+        field_resolutions: { due_at: "REMOTE" },
+      },
+    );
+    await b.repo.acceptResolvedConflict(keptRemote.conflict, keptRemote.entity);
+    expect((await b.worker.runOnce()).stopped).toBeNull();
+
+    const merged = await createShared("准备安全合并验收");
+    await a.manager.updateItem(merged.id, {
+      due_at: "2026-10-05T12:00:00.000Z",
+    });
+    await b.manager.updateItem(merged.id, { detail: "携带课堂讲义" });
+    expect((await a.worker.runOnce()).stopped).toBeNull();
+    expect((await b.worker.runOnce()).stopped).toBeNull();
+    expect((await a.worker.runOnce()).stopped).toBeNull();
+    expect(await a.manager.getItem(merged.id)).toMatchObject({
+      due_at: "2026-10-05T12:00:00.000Z",
+      detail: "携带课堂讲义",
+    });
+    expect(await b.manager.getItem(merged.id)).toMatchObject({
+      due_at: "2026-10-05T12:00:00.000Z",
+      detail: "携带课堂讲义",
+    });
+
+    const removed = await createShared("准备删除传播验收");
+    await a.manager.deleteItem(removed.id);
+    expect((await a.worker.runOnce()).stopped).toBeNull();
+    expect((await b.worker.runOnce()).stopped).toBeNull();
+    expect((await b.manager.getItem(removed.id))?.deleted_at).toBeTruthy();
+    expect((await b.manager.listItems()).map((item) => item.id)).not.toContain(
+      removed.id,
+    );
+  } finally {
+    await server.close();
+    await postgres.close();
+  }
+});
