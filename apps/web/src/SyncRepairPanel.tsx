@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ActionRequiredSyncIssue } from "@course-manager/application";
 import type { Course } from "@course-manager/domain";
+import { AttentionSummary } from "./AttentionSummary.js";
 
 const reasons: Record<string, string> = {
   VALIDATION_ERROR: "这次修改未通过同步校验。请检查本机内容后重新提交。",
@@ -21,8 +22,16 @@ function objectType(issue: ActionRequiredSyncIssue): string {
     COURSE_SCHEDULE_COLLECTION: "课程安排",
     SEMESTER_WEEK_COLLECTION: "学期周设置",
     ITEM_ASSOCIATION: "事项关联",
+    COURSE_SCHEDULE: "课程安排",
+    SEMESTER_WEEK: "学期周设置",
   };
   return labels[issue.mutation.entity_type] ?? "记录";
+}
+
+function userFacingReason(issue: ActionRequiredSyncIssue): string {
+  if (issue.mutation.last_error?.includes("Legacy collection change"))
+    return "这项整组设置来自旧版本，系统无法安全确认它的完整上下文。请查看相关设置后重新保存，或明确采用已同步状态。";
+  return reasons[issue.error_code] ?? "这条记录需要检查后才能继续同步。";
 }
 
 function objectName(issue: ActionRequiredSyncIssue, courses: Course[]): string {
@@ -64,10 +73,12 @@ function RepairIssue({
     }
   }
   return (
-    <article className="conflict-choice sync-repair-choice">
+    <article
+      className={`conflict-choice sync-repair-choice ${busy ? "resolving" : ""}`}
+    >
       <p className="eyebrow">{objectType(issue)}</p>
       <h3>{objectName(issue, courses)}</h3>
-      <p>{reasons[issue.error_code] ?? "这条记录需要检查后才能继续同步。"}</p>
+      <p>{userFacingReason(issue)}</p>
       <div className="sync-repair-actions">
         <button type="button" disabled={busy} onClick={() => onInspect(issue)}>
           查看记录
@@ -127,29 +138,48 @@ export function SyncRepairPanel({
   onInspect,
   onRetry,
   onAbandon,
+  defaultExpanded = false,
 }: {
   issues: ActionRequiredSyncIssue[];
   courses: Course[];
   onInspect: (issue: ActionRequiredSyncIssue) => void;
   onRetry: (mutationId: string) => Promise<void>;
   onAbandon: (mutationId: string) => Promise<void>;
+  defaultExpanded?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   if (!issues.length) return null;
   return (
-    <section className="conflict-panel" aria-label="需要检查的同步记录">
-      <p className="eyebrow">SYNC</p>
-      <h2>有记录需要检查</h2>
-      <p>本机内容仍然保留。检查记录后重新提交，或明确采用已经同步的状态。</p>
-      {issues.map((issue) => (
-        <RepairIssue
-          key={issue.mutation.mutation_id}
-          issue={issue}
-          courses={courses}
-          onInspect={onInspect}
-          onRetry={onRetry}
-          onAbandon={onAbandon}
-        />
-      ))}
+    <section
+      className={`attention-panel sync-repair-panel ${expanded ? "expanded" : ""}`}
+      aria-label="需要检查的同步记录"
+    >
+      <AttentionSummary
+        eyebrow="SYNC RECOVERY"
+        title="有记录需要检查"
+        description="本机内容仍然保留。"
+        count={issues.length}
+        expanded={expanded}
+        tone="repair"
+        onToggle={() => setExpanded((value) => !value)}
+      />
+      {expanded && (
+        <div className="attention-body">
+          <p className="attention-intro">
+            查看当前记录后重新提交，或明确采用已经同步的状态。
+          </p>
+          {issues.map((issue) => (
+            <RepairIssue
+              key={issue.mutation.mutation_id}
+              issue={issue}
+              courses={courses}
+              onInspect={onInspect}
+              onRetry={onRetry}
+              onAbandon={onAbandon}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ConflictResolution } from "@course-manager/contracts";
 import type { Course, Semester } from "@course-manager/domain";
 import type { ConflictDetail } from "./syncTransport.js";
+import { AttentionSummary } from "./AttentionSummary.js";
 
 type FieldChoice = "LOCAL" | "REMOTE" | "EXPLICIT";
 
@@ -265,7 +266,7 @@ function ConflictChoice({
     }
   }
   return (
-    <article className="conflict-choice">
+    <article className={`conflict-choice ${busy ? "resolving" : ""}`}>
       <p className="eyebrow">{objectName}</p>
       <h3>{current.deleted_at ? `已删除 · ${name}` : name}</h3>
       {Boolean(current.deleted_at) && (
@@ -367,6 +368,7 @@ export function ConflictPanel({
   courses,
   semesters = [],
   onResolve,
+  defaultExpanded = false,
 }: {
   conflicts: ConflictDetail[];
   courses: Course[];
@@ -376,22 +378,40 @@ export function ConflictPanel({
     version: number,
     resolution: ConflictResolution,
   ) => Promise<void>;
+  defaultExpanded?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   if (conflicts.length === 0) return null;
   return (
-    <section className="conflict-panel" aria-label="需要选择的同步内容">
-      <p className="eyebrow">SYNC</p>
-      <h2>需要你选择保留的内容</h2>
-      <p>同一处内容在不同设备上被修改。请选择每一处要保留的版本。</p>
-      {conflicts.map((detail) => (
-        <ConflictChoice
-          key={detail.conflict.id}
-          detail={detail}
-          courses={courses}
-          semesters={semesters}
-          onResolve={onResolve}
-        />
-      ))}
+    <section
+      className={`attention-panel conflict-panel ${expanded ? "expanded" : ""}`}
+      aria-label="需要选择的同步内容"
+    >
+      <AttentionSummary
+        eyebrow="SYNC DECISION"
+        title="需要选择保留的内容"
+        description="同一处内容在不同设备上被修改。"
+        count={conflicts.length}
+        expanded={expanded}
+        tone="conflict"
+        onToggle={() => setExpanded((value) => !value)}
+      />
+      {expanded && (
+        <div className="attention-body">
+          <p className="attention-intro">
+            只列出真正冲突的字段。逐项选择后，两端会继续使用同一个对象。
+          </p>
+          {conflicts.map((detail) => (
+            <ConflictChoice
+              key={detail.conflict.id}
+              detail={detail}
+              courses={courses}
+              semesters={semesters}
+              onResolve={onResolve}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

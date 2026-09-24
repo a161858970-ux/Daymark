@@ -35,7 +35,9 @@ import {
   requestCaptureInterpretation,
   resolveSyncConflict,
   retryActionRequiredIssue,
+  retryAuthenticatedSync,
   startAuthenticatedSync,
+  type AuthenticatedSyncStatus,
 } from "./authSync.js";
 import { ConflictPanel } from "./ConflictPanel.js";
 import { AccountControl } from "./AccountControl.js";
@@ -53,6 +55,7 @@ import { localDate } from "./timeInputs.js";
 import { SyncRepairPanel } from "./SyncRepairPanel.js";
 import { AppNavigation, type PrimaryPage } from "./AppNavigation.js";
 import { GlobalSearchButton, SearchSurface } from "./SearchSurface.js";
+import { AttentionSummary } from "./AttentionSummary.js";
 
 type Feedback = {
   message: string;
@@ -114,7 +117,12 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [syncConflicts, setSyncConflicts] = useState<ConflictDetail[]>([]);
   const [syncIssues, setSyncIssues] = useState<ActionRequiredSyncIssue[]>([]);
+  const [syncStatus, setSyncStatus] = useState<AuthenticatedSyncStatus>(() => ({
+    state: authClient ? "SIGNED_OUT" : "LOCAL_ONLY",
+    checked_at: null,
+  }));
   const [searchOpen, setSearchOpen] = useState(false);
+  const [pendingExpanded, setPendingExpanded] = useState(true);
   const [highlightedInformationId, setHighlightedInformationId] = useState<
     string | null
   >(null);
@@ -233,6 +241,7 @@ export function App() {
         () => setError("本机记录已关联另一账户，请使用原账户。"),
         setSyncConflicts,
         setSyncIssues,
+        setSyncStatus,
       ),
     [refresh],
   );
@@ -554,6 +563,7 @@ export function App() {
   ) {
     const result = await resolveSyncConflict(id, version, resolution);
     setSyncConflicts(result.conflicts);
+    retryAuthenticatedSync();
     if (result.undo)
       setFeedback({
         message: "已删除事项",
@@ -674,7 +684,11 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <AccountControl />
+      <AccountControl
+        online={online}
+        status={syncStatus}
+        attentionCount={syncConflicts.length + syncIssues.length}
+      />
       <AppNavigation page={page} onNavigate={navigate} onSearch={openSearch} />
       <main className="main-content">
         {!online && (
@@ -731,39 +745,58 @@ export function App() {
               </div>
             </header>
             {pendingQuestions.length > 0 && (
-              <section className="pending-panel" aria-label="待确认的记录">
-                <h2>待确认的记录</h2>
-                {pendingQuestions.map((capture) => (
-                  <PendingCapture
-                    key={capture.id}
-                    capture={capture}
-                    courses={courses}
-                    contextCourseId={unresolvedContexts[capture.id] ?? null}
-                    onResolve={(resolution, keepOne) =>
-                      resolvePending(capture.id, resolution, keepOne)
-                    }
-                    onSplit={(resolutions) =>
-                      splitPending(capture.id, resolutions)
-                    }
-                    onInterpret={
-                      authClient
-                        ? () =>
-                            requestCaptureInterpretation(
-                              capture.id,
-                              unresolvedContexts[capture.id] ?? null,
-                              courses
-                                .filter((course) =>
-                                  capture.raw_text.includes(course.name),
+              <section
+                className={`attention-panel ambiguity-panel ${pendingExpanded ? "expanded" : ""}`}
+                aria-label="待确认的记录"
+              >
+                <AttentionSummary
+                  eyebrow="NEEDS CONTEXT"
+                  title="待确认的记录"
+                  description={
+                    pendingQuestions.length === 1
+                      ? "这条输入需要一次语义判断。"
+                      : "逐条处理，不影响继续记录。"
+                  }
+                  count={pendingQuestions.length}
+                  expanded={pendingExpanded}
+                  tone="ambiguity"
+                  onToggle={() => setPendingExpanded((value) => !value)}
+                />
+                {pendingExpanded && (
+                  <div className="attention-body ambiguity-body">
+                    {pendingQuestions.map((capture) => (
+                      <PendingCapture
+                        key={capture.id}
+                        capture={capture}
+                        courses={courses}
+                        contextCourseId={unresolvedContexts[capture.id] ?? null}
+                        onResolve={(resolution, keepOne) =>
+                          resolvePending(capture.id, resolution, keepOne)
+                        }
+                        onSplit={(resolutions) =>
+                          splitPending(capture.id, resolutions)
+                        }
+                        onInterpret={
+                          authClient
+                            ? () =>
+                                requestCaptureInterpretation(
+                                  capture.id,
+                                  unresolvedContexts[capture.id] ?? null,
+                                  courses
+                                    .filter((course) =>
+                                      capture.raw_text.includes(course.name),
+                                    )
+                                    .slice(0, 20)
+                                    .map((course) => course.id),
                                 )
-                                .slice(0, 20)
-                                .map((course) => course.id),
-                            )
-                        : undefined
-                    }
-                    onDefer={() => deferPending(capture.id)}
-                    onDelete={() => deletePending(capture.id)}
-                  />
-                ))}
+                            : undefined
+                        }
+                        onDefer={() => deferPending(capture.id)}
+                        onDelete={() => deletePending(capture.id)}
+                      />
+                    ))}
+                  </div>
+                )}
               </section>
             )}
             <ItemList

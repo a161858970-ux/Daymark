@@ -5,6 +5,7 @@ import { SyncRepairPanel } from "./SyncRepairPanel.js";
 it("shows the affected object and safe repair choices without queue internals", () => {
   const html = renderToStaticMarkup(
     <SyncRepairPanel
+      defaultExpanded
       issues={[
         {
           mutation: {

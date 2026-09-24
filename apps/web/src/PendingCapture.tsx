@@ -23,6 +23,12 @@ interface Props {
   onDelete(): Promise<void>;
 }
 
+const unresolvedLabels: Record<string, string> = {
+  需要确认记录类型: "请确认它是事项，还是长期课程信息。",
+  需要确认时间语义: "时间会影响日程与提醒，请核对后保存。",
+  需要确认课程: "请确认它属于哪门课程。",
+};
+
 export function PendingCapture({
   capture,
   courses,
@@ -159,10 +165,22 @@ export function PendingCapture({
   }
 
   return (
-    <div className="pending-row">
-      <p>{capture.raw_text}</p>
-      <small>{capture.unresolved_reason}</small>
-      {suggestion && <p className="capture-suggestion">{suggestion}</p>}
+    <article className={`pending-row ${busy ? "resolving" : ""}`}>
+      <header className="pending-record-head">
+        <p className="eyebrow">ORIGINAL NOTE</p>
+        <h3>{capture.raw_text}</h3>
+        <small>
+          {capture.unresolved_reason
+            ? (unresolvedLabels[capture.unresolved_reason] ??
+              capture.unresolved_reason)
+            : "请核对这条原始记录。"}
+        </small>
+      </header>
+      {suggestion && (
+        <p className="capture-suggestion" role="status">
+          {suggestion}
+        </p>
+      )}
       {!kind ? (
         <div className="pending-actions">
           <button type="button" onClick={() => setKind("ITEM")}>
@@ -317,6 +335,6 @@ export function PendingCapture({
           删除记录
         </button>
       </div>
-    </div>
+    </article>
   );
 }

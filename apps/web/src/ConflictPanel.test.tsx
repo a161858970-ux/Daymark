@@ -5,6 +5,7 @@ import { ConflictPanel } from "./ConflictPanel.js";
 it("shows only fields that need a user decision", () => {
   const html = renderToStaticMarkup(
     <ConflictPanel
+      defaultExpanded
       conflicts={[
         {
           conflict: {
@@ -48,6 +49,7 @@ it("shows only fields that need a user decision", () => {
 it("does not offer a local overwrite for an already deleted object", () => {
   const html = renderToStaticMarkup(
     <ConflictPanel
+      defaultExpanded
       conflicts={[
         {
           conflict: {
@@ -84,6 +86,7 @@ it("summarizes a collection conflict without exposing sync internals", () => {
   const courseId = "33333333-3333-4333-8333-333333333333";
   const html = renderToStaticMarkup(
     <ConflictPanel
+      defaultExpanded
       conflicts={[
         {
           conflict: {

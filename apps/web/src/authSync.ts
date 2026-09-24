@@ -82,6 +82,20 @@ let actionRequired = false;
 let retryRun: (() => void) | null = null;
 const SYNC_RECHECK_INTERVAL_MS = 30_000;
 
+export type AuthenticatedSyncState =
+  | "LOCAL_ONLY"
+  | "SIGNED_OUT"
+  | "OFFLINE"
+  | "SYNCING"
+  | "UP_TO_DATE"
+  | "NEEDS_ATTENTION"
+  | "ERROR";
+
+export interface AuthenticatedSyncStatus {
+  state: AuthenticatedSyncState;
+  checked_at: string | null;
+}
+
 export function retryAuthenticatedSync(): void {
   actionRequired = false;
   retryRun?.();
@@ -221,10 +235,20 @@ export function startAuthenticatedSync(
   onAccountMismatch: () => void,
   onConflicts: (conflicts: ConflictDetail[]) => void,
   onNeedsAttention: (issues: ActionRequiredSyncIssue[]) => void,
+  onStatus: (status: AuthenticatedSyncStatus) => void,
 ): () => void {
-  if (!authClient) return () => {};
+  if (!authClient) {
+    onStatus({ state: "LOCAL_ONLY", checked_at: null });
+    return () => {};
+  }
   const client = authClient;
   let stopped = false;
+  const publishStatus = (
+    state: AuthenticatedSyncState,
+    checkedAt: string | null = null,
+  ) => {
+    if (!stopped) onStatus({ state, checked_at: checkedAt });
+  };
   const worker = createSyncWorker(async () => {
     const { data, error } = await client.auth.getSession();
     if (error || !data.session)
@@ -232,10 +256,20 @@ export function startAuthenticatedSync(
     return data.session.access_token;
   });
   const run = () => {
-    if (stopped || !navigator.onLine || activeRun) return;
+    if (stopped) return;
+    if (!navigator.onLine) {
+      publishStatus("OFFLINE");
+      return;
+    }
+    if (activeRun) return;
     activeRun = (async () => {
-      const { data } = await client.auth.getSession();
-      if (!data.session) return;
+      const { data, error } = await client.auth.getSession();
+      if (error) throw error;
+      if (!data.session) {
+        publishStatus("SIGNED_OUT");
+        return;
+      }
+      publishStatus("SYNCING");
       const transport = new HttpSyncTransport(
         async () => data.session.access_token,
       );
@@ -244,23 +278,41 @@ export function startAuthenticatedSync(
         (value) => value.last_error?.startsWith("VERSION_CONFLICT:"),
       );
       if (pendingConflict) {
-        if (!stopped) onConflicts(await conflictDetails(transport));
+        if (!stopped) {
+          onConflicts(await conflictDetails(transport));
+          publishStatus("NEEDS_ATTENTION");
+        }
         return;
       }
-      if (actionRequired) return;
+      if (actionRequired) {
+        if (!stopped) {
+          onNeedsAttention(await localRepository.listActionRequiredIssues());
+          publishStatus("NEEDS_ATTENTION");
+        }
+        return;
+      }
       const result = await worker.runOnce();
       if (result.stopped === "ACTION_REQUIRED") actionRequired = true;
-      if (!stopped)
-        onNeedsAttention(await localRepository.listActionRequiredIssues());
+      const issues = await localRepository.listActionRequiredIssues();
+      if (!stopped) onNeedsAttention(issues);
       const conflicts = await conflictDetails(transport);
       if (!stopped) onConflicts(conflicts);
       if (!stopped && result.pulled > 0) onApplied();
+      publishStatus(
+        result.stopped || issues.length || conflicts.length
+          ? "NEEDS_ATTENTION"
+          : "UP_TO_DATE",
+        new Date().toISOString(),
+      );
     })()
       .catch((error: unknown) => {
         if (error instanceof OwnerBindingError) {
           actionRequired = true;
-          if (!stopped) onAccountMismatch();
-        }
+          if (!stopped) {
+            onAccountMismatch();
+            publishStatus("NEEDS_ATTENTION");
+          }
+        } else publishStatus("ERROR");
         // The persisted outbox remains available for the next network/session retry.
       })
       .finally(() => {
@@ -269,13 +321,19 @@ export function startAuthenticatedSync(
   };
   retryRun = run;
   const sessionListener = client.auth.onAuthStateChange((_event, session) => {
-    if (session) window.setTimeout(run, 0);
-    else {
+    if (session) {
+      publishStatus("SYNCING");
+      window.setTimeout(run, 0);
+    } else {
       actionRequired = false;
       onConflicts([]);
+      onNeedsAttention([]);
+      publishStatus("SIGNED_OUT");
     }
   });
+  const markOffline = () => publishStatus("OFFLINE");
   window.addEventListener("online", run);
+  window.addEventListener("offline", markOffline);
   window.addEventListener("focus", run);
   const timer = window.setInterval(run, SYNC_RECHECK_INTERVAL_MS);
   run();
@@ -284,6 +342,7 @@ export function startAuthenticatedSync(
     if (retryRun === run) retryRun = null;
     sessionListener.data.subscription.unsubscribe();
     window.removeEventListener("online", run);
+    window.removeEventListener("offline", markOffline);
     window.removeEventListener("focus", run);
     window.clearInterval(timer);
   };
