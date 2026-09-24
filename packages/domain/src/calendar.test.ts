@@ -113,8 +113,24 @@ it("projects occurrence and start/due ranges as segments of the same Item identi
       [occurrence, startDue, noTime],
       "Asia/Hong_Kong",
     ).map((value) => value.id),
-  ).toEqual([occurrence.id, startDue.id]);
+  ).toEqual([startDue.id, occurrence.id]);
   expect(
     calendarItemsForDay("2026-09-15", [occurrence], "Asia/Hong_Kong"),
   ).toEqual([]);
+});
+
+it("orders the single-day projection by the item's actual time", () => {
+  const later = item("later", { due_at: "2026-09-24T12:00:00Z" });
+  const spanning = item("spanning", {
+    occurrence_start_at: "2026-09-23T16:00:00Z",
+    occurrence_end_at: "2026-09-25T10:00:00Z",
+  });
+  const earlier = item("earlier", { start_at: "2026-09-24T01:00:00Z" });
+  expect(
+    calendarItemsForDay(
+      "2026-09-24",
+      [later, earlier, spanning],
+      "Asia/Hong_Kong",
+    ).map((value) => value.id),
+  ).toEqual(["spanning", "earlier", "later"]);
 });

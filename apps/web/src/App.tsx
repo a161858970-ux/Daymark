@@ -925,13 +925,15 @@ export function App() {
         {!initializing && page === "calendar" && (
           <>
             <header className="page-header">
-              <div>
+              <div className="page-title-block">
                 <p className="eyebrow">CALENDAR</p>
                 <h1>日程</h1>
+                <p className="page-deck">按时间查看同一批课程事项。</p>
               </div>
             </header>
             <CalendarView
               items={calendarItems}
+              courses={courses}
               semesters={semesters}
               semesterWeeks={semesterWeeks}
               onOpen={(item) => void openItem(item)}

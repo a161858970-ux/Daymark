@@ -130,12 +130,23 @@ export function calendarItemsForDay(
   items: readonly Item[],
   timeZone: string,
 ): Item[] {
-  return items.filter((item) => {
-    const projection = projectItemToCalendar(item);
-    if (!projection) return false;
-    return (
-      localDateOfInstant(projection.start, timeZone) <= date &&
-      localDateOfInstant(projection.end, timeZone) >= date
-    );
-  });
+  return items
+    .filter((item) => {
+      const projection = projectItemToCalendar(item);
+      if (!projection) return false;
+      return (
+        localDateOfInstant(projection.start, timeZone) <= date &&
+        localDateOfInstant(projection.end, timeZone) >= date
+      );
+    })
+    .sort((left, right) => {
+      const leftProjection = projectItemToCalendar(left)!;
+      const rightProjection = projectItemToCalendar(right)!;
+      return (
+        leftProjection.start.localeCompare(rightProjection.start) ||
+        leftProjection.end.localeCompare(rightProjection.end) ||
+        left.created_at.localeCompare(right.created_at) ||
+        left.id.localeCompare(right.id)
+      );
+    });
 }
