@@ -72,17 +72,17 @@ it("T-AI-004/005/010 and T-REC-004 keep deferred ambiguity across restart until 
   const raw = await manager.capture("第四周前交作业");
   expect(await manager.processClearCapture(raw.id)).toBeNull();
   await manager.deferRawCapture(raw.id);
-  expect((await manager.unresolvedCaptures()).map((value) => value.id)).toEqual([
-    raw.id,
-  ]);
+  expect((await manager.unresolvedCaptures()).map((value) => value.id)).toEqual(
+    [raw.id],
+  );
 
   db.close();
   const reopened = new CourseManagerDb(name);
   databases.push(reopened);
   const resumed = new CourseManager(new DexieLocalRepository(reopened));
-  expect((await resumed.unresolvedCaptures()).map((value) => value.id)).toEqual([
-    raw.id,
-  ]);
+  expect((await resumed.unresolvedCaptures()).map((value) => value.id)).toEqual(
+    [raw.id],
+  );
   expect(await reopened.items.count()).toBe(0);
 
   await resumed.deleteUnresolvedCapture(raw.id);
