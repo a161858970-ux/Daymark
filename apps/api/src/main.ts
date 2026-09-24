@@ -7,6 +7,8 @@ import { CloudAcademicManager } from "./db/academic.js";
 import { CaptureInterpretationService } from "./ai/interpretation.js";
 import { OpenAIInterpretationProvider } from "./ai/openai-provider.js";
 import { CloudConflictManager } from "./db/conflicts.js";
+import { CloudCourseImportManager } from "./db/course-import.js";
+import { OpenAICourseImportParser } from "./ai/course-import-provider.js";
 
 const port = Number(process.env.PORT ?? 3100);
 const databaseUrl = process.env.DATABASE_URL;
@@ -30,6 +32,10 @@ const server = buildServer(
         sync: new CloudSync(cloudDatabase!),
         conflicts: new CloudConflictManager(cloudDatabase!),
         academic: academic!,
+        courseImports: new CloudCourseImportManager(
+          cloudDatabase!,
+          apiKey && model ? new OpenAICourseImportParser(apiKey, model) : null,
+        ),
         interpretation: new CaptureInterpretationService(
           cloud!,
           academic!,

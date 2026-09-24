@@ -1,5 +1,11 @@
 import { useState, type FormEvent } from "react";
+import type {
+  CourseImportCommitResult,
+  CourseImportJob,
+  CourseImportResolution,
+} from "@course-manager/contracts";
 import type { Course, Semester, SemesterWeek } from "@course-manager/domain";
+import { CourseImportPanel } from "./CourseImportPanel.js";
 import { SemesterWeekEditor, type WeekFields } from "./SemesterWeekEditor.js";
 
 interface Props {
@@ -24,6 +30,16 @@ interface Props {
     endDate: string,
   ): Promise<void>;
   onReplaceWeeks(values: WeekFields[]): Promise<void>;
+  courseImportAvailable: boolean;
+  onLoadPendingImports(semesterId: string): Promise<CourseImportJob[]>;
+  onStartImport(semesterId: string, file: File): Promise<CourseImportJob>;
+  onRetryImport(jobId: string, file: File): Promise<CourseImportJob>;
+  onResolveImport(
+    jobId: string,
+    resolution: CourseImportResolution,
+  ): Promise<CourseImportJob>;
+  onCommitImport(jobId: string): Promise<CourseImportCommitResult>;
+  onImportCommitted(result: CourseImportCommitResult): Promise<void>;
 }
 
 export function CourseIndex({
@@ -37,6 +53,13 @@ export function CourseIndex({
   onCreateCourse,
   onCreateSemester,
   onReplaceWeeks,
+  courseImportAvailable,
+  onLoadPendingImports,
+  onStartImport,
+  onRetryImport,
+  onResolveImport,
+  onCommitImport,
+  onImportCommitted,
 }: Props) {
   const [courseName, setCourseName] = useState("");
   const [showCourseForm, setShowCourseForm] = useState(false);
@@ -46,6 +69,7 @@ export function CourseIndex({
   const [semesterEnd, setSemesterEnd] = useState("");
   const [showSemesterForm, setShowSemesterForm] = useState(false);
   const [showWeekEditor, setShowWeekEditor] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function createCourse(inheritFromId: string | null) {
@@ -104,19 +128,48 @@ export function CourseIndex({
           <h2>课程索引</h2>
           <p>打开一门课程，查看它的事项与课程信息。</p>
         </div>
-        <button
-          type="button"
-          className="secondary-action"
-          aria-expanded={showCourseForm}
-          onClick={() => {
-            setShowCourseForm(!showCourseForm);
-            setCandidate(null);
-            setError(null);
-          }}
-        >
-          {showCourseForm ? "收起" : "＋ 添加课程"}
-        </button>
+        <div className="course-index-actions">
+          <button
+            type="button"
+            className="quiet-button"
+            aria-expanded={showImport}
+            onClick={() => {
+              setShowImport(!showImport);
+              setShowCourseForm(false);
+              setCandidate(null);
+              setError(null);
+            }}
+          >
+            导入课程表
+          </button>
+          <button
+            type="button"
+            className="secondary-action"
+            aria-expanded={showCourseForm}
+            onClick={() => {
+              setShowCourseForm(!showCourseForm);
+              setShowImport(false);
+              setCandidate(null);
+              setError(null);
+            }}
+          >
+            {showCourseForm ? "收起" : "＋ 添加课程"}
+          </button>
+        </div>
       </div>
+      {showImport && (
+        <CourseImportPanel
+          semester={semester}
+          available={courseImportAvailable}
+          onClose={() => setShowImport(false)}
+          onLoadPending={onLoadPendingImports}
+          onStart={onStartImport}
+          onRetry={onRetryImport}
+          onResolve={onResolveImport}
+          onCommit={onCommitImport}
+          onCommitted={onImportCommitted}
+        />
+      )}
       {showCourseForm && (
         <form
           className="course-create inline-reveal"

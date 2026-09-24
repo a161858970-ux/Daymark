@@ -27,19 +27,14 @@ export async function sendSignInLink(email: string): Promise<void> {
 
 export type { CaptureInterpretation } from "@course-manager/contracts";
 
-/** Explicit interpretation runs only after the locally saved RawCapture is synced. */
-export async function requestCaptureInterpretation(
-  captureId: string,
-  currentCourseId: string | null,
-  candidateCourseIds: string[],
-): Promise<CaptureInterpretation> {
-  if (!authClient) throw new Error("请先配置账户同步，再使用智能整理。");
-  if (!navigator.onLine)
-    throw new Error("当前离线；记录已保存在本机，可稍后整理。");
-  const { data, error } = await authClient.auth.getSession();
-  if (error || !data.session) throw new Error("请先登录账户，再使用智能整理。");
-  const token = data.session.access_token;
+export async function synchronizeAuthenticatedData(): Promise<string> {
+  if (!authClient) throw new Error("请先配置账户同步，再导入课程表。");
+  if (!navigator.onLine) throw new Error("当前离线；请联网后再导入课程表。");
   if (activeRun) await activeRun;
+  const { data, error } = await authClient.auth.getSession();
+  if (error || !data.session)
+    throw error ?? new Error("请先登录账户，再导入课程表。");
+  const token = data.session.access_token;
   const operation = createSyncWorker(async () => token).runOnce();
   activeRun = operation
     .then(
@@ -50,7 +45,21 @@ export async function requestCaptureInterpretation(
       activeRun = null;
     });
   const result = await operation;
-  if (result.stopped) throw new Error("记录尚未同步完成；请稍后重试。");
+  if (result.stopped)
+    throw new Error("本机更改尚未同步完成；请先处理同步状态。");
+  return token;
+}
+
+/** Explicit interpretation runs only after the locally saved RawCapture is synced. */
+export async function requestCaptureInterpretation(
+  captureId: string,
+  currentCourseId: string | null,
+  candidateCourseIds: string[],
+): Promise<CaptureInterpretation> {
+  if (!authClient) throw new Error("请先配置账户同步，再使用智能整理。");
+  if (!navigator.onLine)
+    throw new Error("当前离线；记录已保存在本机，可稍后整理。");
+  const token = await synchronizeAuthenticatedData();
   const response = await fetch("/api/v1/ai/capture-interpretations", {
     method: "POST",
     headers: {

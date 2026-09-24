@@ -2,6 +2,9 @@ import Fastify from "fastify";
 import { z, ZodError } from "zod";
 import {
   createCourseSchema,
+  courseImportResolutionSchema,
+  courseImportSourceSchema,
+  courseImportStartSchema,
   createItemSchema,
   createRawCaptureSchema,
   isoDateTimeSchema,
@@ -23,6 +26,7 @@ import {
   CloudConflictManager,
   conflictResolutionSchema,
 } from "./db/conflicts.js";
+import { CloudCourseImportManager } from "./db/course-import.js";
 
 export interface ServerDependencies {
   cloud: CloudCourseManager;
@@ -30,8 +34,12 @@ export interface ServerDependencies {
   academic?: CloudAcademicManager;
   interpretation?: CaptureInterpretationService;
   conflicts?: CloudConflictManager;
+  courseImports?: CloudCourseImportManager;
   verifyToken(token: string): Promise<string | null>;
 }
+
+// A 15 MB file expands to roughly 20 MB as base64 JSON.
+const apiBodyLimitBytes = 21_500_000;
 
 const pageSchema = z.object({
   cursor: z.string().optional(),
@@ -95,7 +103,7 @@ function dateInZone(instant: string, timeZone: string): string {
 
 /** Domain routes are registered only when both persistence and auth are supplied. */
 export function buildServer(dependencies?: ServerDependencies) {
-  const server = Fastify({ logger: false });
+  const server = Fastify({ logger: false, bodyLimit: apiBodyLimitBytes });
   server.setErrorHandler((error, _request, reply) => {
     if (error instanceof CloudError) {
       return reply.status(error.statusCode).send({
@@ -324,6 +332,80 @@ export function buildServer(dependencies?: ServerDependencies) {
             id,
             key,
             input.schedules,
+          ),
+          meta: {},
+        };
+      });
+    }
+    if (dependencies.courseImports) {
+      server.post("/api/v1/course-imports", async (request) => {
+        const ownerId = await owner(request.headers.authorization);
+        const input = courseImportStartSchema.parse(request.body);
+        return {
+          data: await dependencies.courseImports!.start(
+            ownerId,
+            input.semester_id,
+            input.source_type,
+          ),
+          meta: {},
+        };
+      });
+      server.get("/api/v1/course-imports", async (request) => {
+        const ownerId = await owner(request.headers.authorization);
+        const query = z
+          .object({ semester_id: uuidSchema.optional() })
+          .parse(request.query);
+        return {
+          data: await dependencies.courseImports!.listPending(
+            ownerId,
+            query.semester_id,
+          ),
+          meta: {},
+        };
+      });
+      server.get("/api/v1/course-imports/:id", async (request) => {
+        const ownerId = await owner(request.headers.authorization);
+        const id = uuidSchema.parse((request.params as { id: string }).id);
+        return {
+          data: await dependencies.courseImports!.get(ownerId, id),
+          meta: {},
+        };
+      });
+      server.post("/api/v1/course-imports/:id/source", async (request) => {
+        const ownerId = await owner(request.headers.authorization);
+        const id = uuidSchema.parse((request.params as { id: string }).id);
+        return {
+          data: await dependencies.courseImports!.parseSource(
+            ownerId,
+            id,
+            courseImportSourceSchema.parse(request.body),
+          ),
+          meta: {},
+        };
+      });
+      server.post(
+        "/api/v1/course-imports/:id/resolve-course",
+        async (request) => {
+          const ownerId = await owner(request.headers.authorization);
+          const id = uuidSchema.parse((request.params as { id: string }).id);
+          return {
+            data: await dependencies.courseImports!.resolveCourse(
+              ownerId,
+              id,
+              courseImportResolutionSchema.parse(request.body),
+            ),
+            meta: {},
+          };
+        },
+      );
+      server.post("/api/v1/course-imports/:id/commit", async (request) => {
+        const ownerId = await owner(request.headers.authorization);
+        const id = uuidSchema.parse((request.params as { id: string }).id);
+        return {
+          data: await dependencies.courseImports!.commit(
+            ownerId,
+            id,
+            mutationKey(request.headers["idempotency-key"]),
           ),
           meta: {},
         };

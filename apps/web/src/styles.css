@@ -1057,6 +1057,155 @@ h2 {
   border-color: #9fac9f;
   background: var(--surface-raised);
 }
+.course-index-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.course-import-panel {
+  margin: 0 0 30px;
+  padding: 22px 0 27px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.course-import-heading,
+.course-import-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 22px;
+}
+.course-import-heading h3 {
+  margin: 2px 0 6px;
+  font-family: ui-serif, "Songti SC", "STSong", serif;
+  font-size: 20px;
+}
+.course-import-heading p,
+.course-import-summary span,
+.course-import-note,
+.course-import-progress,
+.course-import-no-schedule {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+.course-import-file {
+  display: grid;
+  gap: 4px;
+  margin-top: 22px;
+  padding: 16px 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-small);
+  background: rgb(250 248 243 / 56%);
+  color: var(--accent-strong);
+  cursor: pointer;
+}
+.course-import-file small {
+  color: var(--muted);
+}
+.course-import-file input {
+  margin-top: 8px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+.course-import-progress,
+.course-import-note,
+.course-import-success {
+  margin-top: 14px;
+}
+.course-import-success {
+  color: var(--accent-strong);
+  font-size: 13px;
+}
+.course-import-review {
+  margin-top: 24px;
+}
+.course-import-summary {
+  align-items: baseline;
+  padding-bottom: 12px;
+}
+.course-import-summary strong {
+  margin-left: auto;
+  color: var(--ink);
+  font-size: 13px;
+}
+.course-import-courses {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.course-import-courses > li {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+.course-import-course-copy {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+}
+.course-import-course-copy span,
+.course-import-schedules {
+  color: var(--muted);
+  font-size: 12px;
+}
+.course-import-schedules {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  line-height: 1.75;
+}
+.course-import-no-schedule {
+  margin-top: 8px;
+}
+.course-import-duplicate {
+  margin: 15px 0 0;
+  padding: 15px 16px;
+  border: 1px solid #c9c2ae;
+  border-radius: var(--radius-small);
+  background: #f3efe5;
+}
+.course-import-duplicate legend {
+  padding: 0 5px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+.course-import-duplicate p {
+  margin: 0 0 11px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.course-import-duplicate > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.course-import-duplicate button,
+.course-import-commit {
+  min-height: 40px;
+  padding: 9px 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-small);
+  background: var(--surface-raised);
+  color: var(--accent-strong);
+}
+.course-import-duplicate button.selected,
+.course-import-commit {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+.course-import-commit {
+  margin-top: 18px;
+}
+.course-import-commit:disabled {
+  border-color: var(--line);
+  background: #e6e2d9;
+  color: var(--muted);
+}
 .inline-reveal {
   animation: inline-reveal var(--motion-medium) ease-out both;
 }
@@ -2219,6 +2368,24 @@ h2 {
     align-items: flex-start;
     flex-direction: column;
     gap: 17px;
+  }
+  .course-index-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .course-import-heading,
+  .course-import-summary,
+  .course-import-course-copy {
+    flex-direction: column;
+    gap: 7px;
+  }
+  .course-import-summary strong {
+    margin-left: 0;
+  }
+  .course-import-duplicate > div,
+  .course-import-duplicate button,
+  .course-import-commit {
+    width: 100%;
   }
   .course-index-intro .secondary-action,
   .subsection-header .secondary-action {

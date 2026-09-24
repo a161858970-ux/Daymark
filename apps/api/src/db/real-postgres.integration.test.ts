@@ -22,7 +22,11 @@ realPostgres(
       const directory = fileURLToPath(
         new URL("../../../../backend/migrations/", import.meta.url),
       );
-      for (const name of ["001_initial.sql", "002_collection_sync.sql"])
+      for (const name of [
+        "001_initial.sql",
+        "002_collection_sync.sql",
+        "003_course_import.sql",
+      ])
         await client.query(await readFile(join(directory, name), "utf8"));
       const port: CloudDatabase = {
         query: async <Row extends object = Record<string, unknown>>(

@@ -44,6 +44,13 @@ import { AccountControl } from "./AccountControl.js";
 import type { ConflictDetail } from "./syncTransport.js";
 import { CalendarView } from "./CalendarView.js";
 import { CourseIndex } from "./CourseIndex.js";
+import {
+  commitCourseImport,
+  pendingCourseImports,
+  resolveImportedCourse,
+  retryCourseImport,
+  startCourseImport,
+} from "./courseImportClient.js";
 import { CourseDeleteConfirmation } from "./CourseDeleteConfirmation.js";
 import {
   CourseScheduleList,
@@ -1005,6 +1012,15 @@ export function App() {
                     targetSemesterId,
                     values,
                   );
+                  await refresh();
+                }}
+                courseImportAvailable={Boolean(authClient)}
+                onLoadPendingImports={pendingCourseImports}
+                onStartImport={startCourseImport}
+                onRetryImport={retryCourseImport}
+                onResolveImport={resolveImportedCourse}
+                onCommitImport={commitCourseImport}
+                onImportCommitted={async () => {
                   await refresh();
                 }}
               />

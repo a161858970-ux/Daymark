@@ -40,11 +40,27 @@ it("presents courses as an index with incomplete counts and a quiet add entry", 
       onCreateCourse={async () => undefined}
       onCreateSemester={async () => undefined}
       onReplaceWeeks={async () => undefined}
+      courseImportAvailable={false}
+      onLoadPendingImports={async () => []}
+      onStartImport={async () => {
+        throw new Error("unused");
+      }}
+      onRetryImport={async () => {
+        throw new Error("unused");
+      }}
+      onResolveImport={async () => {
+        throw new Error("unused");
+      }}
+      onCommitImport={async () => {
+        throw new Error("unused");
+      }}
+      onImportCommitted={async () => undefined}
     />,
   );
   expect(markup).toContain("课程索引");
   expect(markup).toContain("环境经济学");
   expect(markup).toContain("3 项未完成");
   expect(markup).toContain("＋ 添加课程");
+  expect(markup).toContain("导入课程表");
   expect(markup).not.toContain('aria-label="课程名称"');
 });
