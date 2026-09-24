@@ -52,6 +52,7 @@ import type { WeekFields } from "./SemesterWeekEditor.js";
 import { localDate } from "./timeInputs.js";
 import { SyncRepairPanel } from "./SyncRepairPanel.js";
 import { AppNavigation, type PrimaryPage } from "./AppNavigation.js";
+import { GlobalSearchButton, SearchSurface } from "./SearchSurface.js";
 
 type Feedback = {
   message: string;
@@ -78,6 +79,9 @@ export function App() {
     null,
   );
   const [courseInformation, setCourseInformation] = useState<
+    CourseInformation[]
+  >([]);
+  const [searchCourseInformation, setSearchCourseInformation] = useState<
     CourseInformation[]
   >([]);
   const [courseSchedules, setCourseSchedules] = useState<CourseSchedule[]>([]);
@@ -110,6 +114,10 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [syncConflicts, setSyncConflicts] = useState<ConflictDetail[]>([]);
   const [syncIssues, setSyncIssues] = useState<ActionRequiredSyncIssue[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [highlightedInformationId, setHighlightedInformationId] = useState<
+    string | null
+  >(null);
   const detailRequestIdRef = useRef(0);
   const selectedItemIdRef = useRef<string | null>(null);
   selectedItemIdRef.current = selectedItem?.id ?? null;
@@ -128,6 +136,7 @@ export function App() {
       unresolvedData,
       courseItemData,
       courseInformationData,
+      allCourseInformationData,
       courseScheduleData,
       calendarData,
       semesterData,
@@ -143,6 +152,7 @@ export function App() {
       currentCourseId
         ? courseManager.courseInformation(currentCourseId)
         : Promise.resolve([]),
+      courseManager.allCourseInformation(),
       currentCourseId
         ? courseManager.courseSchedules(currentCourseId)
         : Promise.resolve([]),
@@ -171,6 +181,7 @@ export function App() {
     );
     setCourseItems(courseItemData);
     setCourseInformation(courseInformationData);
+    setSearchCourseInformation(allCourseInformationData);
     setCourseSchedules(courseScheduleData);
     setCalendarItems(calendarData);
     setSemesters(semesterData);
@@ -629,8 +640,34 @@ export function App() {
     (capture) => !dismissedThisLaunch.has(capture.id),
   );
 
+  function openSearch() {
+    setHighlightedInformationId(null);
+    setSearchOpen(true);
+  }
+
+  function openCourseFromSearch(course: Course) {
+    setSearchOpen(false);
+    closeItemDetail();
+    setPage("courses");
+    setCurrentCourseId(course.id);
+    setCourseTab("items");
+    setShowCourseDelete(false);
+  }
+
+  function openInformationFromSearch(entry: CourseInformation) {
+    setSearchOpen(false);
+    closeItemDetail();
+    setPage("courses");
+    setCurrentCourseId(entry.course_id);
+    setCourseTab("information");
+    setHighlightedInformationId(entry.id);
+    setShowCourseDelete(false);
+  }
+
   function navigate(nextPage: PrimaryPage) {
     setPage(nextPage);
+    setSearchOpen(false);
+    setHighlightedInformationId(null);
     closeItemDetail();
     setShowCourseDelete(false);
   }
@@ -638,7 +675,7 @@ export function App() {
   return (
     <div className="app-shell">
       <AccountControl />
-      <AppNavigation page={page} onNavigate={navigate} />
+      <AppNavigation page={page} onNavigate={navigate} onSearch={openSearch} />
       <main className="main-content">
         {!online && (
           <div className="connection-status" role="status">
@@ -681,14 +718,17 @@ export function App() {
                   按课程与时间，核对还需要处理的事项。
                 </p>
               </div>
-              <SemesterSwitcher
-                semesters={semesters}
-                selectedId={selectedSemesterId}
-                onChange={(id) => {
-                  setSelectedSemesterId(id);
-                  setCurrentCourseId(null);
-                }}
-              />
+              <div className="page-header-tools">
+                <GlobalSearchButton onOpen={openSearch} />
+                <SemesterSwitcher
+                  semesters={semesters}
+                  selectedId={selectedSemesterId}
+                  onChange={(id) => {
+                    setSelectedSemesterId(id);
+                    setCurrentCourseId(null);
+                  }}
+                />
+              </div>
             </header>
             {pendingQuestions.length > 0 && (
               <section className="pending-panel" aria-label="待确认的记录">
@@ -765,6 +805,7 @@ export function App() {
                 </p>
               </div>
               <div className="page-header-tools">
+                <GlobalSearchButton onOpen={openSearch} />
                 <SemesterSwitcher
                   semesters={semesters}
                   selectedId={selectedSemesterId}
@@ -860,6 +901,7 @@ export function App() {
                 ) : courseTab === "information" ? (
                   <CourseInformationList
                     information={courseInformation}
+                    highlightedId={highlightedInformationId}
                     onAdd={addInformation}
                     onEdit={editInformation}
                     onDelete={deleteInformation}
@@ -930,6 +972,9 @@ export function App() {
                 <h1>日程</h1>
                 <p className="page-deck">按时间查看同一批课程事项。</p>
               </div>
+              <div className="page-header-tools">
+                <GlobalSearchButton onOpen={openSearch} />
+              </div>
             </header>
             <CalendarView
               items={calendarItems}
@@ -941,6 +986,20 @@ export function App() {
           </>
         )}
       </main>
+      {searchOpen && (
+        <SearchSurface
+          items={allItems}
+          courses={courses}
+          courseInformation={searchCourseInformation}
+          onClose={() => setSearchOpen(false)}
+          onOpenItem={(item) => {
+            setSearchOpen(false);
+            void openItem(item);
+          }}
+          onOpenCourse={openCourseFromSearch}
+          onOpenInformation={openInformationFromSearch}
+        />
+      )}
       {!initializing && <QuickCapture onSave={(text) => saveCapture(text)} />}
       {selectedItem && (
         <ItemDetail

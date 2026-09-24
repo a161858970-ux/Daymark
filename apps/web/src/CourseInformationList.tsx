@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { CourseInformation } from "@course-manager/domain";
 
 interface Props {
@@ -6,6 +6,7 @@ interface Props {
   onAdd(content: string): Promise<void>;
   onEdit(id: string, content: string): Promise<void>;
   onDelete(id: string): Promise<void>;
+  highlightedId?: string | null;
 }
 
 export function CourseInformationList({
@@ -13,11 +14,44 @@ export function CourseInformationList({
   onAdd,
   onEdit,
   onDelete,
+  highlightedId = null,
 }: Props) {
   const [content, setContent] = useState("");
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
+  const [highlightPulseId, setHighlightPulseId] = useState<string | null>(null);
+  const entryRefs = useRef(new Map<string, HTMLLIElement>());
+  const handledHighlightRef = useRef<string | null>(null);
+  const highlightTimerRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (highlightTimerRef.current !== null)
+        window.clearTimeout(highlightTimerRef.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!highlightedId) {
+      handledHighlightRef.current = null;
+      return;
+    }
+    if (handledHighlightRef.current === highlightedId) return;
+    const entry = entryRefs.current.get(highlightedId);
+    if (!entry) return;
+    handledHighlightRef.current = highlightedId;
+    setHighlightPulseId(highlightedId);
+    entry.scrollIntoView({ block: "center", behavior: "smooth" });
+    entry.focus({ preventScroll: true });
+    if (highlightTimerRef.current !== null)
+      window.clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = window.setTimeout(() => {
+      highlightTimerRef.current = null;
+      setHighlightPulseId(null);
+    }, 1600);
+  }, [highlightedId, information]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -67,7 +101,16 @@ export function CourseInformationList({
       )}
       <ul className="information-list">
         {information.map((entry) => (
-          <li key={entry.id}>
+          <li
+            key={entry.id}
+            ref={(node) => {
+              if (node) entryRefs.current.set(entry.id, node);
+              else entryRefs.current.delete(entry.id);
+            }}
+            tabIndex={-1}
+            data-course-information-id={entry.id}
+            className={highlightPulseId === entry.id ? "search-arrival" : ""}
+          >
             {editingId === entry.id ? (
               <form
                 onSubmit={(event) => {

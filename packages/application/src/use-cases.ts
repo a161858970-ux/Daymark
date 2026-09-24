@@ -1189,6 +1189,17 @@ export class CourseManager {
       .sort((a, b) => b.created_at.localeCompare(a.created_at));
   }
 
+  async allCourseInformation(): Promise<CourseInformation[]> {
+    const courses = await this.listCourses();
+    const values = await Promise.all(
+      courses.map((course) => this.repo.listCourseInformation(course.id)),
+    );
+    return values
+      .flat()
+      .filter((value) => value.deleted_at === null)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
   async addCourseInformation(
     courseId: string,
     content: string,

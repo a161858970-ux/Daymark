@@ -1,3 +1,5 @@
+import { GlobalSearchButton } from "./SearchSurface.js";
+
 export type PrimaryPage = "overview" | "courses" | "calendar";
 
 function NavigationIcon({ page }: { page: PrimaryPage }) {
@@ -34,9 +36,11 @@ const destinations: { page: PrimaryPage; label: string; shortLabel: string }[] =
 export function AppNavigation({
   page,
   onNavigate,
+  onSearch,
 }: {
   page: PrimaryPage;
   onNavigate(page: PrimaryPage): void;
+  onSearch(): void;
 }) {
   return (
     <nav className="main-nav" aria-label="主导航">
@@ -70,6 +74,13 @@ export function AppNavigation({
             </span>
           </button>
         ))}
+      </div>
+      <div className="nav-utility">
+        <GlobalSearchButton
+          onOpen={onSearch}
+          className="nav-search-trigger"
+          label="搜索记录"
+        />
       </div>
       <p className="nav-note">记录课程里的事项、信息与上下文。</p>
     </nav>
