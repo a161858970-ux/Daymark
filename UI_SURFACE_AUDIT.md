@@ -8,6 +8,48 @@
 
 当前 Web 已具备大部分产品流程和基础响应式骨架，但视觉仍是工程基线：层级、页面宽度、导航语义、状态反馈与键盘行为尚未形成统一系统。Phase 7 保留现有 domain/application 行为，以 design tokens、共享 surface component 和明确的 desktop/mobile wrapper 收敛表现。
 
+## Phase 7 progress — 2026-09-24
+
+以下状态记录基线审计之后的实施结果。后续 20 个 surface 条目保留改造前证据，7A–7D 的当前状态以本节为准。
+
+### 7A — Shell / Navigation / Tokens — PASS locally
+
+- 建立 canvas、surface、ink、accent、danger、line、radius、shadow 与 motion tokens。
+- Windows 使用 232px 左侧导航；Mobile 使用带安全区的底部导航；窄桌面详情改为 overlay，主内容不被强行压缩。
+- 导航切页会结束临时详情/删除上下文；active、hover、focus-visible 和 reduced-motion 状态统一。
+- 增加首载、本地离线说明与基础 surface state；离线文案明确新记录仍先保存在本机。
+- 通过 desktop 与 390×844 viewport 人工检查，Web build/test/lint/format 均通过。
+
+### 7B — Overview / Course / Item hierarchy — PASS locally
+
+- 收敛 page header、eyebrow、deck、section heading、Item row、Course index、Course detail 与空态层级。
+- 完成控件与 Item 主体保持两个独立 hit target；Completed 默认折叠并保持低权重视觉。
+- 课程创建和 CourseInformation 新增改为按需展开；课程页显示学期上下文与未完成数量，不引入排名或 Dashboard。
+- desktop/mobile 的 Overview、Course index、Course detail 已人工检查；相关静态渲染测试通过。
+
+### 7C — Quick Capture — PASS locally
+
+- 全局只挂载一个连续形变控件；圆形 `+` 向左展开，输入框保持同一 DOM identity。
+- 自动聚焦、Enter 保存、成功后保持展开并可连续记录；外部点击与 Escape 收起，Escape 将焦点还给 `+`。
+- 本地保存成功、失败和 busy 状态均有可访问反馈；Course、Overview 与 Calendar 共享同一入口。
+- desktop 与 390×844 viewport 已验证输入、保存、连续记录和收起行为。
+
+### 7D — Detail / Edit / Complete / Delete / Undo — PASS locally
+
+- Windows 保持一个右侧 detail container；对象切换只替换容器内部内容，并用 selection/ref guard 阻止过期异步刷新写回旧对象。
+- Mobile 使用带 backdrop、drag handle、独立滚动和安全区的 Bottom Sheet；390×844 计算样式与视觉检查通过。
+- Detail facts、补充内容、关联、提醒、原始记录、状态动作和危险操作形成明确层级；Edit 在同一容器内完成。
+- Escape 依次退出删除确认、编辑态和临时详情；打开时聚焦关闭按钮，编辑时聚焦标题，关闭后返回当前 Item 行。
+- 完成先立即进入勾选/删除线状态，保持约 180ms 后短移淡出；目标区、恢复与 Undo 使用短距离进入。删除确认后使用 240ms 离场并提供限时 Undo；两类 Undo 都恢复同一 Item identity。
+- 删除的真实本地行为由 application/storage 自动测试验证；浏览器人工验收到二次确认界面，没有为视觉检查删除现有本地记录。
+
+### Remaining
+
+- **7E**：Calendar month/week/day 的密度、连续 range、移动日视图和方向 motion。
+- **7F**：Search、Ambiguity、Conflict、ACTION_REQUIRED、Account/Sync 和剩余状态 surface。
+- **7G**：全局 motion consistency、Calendar 完成态与跨 surface polish。
+- **7H**：完整 responsive/accessibility matrix 与最终视觉 acceptance。
+
 ## 1. Desktop Navigation — Stage 7A
 
 - **Current implementation**：204px 固定左栏，品牌文字与事项总览/课程/日程三个按钮；账户入口固定在左下。
@@ -210,8 +252,8 @@
 
 ## Phase 7 execution gates
 
-- **7A**：完成 shell、导航、layout tokens、viewport ranges、shared page header 与基础 state surfaces。
-- **7B**：完成 Overview/Course/Item hierarchy、空态、completed section 基础视觉。
-- **7C**：完成 Quick Capture 连续形变、键盘/外部点击、保存/失败反馈。
-- **7D**：完成 detail/edit、completion/delete/undo 视觉与行为；desktop 单容器、mobile sheet。
-- **7E–7H**：本轮 7A–7D 后继续；未完成项保留在本审计中，不提前标记 PASS。
+- **7A — PASS locally**：shell、导航、layout tokens、viewport ranges、shared page header 与基础 state surfaces。
+- **7B — PASS locally**：Overview/Course/Item hierarchy、空态、completed section 基础视觉。
+- **7C — PASS locally**：Quick Capture 连续形变、键盘/外部点击、保存/失败反馈。
+- **7D — PASS locally**：detail/edit、completion/delete/undo；desktop 单容器、mobile sheet。
+- **7E–7H — PENDING**：未完成项保留在本审计中，继续按阶段验证。
