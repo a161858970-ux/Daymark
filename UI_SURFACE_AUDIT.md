@@ -10,7 +10,7 @@
 
 ## Phase 7 progress — 2026-09-24
 
-以下状态记录基线审计之后的实施结果。后续 20 个 surface 条目保留改造前证据，7A–7D 的当前状态以本节为准。
+以下状态记录基线审计之后的实施结果。后续 20 个 surface 条目保留改造前证据，7A–7E 的当前状态以本节为准。
 
 ### 7A — Shell / Navigation / Tokens — PASS locally
 
@@ -43,9 +43,17 @@
 - 完成先立即进入勾选/删除线状态，保持约 180ms 后短移淡出；目标区、恢复与 Undo 使用短距离进入。删除确认后使用 240ms 离场并提供限时 Undo；两类 Undo 都恢复同一 Item identity。
 - 删除的真实本地行为由 application/storage 自动测试验证；浏览器人工验收到二次确认界面，没有为视觉检查删除现有本地记录。
 
+### 7E — Calendar Month / Week / Day — PASS locally
+
+- 月/周视图使用传统七列日历与单一范围导航；Calendar 只接收 Item，不读取或投影 CourseSchedule。
+- 多日 Item 保持一个 identity，并以跨日期连续 segment 呈现；完成项仍留在原日期与时间位置，同时通过勾选、删除线和降低权重表达状态。
+- Single Day 按真实投影时间排序，显示时间、课程和完成语义；点击后打开现有 Item Detail，不创建第二份对象。
+- Mobile 月视图隐藏狭小 event target，整格日期进入 Single Day，再进入 Bottom Sheet；两次 Escape 分别关闭 Item Detail 与 Single Day，并把焦点还给原日期。
+- 翻月/翻周使用统一短方向 transition；today、selected、overflow、empty 和 reduced-motion 状态均已覆盖。
+- desktop 与 390×844 viewport 已人工检查；Calendar/domain 自动测试、Web build、全仓测试、lint 和 format 均通过。
+
 ### Remaining
 
-- **7E**：Calendar month/week/day 的密度、连续 range、移动日视图和方向 motion。
 - **7F**：Search、Ambiguity、Conflict、ACTION_REQUIRED、Account/Sync 和剩余状态 surface。
 - **7G**：全局 motion consistency、Calendar 完成态与跨 surface polish。
 - **7H**：完整 responsive/accessibility matrix 与最终视觉 acceptance。
@@ -256,4 +264,5 @@
 - **7B — PASS locally**：Overview/Course/Item hierarchy、空态、completed section 基础视觉。
 - **7C — PASS locally**：Quick Capture 连续形变、键盘/外部点击、保存/失败反馈。
 - **7D — PASS locally**：detail/edit、completion/delete/undo；desktop 单容器、mobile sheet。
-- **7E–7H — PENDING**：未完成项保留在本审计中，继续按阶段验证。
+- **7E — PASS locally**：Calendar month/week/day、连续 range、移动日视图、方向 motion 与焦点返回。
+- **7F–7H — PENDING**：未完成项保留在本审计中，继续按阶段验证。

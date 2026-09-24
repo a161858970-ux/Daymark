@@ -2,9 +2,9 @@
 
 **更新日期**：2026-09-24
 
-**审计范围**：Specification 00–21；Phase 6 implementation closure；Phase 7A–7D
+**审计范围**：Specification 00–21；Phase 6 implementation closure；Phase 7A–7E
 
-**当前结论**：**PHASE 6 ENGINEERING IMPLEMENTATION: COMPLETE**；**PHASE 7A–7D: PASS LOCALLY**；真实基础设施验收仍为 **BLOCKED BY EXTERNAL CONFIGURATION**，不计为 PASS
+**当前结论**：**PHASE 6 ENGINEERING IMPLEMENTATION: COMPLETE**；**PHASE 7A–7E: PASS LOCALLY**；真实基础设施验收仍为 **BLOCKED BY EXTERNAL CONFIGURATION**，不计为 PASS
 
 本审计把“代码存在”“本机执行通过”“模拟基础设施通过”和“真实外部基础设施通过”分开记录。旧审计中的 26/35/44/48 项测试及同步缺口描述是历史快照，已由本文替换。
 
@@ -189,7 +189,7 @@
 
 > **RELEASE INFRASTRUCTURE VERIFICATION: BLOCKED BY EXTERNAL CONFIGURATION**
 
-## 8. Phase 7A–7D — Visual / Responsive / Motion
+## 8. Phase 7A–7E — Visual / Responsive / Motion
 
 ### 8.1 Implemented
 
@@ -197,6 +197,8 @@
 - 7B 收敛 Overview、Course index/detail、Item rows、completed section、CourseInformation 与页面层级；保留课程导向和两个独立 Item hit target。
 - 7C 将 Quick Capture 变为全局单一 morphing control；支持 autofocus、连续记录、成功/失败状态、外部点击和 Escape 焦点返回。
 - 7D 完成单一 Windows detail container、Mobile Bottom Sheet、同容器 edit、语义化 facts、删除二次确认、完成/恢复/删除/Undo motion 与键盘焦点管理。
+- 7E 完成 Calendar month/week/day：传统七列结构、单一范围导航、today/selected/overflow 状态、连续多日 range、按时间排序的 Single Day 和移动端日期钻取流程。
+- Calendar 继续只投影 Item；多日与完成状态都保留同一 Item identity，CourseSchedule 没有进入 Calendar。
 - Detail 查看、编辑和 surface orchestration 分为 `ItemDetailView`、`ItemEditForm` 与 `ItemDetail`；React 组件不承载 persistence、AI 或 sync protocol。
 - selection request/ref guard 阻止快速切换事项时，较早的 RawCapture/association/refresh 结果覆盖当前详情对象。
 
@@ -206,12 +208,13 @@
 - Mobile browser：390×844 下底部导航、Quick Capture 与 Bottom Sheet 通过人工验证；Sheet 计算样式为 bottom anchored、rounded top、drag handle visible。
 - Keyboard/focus：Quick Capture Escape、detail close、edit Escape、delete-confirm Escape、编辑 autofocus 和关闭后返回当前 Item 行通过人工验证。
 - State motion：完成即时状态、约 180ms hold + leave、completed count、完成 Undo、恢复 re-entry 均通过真实浏览器流程；删除人工验收到二次确认，正式 delete/Undo identity 由 application/storage 自动测试覆盖。
-- `pnpm build`、`pnpm test`、`pnpm lint`、`pnpm format:check` 全部通过；当前全仓为 **72 passed，1 externally gated skip**，其中 Web 为 **10 passed**。
-- Vite 仍仅报告单 bundle 大于 500 kB 的非阻塞 warning，当前主 bundle 约 524 kB。
+- Calendar desktop：月/周导航、跨周 range、日期与 Item 双命中层级、Single Day 与原生 Item Detail 已人工验证。
+- Calendar mobile：390×844 下月视图不显示狭小 event target；日期 → Single Day → Bottom Sheet、分层 Escape 与日期焦点返回已人工验证。
+- `pnpm build`、`pnpm test`、`pnpm lint`、`pnpm format:check` 全部通过；当前全仓为 **75 passed，1 externally gated skip**，其中 Web 为 **12 passed**。
+- Vite 仍仅报告单 bundle 大于 500 kB 的非阻塞 warning，当前主 bundle 约 529 kB。
 
 ### 8.3 Remaining in Phase 7
 
-- 7E Calendar month/week/day 的视觉密度、多日连续 range、移动 day flow 和方向 motion。
 - 7F Search 与 Ambiguity/Conflict/ACTION_REQUIRED/Account/Sync/状态 surface。
 - 7G 全局 motion consistency、Calendar completion 和跨 surface polish。
 - 7H 完整 desktop/mobile breakpoint、键盘、reduced-motion 和最终视觉 acceptance matrix。
@@ -229,15 +232,15 @@
 - `apps/api/src/db/multi-device.test.ts`：A–I/K。
 - `apps/api/src/db/resource-coverage.test.ts`：正式 REST 资源覆盖。
 - `apps/api/src/db/real-postgres.integration.test.ts`：真实 PostgreSQL gate；当前 skipped。
-- `apps/web/src/*.test.tsx`：导航、Course/Item 层级、Quick Capture 单控件 identity、Detail surface、删除/恢复 motion class、Conflict 与 SyncRepair 安全展示。
+- `apps/web/src/*.test.tsx`：导航、Course/Item 层级、Quick Capture 单控件 identity、Detail surface、删除/恢复 motion class、Calendar range/day semantics、Conflict 与 SyncRepair 安全展示。
 
 ## 10. Known limitations and release blockers
 
 1. **External sync validation**：真实 PostgreSQL/Supabase/双浏览器尚未执行。
 2. **Reminder release**：R-01、云端 lease、平台通知和后台能力未完成。
 3. **AI release**：真实 provider 未验收，完整时间语义仍走保守确认。
-4. **Feature scope**：课程表导入、完整 Search、Phase 7E–7H、Phase 8 未实施。
-5. **Bundle**：Web 主 bundle 约 524 kB，构建通过但有 Vite size warning；可在后续阶段做按路由/功能拆分。
+4. **Feature scope**：课程表导入、完整 Search、Phase 7F–7H、Phase 8 未实施。
+5. **Bundle**：Web 主 bundle 约 529 kB，构建通过但有 Vite size warning；可在后续阶段做按路由/功能拆分。
 
 ## 11. Spec deviations
 
@@ -247,4 +250,4 @@
 
 ## 12. Next gate
 
-产品开发路线下一步进入 Phase 7E，并以 `UI_SURFACE_AUDIT.md` 为界继续 Calendar、Search/attention surfaces、全局 motion 与最终 responsive/accessibility acceptance。发布基础设施路线独立保留：拿到外部配置后按 `REAL_POSTGRES_VERIFICATION.md` 完成真实 PostgreSQL、Supabase 与双浏览器验收，再更新本文的 real infrastructure 证据。
+产品开发路线下一步进入 Phase 7F，并以 `UI_SURFACE_AUDIT.md` 为界继续 Search/attention surfaces、全局 motion 与最终 responsive/accessibility acceptance。发布基础设施路线独立保留：拿到外部配置后按 `REAL_POSTGRES_VERIFICATION.md` 完成真实 PostgreSQL、Supabase 与双浏览器验收，再更新本文的 real infrastructure 证据。

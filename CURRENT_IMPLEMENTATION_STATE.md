@@ -2,9 +2,9 @@
 
 **复核日期**：2026-09-24
 
-**仓库基线**：`c17e6f0 Complete Phase 7D item detail interactions`
+**仓库基线**：`eee51d0 Complete Phase 7E calendar experience`
 
-**当前阶段**：Phase 6 工程实现已封存；Phase 7A–7D 已本地通过，下一步进入 7E。真实基础设施验证仍由外部配置阻塞。
+**当前阶段**：Phase 6 工程实现已封存；Phase 7A–7E 已本地通过，下一步进入 7F。真实基础设施验证仍由外部配置阻塞。
 
 本文以当前代码、实际执行的测试和当前机器可用环境为准。PGlite/fake IndexedDB 证据与真实 PostgreSQL/Supabase 证据严格分开。
 
@@ -23,18 +23,19 @@
 - outbox 顺序、owner binding、pull cursor、idempotency、change log、tombstone、stale guard、冲突恢复和服务端 commit 后响应丢失的重试语义已实现。
 - Dexie v6 会将旧版 SemesterWeek/CourseSchedule 逐成员 pending outbox 合并为 parent-scoped collection command。可恢复数据保留完整 previous/desired snapshot；无法证明 parent 的旧删除进入 ACTION_REQUIRED，worker 不会把它作为半组变更上传。
 - 确定性/AI 候选解释边界、多事项拆分确认、provenance，以及可配置 Reminder Engine/本地派生计划已实现；仍有各自的真实 provider/platform gate。
-- Phase 7A–7D 已完成 tokenized shell、Windows/Mobile navigation、Overview/Course/Item hierarchy、全局 Quick Capture、Windows 单 detail container、Mobile Bottom Sheet、同容器 edit、完成/删除/Undo motion 和键盘焦点管理。
+- Phase 7A–7E 已完成 tokenized shell、Windows/Mobile navigation、Overview/Course/Item hierarchy、全局 Quick Capture、Windows 单 detail container、Mobile Bottom Sheet、同容器 edit、完成/删除/Undo motion 和 Calendar month/week/day。
 - 详情快速对象切换使用 request/ref guard，过期 RawCapture、association 或 refresh 结果不能覆盖当前选择；完成、恢复与删除 Undo 保持同一 Item identity。
+- Calendar 使用传统七列月/周投影、连续多日 range 与按时间排序的 Single Day；移动端使用日期 → Single Day → Item Bottom Sheet，且从未读取 CourseSchedule。
 
 ## 2. 已有自动测试证据
 
-当前完整套件在本轮最终 gate 重新执行：**72 项通过，1 项真实 PostgreSQL 测试因缺少 URL 跳过**。
+当前完整套件在本轮最终 gate 重新执行：**75 项通过，1 项真实 PostgreSQL 测试因缺少 URL 跳过**。
 
-- domain：7 passed；
+- domain：8 passed；
 - application：4 passed；
 - storage：30 passed；
 - API：21 passed，1 skipped；
-- Web：10 passed。
+- Web：12 passed。
 
 Phase 6 的自动证据包括：
 
@@ -47,7 +48,7 @@ Phase 6 的自动证据包括：
 - commit 后丢失响应时使用相同 mutation ID，RawCapture/Item 不重复；
 - fake IndexedDB v5 → v6 migration rehearsal：旧 row outbox 折叠为单条整组 command、当前数据不丢失、旧记录保留 superseded provenance、后续只上传 collection command；不可还原旧删除会被隔离且不会上传；
 - Web 不显示 mutation、base version 或内部错误，并为字段冲突提供显式值入口、为 collection conflict 只显示组数量。
-- Web surface 测试覆盖导航、Course/Item 层级、Quick Capture 单控件 identity、Detail 内容、删除/恢复 motion state；desktop 与 390×844 mobile 关键流程已通过浏览器人工验收。
+- Web surface 测试覆盖导航、Course/Item 层级、Quick Capture 单控件 identity、Detail 内容、删除/恢复 motion state、Calendar 连续 range 与 Single Day 语义；desktop 与 390×844 mobile 关键流程已通过浏览器人工验收。
 
 完整逐场景证据见 `docs/MULTI_DEVICE_VERIFICATION.md`，逐实体能力见 `docs/SYNC_ENTITY_MATRIX.md`。
 
@@ -70,7 +71,7 @@ Phase 6 的自动证据包括：
 ### 其他阶段 / 发布
 
 - Reminder 云端 device registration、claim/lease、delivery acknowledgement 和平台通知；R-01 生产提醒数值仍是 release gate。
-- 真实 AI provider、完整自然语言时间理解、课程表 PDF/图片导入、完整 Search、Phase 7E–7H、Phase 8 全量 acceptance。
+- 真实 AI provider、完整自然语言时间理解、课程表 PDF/图片导入、完整 Search、Phase 7F–7H、Phase 8 全量 acceptance。
 
 ## 5. 已刷新或应废弃的旧审计描述
 
@@ -80,7 +81,7 @@ Phase 6 的自动证据包括：
 - “ACTION_REQUIRED 只能重跑整轮同步”已过时：现有逐 mutation 检查、重交/明确放弃和 provenance。
 - “ItemAssociation 只有类型和表”已过时：本地 use case、REST、sync create/delete/pull 和测试已闭合。
 - “Course/CourseInformation 正式写 API 缺失”已过时：当前接口已补齐。
-- 26/35/44/48/64/66 等数字是历史阶段快照，不能代表当前覆盖；当前 gate 使用 72 passed + 1 externally gated skip。
+- 26/35/44/48/64/66/72 等数字是历史阶段快照，不能代表当前覆盖；当前 gate 使用 75 passed + 1 externally gated skip。
 
 `docs/IMPLEMENTATION_AUDIT.md` 已按 Implemented、Verified locally、Verified simulated、Verified real、Not implemented、Blocked、Release blocker 重新整理。
 
@@ -93,7 +94,7 @@ Phase 6 的自动证据包括：
 
 > **PHASE 6 ENGINEERING IMPLEMENTATION: COMPLETE**
 
-> **PHASE 7A–7D: PASS LOCALLY**
+> **PHASE 7A–7E: PASS LOCALLY**
 
 真实外部基础设施仍未验证：
 
