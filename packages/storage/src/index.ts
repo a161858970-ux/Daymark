@@ -29,6 +29,82 @@ import type {
 type Setting = { key: string; value: string };
 type StoredMutation = OutboxMutation & { local_sequence?: number };
 
+type LegacyCollectionRowType = "SEMESTER_WEEK" | "COURSE_SCHEDULE";
+type CollectionCommandType =
+  "SEMESTER_WEEK_COLLECTION" | "COURSE_SCHEDULE_COLLECTION";
+
+function textField(value: Record<string, unknown>, key: string): string | null {
+  return typeof value[key] === "string" ? value[key] : null;
+}
+
+function semesterWeekSnapshot(
+  value: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const id = textField(value, "id");
+  const semesterId = textField(value, "semester_id");
+  const startDate = textField(value, "start_date");
+  const endDate = textField(value, "end_date");
+  const weekNumber = value.week_number;
+  if (
+    !id ||
+    !semesterId ||
+    !startDate ||
+    !endDate ||
+    !Number.isSafeInteger(weekNumber)
+  )
+    return null;
+  return {
+    id,
+    semester_id: semesterId,
+    week_number: weekNumber,
+    start_date: startDate,
+    end_date: endDate,
+  };
+}
+
+function courseScheduleSnapshot(
+  value: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const id = textField(value, "id");
+  const courseId = textField(value, "course_id");
+  const startTime = textField(value, "start_time");
+  const endTime = textField(value, "end_time");
+  const createdAt = textField(value, "created_at");
+  const updatedAt = textField(value, "updated_at");
+  if (
+    !id ||
+    !courseId ||
+    !startTime ||
+    !endTime ||
+    !createdAt ||
+    !updatedAt ||
+    !Number.isSafeInteger(value.weekday)
+  )
+    return null;
+  return {
+    id,
+    course_id: courseId,
+    weekday: value.weekday,
+    start_time: startTime,
+    end_time: endTime,
+    week_start: value.week_start ?? null,
+    week_end: value.week_end ?? null,
+    classroom: value.classroom ?? null,
+    stage_label: value.stage_label ?? null,
+    created_at: createdAt,
+    updated_at: updatedAt,
+  };
+}
+
+function mutationOrder(a: StoredMutation, b: StoredMutation): number {
+  return (
+    (a.local_sequence ?? Number.MAX_SAFE_INTEGER) -
+      (b.local_sequence ?? Number.MAX_SAFE_INTEGER) ||
+    a.created_at.localeCompare(b.created_at) ||
+    a.mutation_id.localeCompare(b.mutation_id)
+  );
+}
+
 export class OwnerBindingError extends Error {}
 
 export class CourseManagerDb extends Dexie {
@@ -116,6 +192,221 @@ export class CourseManagerDb extends Dexie {
     this.version(5).stores({
       sync_repair_decisions: "id, owner_id, mutation_id, decided_at",
     });
+    this.version(6)
+      .stores({})
+      .upgrade(async (tx) => {
+        const outbox = tx.table<StoredMutation, string>("outbox_mutations");
+        const settings = tx.table<Setting, string>("settings");
+        const allMutations = await outbox.toArray();
+        const pendingLegacy = allMutations
+          .filter(
+            (value) =>
+              value.acked_at === null &&
+              (value.entity_type === "SEMESTER_WEEK" ||
+                value.entity_type === "COURSE_SCHEDULE"),
+          )
+          .sort(mutationOrder);
+        if (!pendingLegacy.length) return;
+
+        const weekRows = await tx
+          .table<SemesterWeek, string>("semester_weeks")
+          .toArray();
+        const scheduleRows = await tx
+          .table<CourseSchedule, string>("course_schedules")
+          .toArray();
+        const parentByObject = new Map<string, string>();
+        const snapshotByObject = new Map<string, Record<string, unknown>>();
+        const objectKey = (type: LegacyCollectionRowType, id: string) =>
+          `${type}:${id}`;
+
+        for (const row of weekRows) {
+          const key = objectKey("SEMESTER_WEEK", row.id);
+          parentByObject.set(key, row.semester_id);
+          snapshotByObject.set(
+            key,
+            semesterWeekSnapshot(row as unknown as Record<string, unknown>)!,
+          );
+        }
+        for (const row of scheduleRows) {
+          const key = objectKey("COURSE_SCHEDULE", row.id);
+          parentByObject.set(key, row.course_id);
+          snapshotByObject.set(
+            key,
+            courseScheduleSnapshot(row as unknown as Record<string, unknown>)!,
+          );
+        }
+        for (const mutation of [...allMutations].sort(mutationOrder)) {
+          if (
+            mutation.entity_type !== "SEMESTER_WEEK" &&
+            mutation.entity_type !== "COURSE_SCHEDULE"
+          )
+            continue;
+          const key = objectKey(mutation.entity_type, mutation.entity_id);
+          const snapshot =
+            mutation.entity_type === "SEMESTER_WEEK"
+              ? semesterWeekSnapshot(mutation.changed_fields)
+              : courseScheduleSnapshot(mutation.changed_fields);
+          if (snapshot) {
+            snapshotByObject.set(key, snapshot);
+            const parent = textField(
+              snapshot,
+              mutation.entity_type === "SEMESTER_WEEK"
+                ? "semester_id"
+                : "course_id",
+            );
+            if (parent) parentByObject.set(key, parent);
+          }
+        }
+
+        // Legacy replacement wrote all member mutations in one transaction. A
+        // delete may only contain its ID, so use the unique parent carried by
+        // another member from that same timestamp when history cannot identify it.
+        const batchParents = new Map<string, Set<string>>();
+        for (const mutation of pendingLegacy) {
+          const rowType = mutation.entity_type as LegacyCollectionRowType;
+          const parent = parentByObject.get(
+            objectKey(rowType, mutation.entity_id),
+          );
+          if (!parent) continue;
+          const batchKey = `${mutation.owner_id}:${rowType}:${mutation.created_at}`;
+          const parents = batchParents.get(batchKey) ?? new Set<string>();
+          parents.add(parent);
+          batchParents.set(batchKey, parents);
+        }
+
+        const groups = new Map<
+          string,
+          {
+            ownerId: string;
+            rowType: LegacyCollectionRowType;
+            commandType: CollectionCommandType;
+            parentId: string;
+            mutations: StoredMutation[];
+          }
+        >();
+        const unresolved: StoredMutation[] = [];
+        for (const mutation of pendingLegacy) {
+          const rowType = mutation.entity_type as LegacyCollectionRowType;
+          const key = objectKey(rowType, mutation.entity_id);
+          let parentId = parentByObject.get(key);
+          if (!parentId) {
+            const parents = batchParents.get(
+              `${mutation.owner_id}:${rowType}:${mutation.created_at}`,
+            );
+            if (parents?.size === 1) parentId = [...parents][0];
+          }
+          if (!parentId) {
+            unresolved.push(mutation);
+            continue;
+          }
+          const commandType: CollectionCommandType =
+            rowType === "SEMESTER_WEEK"
+              ? "SEMESTER_WEEK_COLLECTION"
+              : "COURSE_SCHEDULE_COLLECTION";
+          const groupKey = `${mutation.owner_id}:${commandType}:${parentId}`;
+          const group = groups.get(groupKey) ?? {
+            ownerId: mutation.owner_id,
+            rowType,
+            commandType,
+            parentId,
+            mutations: [],
+          };
+          group.mutations.push(mutation);
+          groups.set(groupKey, group);
+        }
+
+        const migratedAt = new Date().toISOString();
+        for (const mutation of unresolved) {
+          await outbox.update(mutation.mutation_id, {
+            last_error:
+              "VALIDATION_ERROR: Legacy collection change needs review; open the parent and save the collection again before syncing",
+          });
+          await settings.put({
+            key: `legacy_collection_migration_required:${mutation.entity_type}:${mutation.entity_id}`,
+            value: mutation.mutation_id,
+          });
+        }
+
+        for (const group of groups.values()) {
+          group.mutations.sort(mutationOrder);
+          const desired = (
+            group.rowType === "SEMESTER_WEEK"
+              ? weekRows
+                  .filter((row) => row.semester_id === group.parentId)
+                  .map((row) =>
+                    semesterWeekSnapshot(
+                      row as unknown as Record<string, unknown>,
+                    ),
+                  )
+              : scheduleRows
+                  .filter(
+                    (row) =>
+                      row.course_id === group.parentId &&
+                      row.deleted_at === null,
+                  )
+                  .map((row) =>
+                    courseScheduleSnapshot(
+                      row as unknown as Record<string, unknown>,
+                    ),
+                  )
+          ).filter((value): value is Record<string, unknown> => value !== null);
+          const before = new Map(
+            desired.map((value) => [String(value.id), value]),
+          );
+          let completePreviousSnapshot = true;
+          for (const mutation of [...group.mutations].reverse()) {
+            if (mutation.operation === "CREATE") {
+              before.delete(mutation.entity_id);
+              continue;
+            }
+            if (mutation.operation === "DELETE") {
+              const snapshot = snapshotByObject.get(
+                objectKey(group.rowType, mutation.entity_id),
+              );
+              if (snapshot) before.set(mutation.entity_id, snapshot);
+              else completePreviousSnapshot = false;
+            }
+          }
+          // An empty previous snapshot is deliberately conservative. It either
+          // applies to an empty remote collection or produces a collection
+          // conflict; it can never expose a partially replayed replacement.
+          const previous = completePreviousSnapshot ? [...before.values()] : [];
+          const commandId = crypto.randomUUID();
+          const first = group.mutations[0]!;
+          const version = await settings.get(
+            `sync_version:${group.commandType}:${group.parentId}`,
+          );
+          await outbox.put({
+            mutation_id: commandId,
+            owner_id: group.ownerId,
+            entity_type: group.commandType,
+            entity_id: group.parentId,
+            operation: "UPDATE",
+            base_version: version ? Number(version.value) : 0,
+            changed_fields: {
+              previous_collection: previous,
+              collection: desired,
+            },
+            created_at: first.created_at,
+            attempt_count: 0,
+            last_error: null,
+            acked_at: null,
+            ...(first.local_sequence === undefined
+              ? {}
+              : { local_sequence: first.local_sequence }),
+          });
+          for (const mutation of group.mutations)
+            await outbox.update(mutation.mutation_id, {
+              acked_at: migratedAt,
+              last_error: `SUPERSEDED_BY_COLLECTION:${commandId}`,
+            });
+          if (!completePreviousSnapshot)
+            await settings.put({
+              key: `legacy_collection_snapshot_fallback:${group.commandType}:${group.parentId}`,
+              value: commandId,
+            });
+        }
+      });
   }
 }
 
@@ -438,6 +729,7 @@ export class DexieLocalRepository
     for (const mutation of await this.pendingMutations()) {
       const code = this.actionRequiredCode(mutation);
       if (!code) continue;
+      const localObject = await this.localSyncObject(mutation);
       const unsafeUndo =
         mutation.entity_type === "ITEM" &&
         mutation.operation === "UPDATE" &&
@@ -447,10 +739,11 @@ export class DexieLocalRepository
         mutation.entity_type === "COURSE" && mutation.operation === "DELETE";
       result.push({
         mutation,
-        local_object: await this.localSyncObject(mutation),
+        local_object: localObject,
         error_code: code,
         can_retry:
           (code === "VALIDATION_ERROR" || code === "IDEMPOTENCY_REPLAY") &&
+          localObject !== null &&
           !unsafeUndo &&
           !complexCourseDelete,
         can_abandon:

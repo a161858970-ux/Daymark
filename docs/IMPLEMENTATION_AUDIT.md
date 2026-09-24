@@ -2,9 +2,9 @@
 
 **更新日期**：2026-09-24
 
-**审计范围**：Specification 00–21；当前代码至 Phase 6
+**审计范围**：Specification 00–21；Phase 6 implementation closure 与 Phase 7 起始基线
 
-**当前结论**：**PHASE 6 STATUS: PARTIALLY COMPLETE**
+**当前结论**：**PHASE 6 ENGINEERING IMPLEMENTATION: COMPLETE**；真实基础设施验收仍为 **BLOCKED BY EXTERNAL CONFIGURATION**，不计为 PASS
 
 本审计把“代码存在”“本机执行通过”“模拟基础设施通过”和“真实外部基础设施通过”分开记录。旧审计中的 26/35/44/48 项测试及同步缺口描述是历史快照，已由本文替换。
 
@@ -122,6 +122,8 @@
 - 服务端锁定 parent/revision，在一个 PostgreSQL transaction 内验证成员、比较 version 与旧快照、应用整组、保留 client IDs、写一个 envelope 与幂等结果。
 - stale 并发形成 `collection` 冲突；用户只能选择完整本机组或完整已同步组。pull 在一个 Dexie transaction 内应用完整 envelope 和 cursor。
 - 普通 REST 的 weeks/schedules replace 进入同一个 collection revision/change stream，不会绕过离线并发检测。
+- Dexie v6 会把可识别父级的旧版逐成员 pending outbox 原子折叠为一条 collection command；旧 mutation 保留，并以 `SUPERSEDED_BY_COLLECTION` 明确记录由哪个新 command 取代。
+- 迁移通过当前本地集合反推 desired collection，并从 tombstone/outbox history 反推 previous collection。若旧 SemesterWeek 删除已经丢失完整快照，迁移使用保守空基线，使远端非空时形成显式 collection conflict；若连 parent 都无法证明，则保留旧 mutation、标记 ACTION_REQUIRED，并阻止 worker 逐成员上传。
 - 详细决定见 `ADR-005-collection-replacement-sync.md`。
 
 #### ACTION_REQUIRED repair
@@ -147,8 +149,8 @@
 ### 7.2 Verified locally
 
 - `pnpm build`：PASS。Vite 仅报告单 bundle 大于 500 kB 的非阻塞 warning。
-- `pnpm test`：**64 passed，1 skipped**。
-  - domain 7；application 4；storage 28；API 21 passed + 1 real PostgreSQL skipped；Web 4。
+- `pnpm test`：**66 passed，1 skipped**。
+  - domain 7；application 4；storage 30；API 21 passed + 1 real PostgreSQL skipped；Web 4。
 - `pnpm lint`：PASS。
 - `pnpm format:check`：PASS。
 - `pnpm dev`：Web HTTP 200；API health HTTP 200 / `status=ok`。
@@ -159,6 +161,7 @@
 - A–I/K 使用两个独立 Dexie 设备或受控 lossy transport；J 使用 pull transaction overlap 注入。A–K 的 Initial/Operations/Expected/Actual/PASS 见 `MULTI_DEVICE_VERIFICATION.md`。
 - collection tests覆盖 replay、owner scope、stale version、LOCAL/REMOTE resolution、canonical ID、单 envelope 和 ItemAssociation。
 - ACTION_REQUIRED tests覆盖当前内容重交、new idempotency identity、过期 Undo 安全放弃和 provenance。
+- fake IndexedDB 从真实 v5 schema 打开到 v6：核对 SemesterWeek/CourseSchedule 数据不丢失、旧 row mutation 被单 collection command 取代、未来 worker 只上传整组；另有不可还原删除的隔离测试，证明不会产生半组上传或静默丢弃。
 
 ### 7.4 Verified in real infrastructure
 
@@ -169,7 +172,6 @@
 - 真实 Supabase login 和 authenticated browser sync。
 - 外部 PostgreSQL migration/integration run。
 - 两个浏览器 profile/物理设备的断网、后台、重启和长时间 retry 生命周期。
-- 旧开发 IndexedDB 中逐成员 SemesterWeek/CourseSchedule pending outbox 的真实升级演练。服务端暂保留旧命令兼容；新代码不会再生成。
 - Reminder 云端 delivery/lease 属于 Phase 5/发布缺口，不由通用 entity sync 代替。
 
 ### 7.6 Blocked by external configuration
@@ -179,15 +181,20 @@
 
 ### 7.7 Phase 6 result
 
-本地同步协议、collection replace、ACTION_REQUIRED、entity coverage、可重复 A–K 与真实环境入口已经闭合。真实外部基础设施和设备生命周期没有证据，且旧 IndexedDB 升级演练未完成。因此遵守用户结束条件，不宣称 COMPLETE：
+本地同步协议、collection replace、旧 IndexedDB migration rehearsal、ACTION_REQUIRED、entity coverage、可重复 A–K 与真实环境入口已经闭合。因此 Phase 6 的工程实现可以封存：
 
-> **PHASE 6 STATUS: PARTIALLY COMPLETE**
+> **PHASE 6 ENGINEERING IMPLEMENTATION: COMPLETE**
+
+真实 PostgreSQL、Supabase authentication 与两个独立浏览器/物理设备的生命周期仍没有执行证据，状态保持：
+
+> **RELEASE INFRASTRUCTURE VERIFICATION: BLOCKED BY EXTERNAL CONFIGURATION**
 
 ## 8. Current test evidence
 
 - `packages/domain/src/*.test.ts`：领域投影、排序、学期规则。
 - `packages/application/src/reminders.test.ts`：提醒策略与 stale guard。
 - `packages/storage/src/storage.test.ts`：本地产品流程、collection 单 outbox、ItemAssociation。
+- `packages/storage/src/migration.test.ts`：Dexie v5 → v6 迁移、collection command 折叠、provenance 与不可还原旧删除隔离。
 - `packages/storage/src/sync.test.ts`：cursor、overlap、repair、collection envelope、resolution + later edit。
 - `apps/api/src/db/collection-sync.test.ts`：collection/association/academic concurrency。
 - `apps/api/src/db/multi-device.test.ts`：A–I/K。
@@ -198,11 +205,10 @@
 ## 9. Known limitations and release blockers
 
 1. **External sync validation**：真实 PostgreSQL/Supabase/双浏览器尚未执行。
-2. **Legacy local upgrade rehearsal**：旧 collection row mutation 的真实 IndexedDB 样本未演练。
-3. **Reminder release**：R-01、云端 lease、平台通知和后台能力未完成。
-4. **AI release**：真实 provider 未验收，完整时间语义仍走保守确认。
-5. **Feature scope**：课程表导入、完整 Search、Phase 7、Phase 8 未实施。
-6. **Bundle**：Web 主 bundle 约 509 kB，构建通过但有 Vite size warning；可在后续非 Phase 6 阶段做按路由/功能拆分。
+2. **Reminder release**：R-01、云端 lease、平台通知和后台能力未完成。
+3. **AI release**：真实 provider 未验收，完整时间语义仍走保守确认。
+4. **Feature scope**：课程表导入、完整 Search、Phase 7、Phase 8 未实施。
+5. **Bundle**：Web 主 bundle 约 513 kB，构建通过但有 Vite size warning；可在后续阶段做按路由/功能拆分。
 
 ## 10. Spec deviations
 
@@ -212,4 +218,4 @@
 
 ## 11. Next gate
 
-下一步应先按 `REAL_POSTGRES_VERIFICATION.md` 获取外部配置并完成真实 Phase 6 验收，修复任何由真实网络/JWT/数据库暴露的问题；随后更新本文的 real infrastructure 与旧数据升级证据。通过该 gate 后才进入 Phase 7。
+产品开发路线现在进入 Phase 7，并以 `UI_SURFACE_AUDIT.md` 为界按 7A–7H 收敛视觉、响应式与动效。发布基础设施路线独立保留：拿到外部配置后按 `REAL_POSTGRES_VERIFICATION.md` 完成真实 PostgreSQL、Supabase 与双浏览器验收，再更新本文的 real infrastructure 证据。

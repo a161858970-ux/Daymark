@@ -66,17 +66,23 @@ collection conflict 的唯一冲突字段是 `collection`。用户只能选择�
 
 `PUT /semesters/{id}/weeks` 与 `PUT /courses/{id}/schedules` 仍是正式人工/导入接口。它们在相同数据库事务中更新 collection revision 并写完整 envelope，因此不会绕过离线客户端的并发检测。
 
+### 8. 旧 row outbox 的升级边界
+
+Dexie v6 将能够证明 parent 的 pending `SEMESTER_WEEK` / `COURSE_SCHEDULE` mutation 折叠成一条父对象级 command。当前本地活动集合成为 desired snapshot；tombstone 与历史 outbox 用于逆推出 replacement 之前的 snapshot。旧 mutation 仍保留，并以 `SUPERSEDED_BY_COLLECTION:<command id>` 记录替代关系。
+
+SemesterWeek 的旧实现会物理删除成员。如果删除前的完整成员已经无法从历史恢复，迁移以空 previous snapshot 作为保守 stale guard：远端非空时必然形成整组 conflict，而不会冒险上传半组。若连 parent 也无法证明，则旧 mutation 保持 pending、进入 ACTION_REQUIRED，sync worker 在用户明确处理前不会上传它。
+
 ## Consequences
 
 - Offline replace、重试和并发替换具有与正式 REST 一致的原子语义。
 - change log 的可见单位是整组，客户端不会观察到中间行集合。
 - 冲突界面只需显示父对象和两组数量，不暴露 SQL、版本号或 outbox 数据。
 - `sync_collection_revisions` 是新增迁移 `002_collection_sync.sql` 的持久状态。
-- 旧开发版本已产生的逐成员 mutation 仍由服务端兼容读取，避免静默丢弃；新代码不再生成它们。发布前需对真实旧 IndexedDB 做升级演练。
+- 服务端仍兼容已经在升级前发出的旧命令；新代码不再生成它们。尚未上传的旧队列由 Dexie v6 转换或显式隔离，不会静默丢弃。
 
 ## Verification
 
 - PGlite：幂等 replay、stale version、替换前快照、owner isolation、整组冲突及两种解决策略。
-- fake IndexedDB：单 command outbox、atomic envelope、无效 envelope rollback、解决后保留更晚的本机替换。
+- fake IndexedDB：单 command outbox、atomic envelope、无效 envelope rollback、解决后保留更晚的本机替换；v5 → v6 rehearsal 验证旧队列转换、数据留存、superseded provenance、后续只上传整组 command 与不可还原删除隔离。
 - 双设备模拟：两个独立 Dexie 数据库经 Fastify + PGlite 并发替换并最终收敛。
 - 真实 PostgreSQL：测试入口已建立，当前因缺少 `REAL_DATABASE_URL` 尚未执行。

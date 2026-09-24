@@ -2,9 +2,9 @@
 
 **复核日期**：2026-09-24
 
-**仓库基线**：`38f4f94 Establish course manager implementation baseline` 之后的当前工作树
+**仓库基线**：`fa4750a Complete Phase 6 sync protocol groundwork` 之后的 implementation closure
 
-**当前阶段**：Phase 6 — Offline / Sync / Conflict，**PARTIALLY COMPLETE**
+**当前阶段**：Phase 6 工程实现已封存；Phase 7 开始。真实基础设施验证仍由外部配置阻塞。
 
 本文以当前代码、实际执行的测试和当前机器可用环境为准。PGlite/fake IndexedDB 证据与真实 PostgreSQL/Supabase 证据严格分开。
 
@@ -21,15 +21,16 @@
 - ACTION_REQUIRED 有完整用户出口：显示受影响对象和可读原因；允许时用当前本地内容、新 mutation ID 与已知服务器版本重交；或经二次确认采用已同步状态。repair decision 记录旧/新 mutation、被替代 mutation、动作、设备与原错误。
 - 过期 Undo 不能重交为 undelete，只能明确采用已同步 tombstone；放弃 collection replacement 时恢复替换前整组并重置 pull cursor；任何路径都不静默删除 RawCapture。
 - outbox 顺序、owner binding、pull cursor、idempotency、change log、tombstone、stale guard、冲突恢复和服务端 commit 后响应丢失的重试语义已实现。
+- Dexie v6 会将旧版 SemesterWeek/CourseSchedule 逐成员 pending outbox 合并为 parent-scoped collection command。可恢复数据保留完整 previous/desired snapshot；无法证明 parent 的旧删除进入 ACTION_REQUIRED，worker 不会把它作为半组变更上传。
 - 确定性/AI 候选解释边界、多事项拆分确认、provenance，以及可配置 Reminder Engine/本地派生计划已实现；仍有各自的真实 provider/platform gate。
 
 ## 2. 已有自动测试证据
 
-当前完整套件在本轮最终 gate 重新执行：**64 项通过，1 项真实 PostgreSQL 测试因缺少 URL 跳过**。
+当前完整套件在本轮最终 gate 重新执行：**66 项通过，1 项真实 PostgreSQL 测试因缺少 URL 跳过**。
 
 - domain：7 passed；
 - application：4 passed；
-- storage：28 passed；
+- storage：30 passed；
 - API：21 passed，1 skipped；
 - Web：4 passed。
 
@@ -42,6 +43,7 @@ Phase 6 的自动证据包括：
 - Semester/Course/Item/CourseInformation/RawCapture 的 merge/conflict/version 行为；
 - 两个独立 Dexie 数据库经 Fastify + PGlite 完成 A–I 与 K；J 通过受控 pull overlap 测试；
 - commit 后丢失响应时使用相同 mutation ID，RawCapture/Item 不重复；
+- fake IndexedDB v5 → v6 migration rehearsal：旧 row outbox 折叠为单条整组 command、当前数据不丢失、旧记录保留 superseded provenance、后续只上传 collection command；不可还原旧删除会被隔离且不会上传；
 - Web 不显示 mutation、base version 或内部错误，并为字段冲突提供显式值入口、为 collection conflict 只显示组数量。
 
 完整逐场景证据见 `docs/MULTI_DEVICE_VERIFICATION.md`，逐实体能力见 `docs/SYNC_ENTITY_MATRIX.md`。
@@ -61,7 +63,6 @@ Phase 6 的自动证据包括：
 - 在真实 PostgreSQL 运行 migration 与 `real-postgres.integration.test.ts`。
 - 在真实 Supabase 完成 login → authenticated API → capture/outbox/push/pull/conflict/resolve/restart/convergence。
 - 两个独立浏览器 profile/物理设备上的断网、后台恢复与长时间重试验收。
-- 旧开发版本中已经存在逐成员 SemesterWeek/CourseSchedule outbox 的真实 IndexedDB 升级演练。新代码不再生成这些 mutation，服务端暂保留兼容处理，避免静默丢弃。
 
 ### 其他阶段 / 发布
 
@@ -76,14 +77,19 @@ Phase 6 的自动证据包括：
 - “ACTION_REQUIRED 只能重跑整轮同步”已过时：现有逐 mutation 检查、重交/明确放弃和 provenance。
 - “ItemAssociation 只有类型和表”已过时：本地 use case、REST、sync create/delete/pull 和测试已闭合。
 - “Course/CourseInformation 正式写 API 缺失”已过时：当前接口已补齐。
-- 26/35/44/48 等数字是历史阶段快照，不能代表当前覆盖；当前 gate 使用 64 passed + 1 externally gated skip。
+- 26/35/44/48/64 等数字是历史阶段快照，不能代表当前覆盖；当前 gate 使用 66 passed + 1 externally gated skip。
 
 `docs/IMPLEMENTATION_AUDIT.md` 已按 Implemented、Verified locally、Verified simulated、Verified real、Not implemented、Blocked、Release blocker 重新整理。
 
-## 6. Phase 6 剩余 blocker
+## 6. Phase 6 状态与剩余 release gate
 
 1. **EXTERNAL CONFIGURATION REQUIRED**：真实 PostgreSQL 连接与 Supabase 项目/测试用户/token 缺失，无法产出真实基础设施证据。
 2. **ENVIRONMENT VERIFICATION REQUIRED**：尚未在两个独立浏览器 profile 或物理设备执行 A–K 的网络/生命周期验收。
-3. **MIGRATION REHEARSAL REQUIRED**：旧逐成员 collection outbox 的真实 IndexedDB 升级样本尚未演练；当前仅保证新写入语义和服务端兼容。
 
-本地协议实现、可修复冲突和模拟双设备闭环已完成，但用户定义的结束条件包含真实环境可用时的验证与所有无法验证项的明确记录。由于外部配置缺失，最终状态保持 **PHASE 6 STATUS: PARTIALLY COMPLETE**，且本轮不进入 Phase 7。
+旧逐成员 collection outbox 的可重复 fake IndexedDB v5 → v6 演练已经完成；当前没有未闭合的 Phase 6 本地工程 blocker。
+
+> **PHASE 6 ENGINEERING IMPLEMENTATION: COMPLETE**
+
+真实外部基础设施仍未验证：
+
+> **RELEASE INFRASTRUCTURE VERIFICATION: BLOCKED BY EXTERNAL CONFIGURATION**

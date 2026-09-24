@@ -69,6 +69,12 @@ export class SyncWorker {
     const deviceId = await this.repo.deviceId();
     let pushed = 0;
     for (const mutation of await this.repo.pendingMutations()) {
+      if (
+        /^(VALIDATION_ERROR|FORBIDDEN|NOT_FOUND|IDEMPOTENCY_REPLAY):/.test(
+          mutation.last_error ?? "",
+        )
+      )
+        return { pushed, pulled: 0, stopped: "ACTION_REQUIRED" };
       const observed = await this.repo.serverVersion(
         mutation.entity_type,
         mutation.entity_id,
