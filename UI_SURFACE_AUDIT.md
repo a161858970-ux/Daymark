@@ -10,7 +10,7 @@
 
 ## Phase 7 progress — 2026-09-24
 
-以下状态记录基线审计之后的实施结果。后续 20 个 surface 条目保留改造前证据，7A–7F 的当前状态以本节为准。
+以下状态记录基线审计之后的实施结果。后续 20 个 surface 条目保留改造前证据，7A–7G 的当前状态以本节为准。
 
 ### 7A — Shell / Navigation / Tokens — PASS locally
 
@@ -60,11 +60,21 @@
 - unresolved、field/collection conflict 与 ACTION_REQUIRED 使用统一轻量摘要；待确认记录启动时展开，冲突与修复默认收起，展开后仍保留既有字段选择、整组选择、删除边界和二次确认。
 - 账户入口在无外部配置时也显示“仅本机”；已建模 signed-out、offline、syncing、up-to-date、needs-attention 与 error 文案。后台同步保持安静，不显示持续 spinner 或内部队列术语。
 - Search、账户 popover、attention disclosure 的 Escape、外部关闭与焦点返回已验证；desktop 与 390×844 viewport 人工检查通过。
-- 全仓 build/test/lint/format 通过：82 passed，1 个真实 PostgreSQL gate skipped。
+- 当时全仓 build/test/lint/format 通过：82 passed，1 个真实 PostgreSQL gate skipped；最新总数见 7G。
+
+### 7G — Motion system — PASS locally
+
+- 建立共享 motion timing 与退出 presence；feedback、error、Search、Account popover 和 Item Detail 会先完成短离场再卸载。系统请求 reduced motion 时，CSS 位移被压缩，JavaScript 退出等待降为零。
+- 页面主空间、课程索引 → 详情、课程 tab、学期上下文与 Completed 展开使用小距离 opacity/transform transition；不引入整页滑动、bounce 或装饰性等待。
+- Quick Capture 本地保存后显示不抢焦点的轻量成功浮层，输入框保持展开并可立即继续输入；局部反馈与全局 toast 不再重复播报同一次快速记录。
+- Windows Detail 从右侧轻量退出；Mobile Bottom Sheet 向下退出并同步淡出 backdrop。关闭后仍返回原 Item 行；删除失败不会提前关闭详情。
+- Calendar 改期保留同一 Item id，在新 grid position 使用短到达提示；月/周容器不重新挂载。完成 Item 继续留在原日期位置，只改变完成视觉。
+- transient feedback 使用 2200ms 可见窗口与自然淡出；错误保持稳定，不使用 shake 或全屏错误动画。
+- desktop 与 390×844 手工验证页面/课程/tab/Completed/Quick Capture/Detail/Search/Account；日程事项从 9 月 30 日移至 9 月 29 日后捕获 `calendar-item-relocated`，再恢复原日期。移动端捕获 `sheet-out` 280ms 和向下位移；焦点返回通过。
+- 全仓 build/test/lint/format 通过：**87 passed，1 个真实 PostgreSQL gate skipped**；Web 为 **22 passed**。Vite 仅保留主 bundle 约 544 kB 的非阻塞 warning。
 
 ### Remaining
 
-- **7G**：全局 motion consistency、Calendar 完成态与跨 surface polish。
 - **7H**：完整 responsive/accessibility matrix 与最终视觉 acceptance。
 
 ## 1. Desktop Navigation — Stage 7A
@@ -275,4 +285,5 @@
 - **7D — PASS locally**：detail/edit、completion/delete/undo；desktop 单容器、mobile sheet。
 - **7E — PASS locally**：Calendar month/week/day、连续 range、移动日视图、方向 motion 与焦点返回。
 - **7F — PASS locally**：全局 Search、unresolved、Conflict、ACTION_REQUIRED、Account/Sync 与状态 surface。
-- **7G–7H — PENDING**：未完成项保留在本审计中，继续按阶段验证。
+- **7G — PASS locally**：统一 timing/exit presence、页面与 tab 连续性、Quick Capture 成功反馈、Calendar 改期、desktop/mobile detail exit 与 reduced-motion gate。
+- **7H — PENDING**：完整 breakpoint、键盘、触控、屏幕阅读语义与最终视觉 acceptance matrix。
