@@ -44,8 +44,8 @@ import { SemesterSwitcher } from "./SemesterSwitcher.js";
 import type { WeekFields } from "./SemesterWeekEditor.js";
 import { localDate } from "./timeInputs.js";
 import { SyncRepairPanel } from "./SyncRepairPanel.js";
+import { AppNavigation, type PrimaryPage } from "./AppNavigation.js";
 
-type Page = "overview" | "courses" | "calendar";
 type Feedback = {
   message: string;
   action?: () => Promise<void>;
@@ -53,7 +53,11 @@ type Feedback = {
 };
 
 export function App() {
-  const [page, setPage] = useState<Page>("overview");
+  const [page, setPage] = useState<PrimaryPage>("overview");
+  const [initializing, setInitializing] = useState(true);
+  const [online, setOnline] = useState(
+    () => typeof navigator === "undefined" || navigator.onLine,
+  );
   const [currentCourseId, setCurrentCourseId] = useState<string | null>(null);
   const [showCourseDelete, setShowCourseDelete] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -160,8 +164,25 @@ export function App() {
   }, [currentCourseId, selectedItem?.id, selectedSemesterId]);
 
   useEffect(() => {
-    void refresh().catch((cause: unknown) => setError(String(cause)));
+    let active = true;
+    void refresh()
+      .catch((cause: unknown) => setError(String(cause)))
+      .finally(() => {
+        if (active) setInitializing(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [refresh]);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
   useEffect(() => {
     void courseManager
       .recoverPendingCaptures()
@@ -480,34 +501,26 @@ export function App() {
     (capture) => !dismissedThisLaunch.has(capture.id),
   );
 
+  function navigate(nextPage: PrimaryPage) {
+    setPage(nextPage);
+    setSelectedItem(null);
+    setShowCourseDelete(false);
+  }
+
   return (
     <div className="app-shell">
       <AccountControl />
-      <nav className="main-nav" aria-label="主导航">
-        <div className="brand">课程与事项</div>
-        <button
-          type="button"
-          className={page === "overview" ? "active" : ""}
-          onClick={() => setPage("overview")}
-        >
-          事项总览
-        </button>
-        <button
-          type="button"
-          className={page === "courses" ? "active" : ""}
-          onClick={() => setPage("courses")}
-        >
-          课程
-        </button>
-        <button
-          type="button"
-          className={page === "calendar" ? "active" : ""}
-          onClick={() => setPage("calendar")}
-        >
-          日程
-        </button>
-      </nav>
+      <AppNavigation page={page} onNavigate={navigate} />
       <main className="main-content">
+        {!online && (
+          <div className="connection-status" role="status">
+            <span aria-hidden="true" />
+            <div>
+              <strong>当前离线</strong>
+              <small>新记录会先保存在本机，联网后继续同步。</small>
+            </div>
+          </div>
+        )}
         <ConflictPanel
           conflicts={syncConflicts}
           courses={courses}
@@ -521,7 +534,16 @@ export function App() {
           onRetry={retrySyncIssue}
           onAbandon={abandonSyncIssue}
         />
-        {page === "overview" && (
+        {initializing && (
+          <section className="surface-state loading-state" aria-busy="true">
+            <span className="loading-mark" aria-hidden="true" />
+            <div>
+              <h1>正在读取本机记录</h1>
+              <p>课程、事项与原始记录会从本地数据库恢复。</p>
+            </div>
+          </section>
+        )}
+        {!initializing && page === "overview" && (
           <>
             <header className="page-header">
               <div>
@@ -583,7 +605,7 @@ export function App() {
             <QuickCapture onSave={(text) => saveCapture(text)} />
           </>
         )}
-        {page === "courses" && (
+        {!initializing && page === "courses" && (
           <>
             <header className="page-header">
               <div>
@@ -751,7 +773,7 @@ export function App() {
             )}
           </>
         )}
-        {page === "calendar" && (
+        {!initializing && page === "calendar" && (
           <>
             <header className="page-header">
               <div>
