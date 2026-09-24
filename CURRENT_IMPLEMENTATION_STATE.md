@@ -2,7 +2,7 @@
 
 **复核日期**：2026-09-24
 
-**仓库基线**：`eca4c14 Format unresolved acceptance coverage`
+**功能/验收基线**：`1dcdf18 Record Phase 8 acceptance audit`
 
 **当前阶段**：Phase 6 工程实现与 Phase 7A–7H 已封存；Phase 8 本地 acceptance/hardening 已逐项执行。真实基础设施、真实 AI provider、平台通知和物理设备验证仍是独立发布 gate。
 
@@ -112,3 +112,41 @@ Phase 6 的自动证据包括：
 真实外部基础设施仍未验证：
 
 > **RELEASE INFRASTRUCTURE VERIFICATION: BLOCKED BY EXTERNAL CONFIGURATION**
+
+## 7. 新 agent 接手入口
+
+### 先读什么
+
+1. 本文件，确认当前真实状态和 release gates。
+2. `docs/ACCEPTANCE_TRACEABILITY.md`，查看 `19_TEST_ACCEPTANCE_SPEC.md` 的 71/71 ID 映射。
+3. `docs/IMPLEMENTATION_AUDIT.md`，查看 Phase 1–8 的实现边界和证据等级。
+4. 进入 sync 工作前读 `docs/ADR-003-sync-core.md`、`docs/ADR-004-conflict-resolution.md`、`docs/ADR-005-collection-replacement-sync.md` 与 `docs/SYNC_ENTITY_MATRIX.md`。
+5. 进入真实环境验收前按 `docs/REAL_POSTGRES_VERIFICATION.md` 执行，不用 PGlite 结果替代真实证据。
+
+### 下一步
+
+1. **Reminder delivery engineering**：继续实现 device registration、claim/lease、delivery acknowledgement、completion/deletion/time-change cancellation 和平台 notification adapters。保持 `ReminderPolicy` 可配置，在 R-01 确定前不得写死生产数字。
+2. **External integration lane**：拿到配置后依次运行三份 migration、`pnpm test:postgres`、真实 Supabase 登录/同步、两个独立 browser profile、真实 OpenAI interpretation/import file 和物理设备矩阵。
+3. **Release optimization**：主功能闭合后再处理约 554 kB 的 Vite bundle warning；它当前不是 build failure，也不应通过删减产品 surface 解决。
+
+### 本轮关键决定
+
+- Course Import 采用 recoverable job：源文件只在 parse request 中使用，长期保存 normalized preview、source hash/name/media type、用户 duplicate decisions 和 commit result；不长期保存原始字节。
+- 跨学期同名只产生 owner-scoped candidate；SAME_COURSE 必须由用户明确选择，只继承 CourseInformation，不复制历史 Item 或旧 CourseSchedule。
+- 导入 commit 使用 transaction + Idempotency-Key + `(owner, semester, source hash)` 去重；失败解析不写部分 Course，重启可从 preview checkpoint 继续。
+- Phase 8 的 PASS 只表示本机自动测试、浏览器检查和模拟基础设施成立；外部服务与物理环境继续单独标记，不提升为 production PASS。
+
+### 已知坑与命令边界
+
+- **现象**：普通 `pnpm test` 显示 1 skipped，而 `pnpm test:postgres` 在同一机器直接失败。**原因**：前者允许缺少 `REAL_DATABASE_URL` 时跳过真实 PostgreSQL 文件，后者是显式外部 gate。**解决**：本地回归使用 `pnpm test`；只在提供可丢弃真实数据库后运行 `pnpm test:postgres`，不得把 skipped 写成真实 PASS。
+- **现象**：当前环境直接执行 `pnpm exec prettier ...` 报找不到命令。**原因**：本机 pnpm command shim 没有通过该调用解析 root dev binary。**解决**：使用已验证的项目脚本 `pnpm format` 或 `pnpm format:check`。
+- **现象**：旧验证文档只列两份 migration。**原因**：Course Import 后新增 `003_course_import.sql`，历史说明未同步。**解决**：文档已修正；真实数据库必须依次应用 `001_initial.sql`、`002_collection_sync.sql`、`003_course_import.sql`。
+- **现象**：无外部配置时 API 只有 health，Course Import 不能上传解析。**原因**：认证业务路由要求同时配置 `DATABASE_URL` 与 `SUPABASE_URL`，provider 另需 OpenAI key/model。**解决**：本地继续使用 IndexedDB、确定性解析和手工 Course/CourseSchedule；外部 lane 按 `docs/REAL_POSTGRES_VERIFICATION.md` 配置。
+- 仓库当前没有 Git remote，结项没有 push。新增 remote 或发布目标前先由总控确认。
+
+### 当前风险与需要总控提供的输入
+
+- **需要产品拍板**：R-01 Numeric Reminder Policy。
+- **需要外部配置**：可丢弃的真实 PostgreSQL、Supabase project/test user/token、OpenAI key/model。
+- **需要实机资源**：Mobile/Windows 设备、两个独立 browser profile、屏幕阅读器、系统缩放与移动软键盘环境。
+- 当前未发现 P0 规格冲突、未提交有效代码、调试残留、个人绝对路径或误跟踪密钥。
