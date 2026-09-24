@@ -5,6 +5,8 @@ interface Props {
   items: Item[];
   courses: Course[];
   pendingMoveIds: Set<string>;
+  pendingDeleteIds?: Set<string>;
+  enteringItemIds?: Set<string>;
   selectedItemId?: string | null;
   emptyLabel?: string;
   onOpen(item: Item): void;
@@ -34,6 +36,8 @@ function Row({
   item,
   courses,
   leaving,
+  deleting,
+  entering,
   selected,
   onOpen,
   onComplete,
@@ -41,6 +45,8 @@ function Row({
   item: Item;
   courses: Course[];
   leaving: boolean;
+  deleting: boolean;
+  entering: boolean;
   selected: boolean;
   onOpen: (item: Item) => void;
   onComplete: (item: Item) => void;
@@ -48,13 +54,24 @@ function Row({
   const course = courses.find((value) => value.id === item.course_id);
   return (
     <li
-      className={`item-row ${item.status === "COMPLETE" ? "completed" : ""} ${leaving ? "leaving" : ""} ${selected ? "selected" : ""}`}
+      data-item-row-id={item.id}
+      className={[
+        "item-row",
+        item.status === "COMPLETE" ? "completed" : "",
+        leaving ? "leaving" : "",
+        deleting ? "deleting" : "",
+        entering ? "entering" : "",
+        selected ? "selected" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       {item.status === "INCOMPLETE" || leaving ? (
         <button
           className="completion-target"
           type="button"
           aria-label={`完成 ${item.title}`}
+          disabled={deleting}
           onClick={() => onComplete(item)}
         >
           <span className="completion-indicator">
@@ -70,6 +87,7 @@ function Row({
         className="item-body"
         type="button"
         aria-current={selected ? "true" : undefined}
+        disabled={deleting}
         onClick={() => onOpen(item)}
       >
         <span className="item-title">{item.title}</span>
@@ -85,6 +103,8 @@ export function ItemList({
   items,
   courses,
   pendingMoveIds,
+  pendingDeleteIds = new Set(),
+  enteringItemIds = new Set(),
   selectedItemId = null,
   emptyLabel = "没有未完成事项",
   onOpen,
@@ -111,6 +131,8 @@ export function ItemList({
                 item={item}
                 courses={courses}
                 leaving={pendingMoveIds.has(item.id)}
+                deleting={pendingDeleteIds.has(item.id)}
+                entering={enteringItemIds.has(item.id)}
                 selected={selectedItemId === item.id}
                 onOpen={onOpen}
                 onComplete={onComplete}
@@ -146,6 +168,8 @@ export function ItemList({
                 item={item}
                 courses={courses}
                 leaving={false}
+                deleting={pendingDeleteIds.has(item.id)}
+                entering={enteringItemIds.has(item.id)}
                 selected={selectedItemId === item.id}
                 onOpen={onOpen}
                 onComplete={onComplete}

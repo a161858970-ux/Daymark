@@ -51,3 +51,29 @@ it("keeps completion and item detail as separate targets", () => {
   expect(markup).toContain('aria-current="true"');
   expect(markup).toContain("环境经济学 · 截止");
 });
+
+it("exposes the short delete and same-identity re-entry motion states", () => {
+  const deleting = renderToStaticMarkup(
+    <ItemList
+      items={[item]}
+      courses={[course]}
+      pendingMoveIds={new Set()}
+      pendingDeleteIds={new Set([item.id])}
+      onOpen={() => undefined}
+      onComplete={() => undefined}
+    />,
+  );
+  const entering = renderToStaticMarkup(
+    <ItemList
+      items={[item]}
+      courses={[course]}
+      pendingMoveIds={new Set()}
+      enteringItemIds={new Set([item.id])}
+      onOpen={() => undefined}
+      onComplete={() => undefined}
+    />,
+  );
+  expect(deleting).toContain("item-row deleting");
+  expect(deleting).toContain("disabled");
+  expect(entering).toContain("item-row entering");
+});

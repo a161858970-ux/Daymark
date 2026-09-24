@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type MutableRefObject,
+} from "react";
 import type { ConflictResolution } from "@course-manager/contracts";
 import type {
   ActionRequiredSyncIssue,
@@ -92,15 +99,28 @@ export function App() {
   const [pendingMoveIds, setPendingMoveIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [enteringItemIds, setEnteringItemIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [courseItemText, setCourseItemText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [syncConflicts, setSyncConflicts] = useState<ConflictDetail[]>([]);
   const [syncIssues, setSyncIssues] = useState<ActionRequiredSyncIssue[]>([]);
+  const detailRequestIdRef = useRef(0);
+  const selectedItemIdRef = useRef<string | null>(null);
+  selectedItemIdRef.current = selectedItem?.id ?? null;
+  const completionTimersRef = useRef<Map<string, number>>(new Map());
+  const deletionTimersRef = useRef<Map<string, number>>(new Map());
+  const enteringTimersRef = useRef<Map<string, number>>(new Map());
 
   const refresh = useCallback(async () => {
     const now = new Date().toISOString();
     const today = localDate();
+    const requestedSelectedItemId = selectedItem?.id ?? null;
     const [
       courseData,
       allItemData,
@@ -155,11 +175,14 @@ export function App() {
     setCalendarItems(calendarData);
     setSemesters(semesterData);
     setSemesterWeeks(weekGroups.flat());
-    setItemAssociations(selectedAssociationData);
-    if (selectedItem) {
-      const next = await courseManager.getItem(selectedItem.id);
-      if (next?.deleted_at) setSelectedItem(null);
-      else if (next) setSelectedItem(next);
+    if (selectedItemIdRef.current === requestedSelectedItemId) {
+      setItemAssociations(selectedAssociationData);
+      if (requestedSelectedItemId) {
+        const next = await courseManager.getItem(requestedSelectedItemId);
+        if (selectedItemIdRef.current !== requestedSelectedItemId) return;
+        if (next?.deleted_at) setSelectedItem(null);
+        else if (next) setSelectedItem(next);
+      }
     }
   }, [currentCourseId, selectedItem?.id, selectedSemesterId]);
 
@@ -210,6 +233,60 @@ export function App() {
     );
     return () => window.clearTimeout(timeout);
   }, [feedback]);
+  useEffect(
+    () => () => {
+      for (const timer of completionTimersRef.current.values())
+        window.clearTimeout(timer);
+      for (const timer of deletionTimersRef.current.values())
+        window.clearTimeout(timer);
+      for (const timer of enteringTimersRef.current.values())
+        window.clearTimeout(timer);
+    },
+    [],
+  );
+
+  function replaceItemLocally(nextItem: Item) {
+    const replace = (items: Item[]) =>
+      items.map((value) => (value.id === nextItem.id ? nextItem : value));
+    setOverviewItems(replace);
+    setCourseItems(replace);
+    setCalendarItems(replace);
+    setAllItems(replace);
+    if (selectedItem?.id === nextItem.id) setSelectedItem(nextItem);
+  }
+
+  function clearMotionTimer(
+    timers: MutableRefObject<Map<string, number>>,
+    itemId: string,
+  ) {
+    const timer = timers.current.get(itemId);
+    if (timer !== undefined) window.clearTimeout(timer);
+    timers.current.delete(itemId);
+  }
+
+  function markItemEntering(itemId: string) {
+    clearMotionTimer(enteringTimersRef, itemId);
+    setEnteringItemIds((ids) => new Set(ids).add(itemId));
+    enteringTimersRef.current.set(
+      itemId,
+      window.setTimeout(() => {
+        enteringTimersRef.current.delete(itemId);
+        setEnteringItemIds((ids) => {
+          const next = new Set(ids);
+          next.delete(itemId);
+          return next;
+        });
+      }, 360),
+    );
+  }
+
+  function closeItemDetail() {
+    detailRequestIdRef.current += 1;
+    selectedItemIdRef.current = null;
+    setSelectedItem(null);
+    setSelectedRaw(null);
+    setItemAssociations([]);
+  }
 
   async function saveCapture(text: string, courseId: string | null = null) {
     try {
@@ -230,9 +307,18 @@ export function App() {
   }
 
   async function openItem(item: Item) {
+    const requestId = ++detailRequestIdRef.current;
+    selectedItemIdRef.current = item.id;
     setSelectedItem(item);
-    setSelectedRaw((await courseManager.rawCaptureForItem(item.id)) ?? null);
-    setItemAssociations(await courseManager.itemAssociations(item.id));
+    setSelectedRaw(null);
+    setItemAssociations([]);
+    const [rawCapture, associations] = await Promise.all([
+      courseManager.rawCaptureForItem(item.id),
+      courseManager.itemAssociations(item.id),
+    ]);
+    if (detailRequestIdRef.current !== requestId) return;
+    setSelectedRaw(rawCapture ?? null);
+    setItemAssociations(associations);
   }
 
   async function addItemAssociation(associatedItemId: string) {
@@ -250,35 +336,37 @@ export function App() {
   async function complete(item: Item) {
     try {
       const completed = await courseManager.completeItem(item.id);
+      clearMotionTimer(completionTimersRef, item.id);
       setPendingMoveIds((ids) => new Set(ids).add(item.id));
-      setOverviewItems((items) =>
-        items.map((value) => (value.id === item.id ? completed : value)),
-      );
-      setCourseItems((items) =>
-        items.map((value) => (value.id === item.id ? completed : value)),
-      );
-      if (selectedItem?.id === item.id) setSelectedItem(completed);
+      replaceItemLocally(completed);
       setFeedback({
         message: "✓ 已标记为完成",
-        duration: 5000,
+        duration: 2200,
         action: async () => {
-          await courseManager.restoreItem(item.id);
+          clearMotionTimer(completionTimersRef, item.id);
+          const restored = await courseManager.restoreItem(item.id);
           setPendingMoveIds((ids) => {
             const next = new Set(ids);
             next.delete(item.id);
             return next;
           });
+          replaceItemLocally(restored);
           await refresh();
+          markItemEntering(item.id);
         },
       });
-      window.setTimeout(() => {
-        setPendingMoveIds((ids) => {
-          const next = new Set(ids);
-          next.delete(item.id);
-          return next;
-        });
-        void refresh();
-      }, 420);
+      completionTimersRef.current.set(
+        item.id,
+        window.setTimeout(() => {
+          completionTimersRef.current.delete(item.id);
+          setPendingMoveIds((ids) => {
+            const next = new Set(ids);
+            next.delete(item.id);
+            return next;
+          });
+          void refresh().then(() => markItemEntering(item.id));
+        }, 420),
+      );
     } catch (cause) {
       setError(String(cause));
     }
@@ -286,8 +374,10 @@ export function App() {
 
   async function restore(item: Item) {
     try {
-      setSelectedItem(await courseManager.restoreItem(item.id));
+      const restored = await courseManager.restoreItem(item.id);
+      replaceItemLocally(restored);
       await refresh();
+      markItemEntering(item.id);
     } catch (cause) {
       setError(String(cause));
     }
@@ -296,16 +386,40 @@ export function App() {
   async function remove(item: Item) {
     try {
       const deleted = await courseManager.deleteItem(item.id);
-      setSelectedItem(null);
-      await refresh();
+      closeItemDetail();
+      clearMotionTimer(deletionTimersRef, item.id);
+      setPendingDeleteIds((ids) => new Set(ids).add(item.id));
       setFeedback({
         message: `已删除“${item.title}”`,
-        duration: 5000,
+        duration: 2200,
         action: async () => {
-          await courseManager.undoDelete(item.id, deleted.token);
+          clearMotionTimer(deletionTimersRef, item.id);
+          setPendingDeleteIds((ids) => {
+            const next = new Set(ids);
+            next.delete(item.id);
+            return next;
+          });
+          const restored = await courseManager.undoDelete(
+            item.id,
+            deleted.token,
+          );
+          replaceItemLocally(restored);
           await refresh();
+          markItemEntering(item.id);
         },
       });
+      deletionTimersRef.current.set(
+        item.id,
+        window.setTimeout(() => {
+          deletionTimersRef.current.delete(item.id);
+          setPendingDeleteIds((ids) => {
+            const next = new Set(ids);
+            next.delete(item.id);
+            return next;
+          });
+          void refresh();
+        }, 240),
+      );
     } catch (cause) {
       setError(String(cause));
     }
@@ -517,7 +631,7 @@ export function App() {
 
   function navigate(nextPage: PrimaryPage) {
     setPage(nextPage);
-    setSelectedItem(null);
+    closeItemDetail();
     setShowCourseDelete(false);
   }
 
@@ -616,6 +730,8 @@ export function App() {
               items={overviewItems}
               courses={courses}
               pendingMoveIds={pendingMoveIds}
+              pendingDeleteIds={pendingDeleteIds}
+              enteringItemIds={enteringItemIds}
               selectedItemId={selectedItem?.id ?? null}
               onOpen={(item) => void openItem(item)}
               onComplete={(item) => void complete(item)}
@@ -733,6 +849,8 @@ export function App() {
                       items={courseItems}
                       courses={courses}
                       pendingMoveIds={pendingMoveIds}
+                      pendingDeleteIds={pendingDeleteIds}
+                      enteringItemIds={enteringItemIds}
                       selectedItemId={selectedItem?.id ?? null}
                       emptyLabel="这门课还没有未完成事项"
                       onOpen={(item) => void openItem(item)}
@@ -845,10 +963,7 @@ export function App() {
                   association.item_id_b === item.id,
               ),
           )}
-          onClose={() => {
-            setSelectedItem(null);
-            setItemAssociations([]);
-          }}
+          onClose={closeItemDetail}
           onComplete={(item) => void complete(item)}
           onRestore={(item) => void restore(item)}
           onDelete={(item) => void remove(item)}
