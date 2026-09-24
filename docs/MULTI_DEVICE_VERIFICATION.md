@@ -105,9 +105,18 @@
 - **Result**：**PASS**。
 - **Evidence**：`apps/api/src/db/multi-device.test.ts` — `K: a committed mutation with a lost response retries the same ID without duplicates`。
 
+## `T-SYNC-005–008`. 正式 acceptance 语义
+
+- **Initial state**：每个子场景都由 Device A 创建一个 Item，push 后由 Device B pull；两端持有同一 canonical ID/revision。
+- **Operation sequence**：依次执行两端并发 complete、两端不同 `due_at`、A 改 `due_at` + B 改 `detail`、A 删除 + B pull。
+- **Expected state**：并发 complete 无冲突且收敛 COMPLETE；不同 due date 只形成 `due_at` conflict；非重叠字段自动合并；删除 tombstone 传播且普通 list 隐藏对象。
+- **Actual state**：complete 场景两端均为 COMPLETE 且 conflict list 为空；due 场景 worker 以 `VERSION_CONFLICT` 停止且 `conflicting_fields = ["due_at"]`；安全合并后两端同时保留新时间和补充说明；删除后 B 保存 `deleted_at` 且普通 list 不含该 ID。
+- **Result**：**PASS**。
+- **Evidence**：`apps/api/src/db/multi-device.test.ts` — `T-SYNC-005..008 covers concurrent complete, due conflict, safe merge, and tombstone propagation`。
+
 ## 汇总
 
-- **Automated simulated infrastructure**：A–K 全部 **PASS**。
+- **Automated simulated infrastructure**：A–K 与正式 `T-SYNC-005–008` 全部 **PASS**。
 - **Real PostgreSQL**：**BLOCKED — EXTERNAL CONFIGURATION REQUIRED**。当前没有 `REAL_DATABASE_URL`，也未发现本机 `docker`/`psql`。
 - **Real Supabase Auth/API**：**BLOCKED — EXTERNAL CONFIGURATION REQUIRED**。当前没有 Supabase URL、可登录账号或 access token。
 - **Two physical devices / installed Windows-Mobile shells**：**NOT RUN**。已有可重复的双 Dexie 协议测试流程，但它不等于物理设备、后台网络与平台生命周期验收。

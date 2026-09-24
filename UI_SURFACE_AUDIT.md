@@ -2,11 +2,21 @@
 
 **审计日期**：2026-09-24  
 **规格基线**：`11_UX_VISUAL_SPEC.md`、`12_MOTION_SPEC.md`、`13_RESPONSIVE_SPEC.md`  
-**代码基线**：`ba9fad8 Complete Phase 7H responsive refinement`
+**代码基线**：`eca4c14 Format unresolved acceptance coverage`
 
 ## 总体判断
 
 Phase 7A–7H 已把原工程基线收敛为统一视觉、响应式和动效系统；产品 domain/application 行为保持不变。最终 breakpoint、触控、键盘、屏幕阅读语义与跨断点状态连续性已在本地浏览器通过，物理设备与辅助技术实机验收保留给 Phase 8 / release validation。
+
+## Phase 8 course import addendum — PASS locally/simulated
+
+- Course index 现在把“导入课程表”与“＋ 添加课程”作为同层级轻量入口；导入仍属于 Course flow，没有进入 Dashboard、Calendar 或 Quick Capture。
+- Import panel 先选择 semester/source，再展示可恢复 preview；PDF、PNG、JPEG 与 WebP 只作为解析输入，原始字节不进入长期数据库。
+- preview 逐门显示课程与 schedule；跨学期 owner-scoped exact-name candidate 必须由用户明确选择 SAME_COURSE 或 NEW_COURSE，之后才允许 atomic commit。
+- 未配置认证/database/provider 时 surface 明确显示仅本机限制，并保留手工创建 Course/CourseSchedule 的可用路径；不会伪造导入成功。
+- Desktop 浏览器已验证 Course index → 展开 import → semester/source/review 文案 → 收起。390×844 下 panel 纵向堆叠、无水平溢出，面板宽约 336px，可见按钮与 file input 命中区约 44px。
+- `apps/web/src/CourseImportPanel.test.tsx` 验证 review-first flow 与 duplicate decision；`apps/api/src/db/course-import.test.ts` 验证 preview checkpoint、失败重试、owner isolation、明确 duplicate decision、atomic commit 和相同 source 去重。
+- 真实 OpenAI file/image provider 没有外部 key/model，状态为 BLOCKED；本地 UI、API/PGlite 与 provider payload contract 已验证。
 
 ## Phase 7 progress — 2026-09-24
 

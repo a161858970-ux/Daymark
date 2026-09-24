@@ -2,9 +2,9 @@
 
 **更新日期**：2026-09-24
 
-**审计范围**：Specification 00–21；Phase 6 implementation closure；Phase 7A–7H
+**审计范围**：Specification 00–21；Phase 1–8；release gates
 
-**当前结论**：**PHASE 6 ENGINEERING IMPLEMENTATION: COMPLETE**；**PHASE 7A–7H: PASS LOCALLY**；真实基础设施验收仍为 **BLOCKED BY EXTERNAL CONFIGURATION**，不计为 PASS
+**当前结论**：**PHASE 6 ENGINEERING IMPLEMENTATION: COMPLETE**；**PHASE 7A–7H: PASS LOCALLY**；**PHASE 8 LOCAL ACCEPTANCE: PASS WITH EXTERNAL RELEASE GATES**。真实基础设施、真实 AI provider、平台通知与物理设备验收没有执行，不计为 PASS。
 
 本审计把“代码存在”“本机执行通过”“模拟基础设施通过”和“真实外部基础设施通过”分开记录。旧审计中的 26/35/44/48 项测试及同步缺口描述是历史快照，已由本文替换。
 
@@ -57,14 +57,18 @@
 - Overview 默认规则、Calendar 月/周/日投影、多日 Item、历史学期过滤。
 - CourseSchedule 与 Item 分离；Calendar 不显示课表。
 - Course 删除要求“删除关联事项”或“解除课程关联”，在本地和服务端都原子执行。
+- Course Import 使用 recoverable job、transient source、persisted normalized preview、explicit duplicate decision 和 atomic commit；同 source hash/semester 重复提交返回原结果。
+- SAME_COURSE 只从前一学期同名候选继承 CourseInformation；不复制历史 Item 或旧 CourseSchedule。导入 source 中的新 schedule 才属于新 Course instance。
 
 ### Verified locally/simulated
 
 - Domain、Dexie 与 PGlite 测试覆盖历史 Overview、周映射、多日期、课程删除策略和 Calendar 排除 CourseSchedule。
+- `apps/api/src/db/course-import.test.ts` 覆盖 preview checkpoint、owner isolation、duplicate decision、atomic commit、失败恢复与重复 source 去重。
+- `apps/web/src/CourseImportPanel.test.tsx` 和 desktop/390×844 浏览器流程覆盖 review-first UI、入口、local-only gate 与响应式布局。
 
-### Not implemented
+### Blocked by external configuration
 
-- PDF/图片课表导入及人工核对；当前只支持手工 CourseSchedule。
+- 没有 OpenAI key/model，真实 PDF/图片识别未运行；手工 Course/CourseSchedule 不依赖该 provider。
 
 ## 5. Phase 4 — AI Pipeline
 
@@ -223,8 +227,8 @@
 - Responsive/accessibility：`360×800`、`390×844`、`430×932`、`768×900`、`1023×900`、`1024×900`、`1100×900`、`1101×900`、`1366×768`、`1440×900` 无水平溢出；Mobile 可见操作目标无小于约 44px 的命中区。
 - Keyboard/screen reader：导航焦点可见；Enter 激活；Search/Account/Quick Capture/Detail 分层 Escape；Mobile Detail `aria-modal` + Tab loop；desktop Detail 保持非 modal；关闭后焦点返回。
 - Resize：同一 Item 在 desktop → mobile → compact desktop → desktop 间保持 identity，详情只切换 Side Container / Bottom Sheet 表达。
-- `pnpm build`、`pnpm test`、`pnpm lint`、`pnpm format:check` 全部通过；当前全仓为 **88 passed，1 externally gated skip**，其中 Web 为 **23 passed**。
-- `pnpm --filter @course-manager/web dev` 已启动并由 HTTP 200 验证。Vite 仍仅报告单 bundle 大于 500 kB 的非阻塞 warning，当前主 bundle 约 544 kB。
+- Phase 7 closure 时 `pnpm build`、`pnpm test`、`pnpm lint`、`pnpm format:check` 全部通过，快照为 **88 passed，1 externally gated skip**，其中 Web 为 **23 passed**；Phase 8 最新总数见下节。
+- `pnpm --filter @course-manager/web dev` 已启动并由 HTTP 200 验证。Phase 7 closure 时 Vite 主 bundle 约 544 kB；Course Import 加入后的当前数字见 Phase 8 gate。
 
 ### 8.3 Phase 7 result
 
@@ -232,33 +236,61 @@
 
 完整断点与可访问性证据见 `RESPONSIVE_ACCEPTANCE_MATRIX.md`。物理手机、Windows 触屏设备、屏幕阅读器和移动软键盘仍需 Phase 8 / release validation 实机验收。
 
-## 9. Current test evidence
+## 9. Phase 8 — Test / Hardening / Acceptance
+
+### 9.1 Implemented and verified locally
+
+- 建立 `docs/ACCEPTANCE_TRACEABILITY.md`，逐项映射 `T-ITEM-001..007`、`T-OV-001..007`、`T-COURSE-001..006`、`T-ASSOC-001`、`T-CAL-001..011`、`T-QC-001..006`、`T-AI-001..010`、`T-RM-001..010`、`T-SYNC-001..008`、`T-REC-001..005`，以及 cross-view、cross-platform、UX/Motion 和 accessibility 条目。
+- 增加一条 integrated local-first acceptance：同一 Item 贯穿 capture、Overview、Course、Calendar、Reminder、edit、complete/restore、delete/Undo 和 RawCaptureOutput，验证 identity、created_at、tombstone 与 provenance。
+- 增加 exact sync acceptance：并发 complete 无冲突、不同 due date 显式冲突、非重叠字段安全合并、tombstone 传播。
+- 增加 deferred ambiguity 重启验收：defer 后关闭/重开 IndexedDB 仍显示 unresolved，明确删除后不再提示且不创建 Item。
+- 补齐 Calendar month overlap/week-boundary、Overview completed separation/default collapse 的直接 acceptance 证据。
+- Course Import 补齐正式 contracts、migration `003_course_import.sql`、recoverable service/API、OpenAI file/image adapter、review UI、failure recovery、source hash idempotency 与自动测试。
+
+### 9.2 Final local gate
+
+- `pnpm test`：**97 passed，1 skipped**。
+  - domain：11 passed；application：4 passed；storage：32 passed；API：25 passed + 1 real PostgreSQL skipped；Web：25 passed。
+- `pnpm build`：PASS；Vite 主 bundle 约 554 kB，只有非阻塞 size warning。
+- `pnpm lint`、`pnpm format:check`、`git diff --check`：PASS。
+- 运行态检查：Web `http://127.0.0.1:5173/` HTTP 200；API `/api/v1/health` HTTP 200 / `status=ok`。
+- 运行中的 Vite 页面完成 Course Import desktop/mobile entry、review surface、无水平溢出与触控目标检查；Phase 7 的完整 viewport/motion evidence 继续有效。
+
+### 9.3 Result
+
+> **PHASE 8 LOCAL ACCEPTANCE: PASS WITH EXTERNAL RELEASE GATES**
+
+本地自动、浏览器和模拟基础设施的规格证据已经闭合。R-01、真实 PostgreSQL/Supabase、真实 AI/import provider、平台通知和物理 accessibility/device matrix 仍保持独立 gate，因此当前状态不是 production release PASS。
+
+## 10. Current test evidence
 
 - `packages/domain/src/*.test.ts`：领域投影、排序、学期规则。
 - `packages/application/src/reminders.test.ts`：提醒策略与 stale guard。
 - `packages/storage/src/storage.test.ts`：本地产品流程、collection 单 outbox、ItemAssociation。
+- `packages/storage/src/acceptance.test.ts`：T-ITEM 主链路、跨视图/提醒一致性、unresolved 重启与明确删除。
 - `packages/storage/src/migration.test.ts`：Dexie v5 → v6 迁移、collection command 折叠、provenance 与不可还原旧删除隔离。
 - `packages/storage/src/sync.test.ts`：cursor、overlap、repair、collection envelope、resolution + later edit。
 - `apps/api/src/db/collection-sync.test.ts`：collection/association/academic concurrency。
-- `apps/api/src/db/multi-device.test.ts`：A–I/K。
+- `apps/api/src/db/multi-device.test.ts`：A–I/K 与 `T-SYNC-005..008` exact acceptance。
+- `apps/api/src/db/course-import.test.ts`：Course Import preview/recovery/duplicate decision/atomic commit/idempotency。
 - `apps/api/src/db/resource-coverage.test.ts`：正式 REST 资源覆盖。
 - `apps/api/src/db/real-postgres.integration.test.ts`：真实 PostgreSQL gate；当前 skipped。
 - `apps/web/src/*.test.tsx` 与 `motion.test.ts`：导航、Course/Item 层级、Quick Capture 单控件 identity、Detail surface/mobile modal、删除/恢复 motion class、Calendar range/day/position semantics、Search 分组、attention/account 状态、transient notice、reduced-motion timing、Conflict 与 SyncRepair 安全展示。
 
-## 10. Known limitations and release blockers
+## 11. Known limitations and release blockers
 
 1. **External sync validation**：真实 PostgreSQL/Supabase/双浏览器尚未执行。
 2. **Reminder release**：R-01、云端 lease、平台通知和后台能力未完成。
-3. **AI release**：真实 provider 未验收，完整时间语义仍走保守确认。
-4. **Feature scope**：课程表导入与 Phase 8 全量 acceptance 未实施；物理设备、屏幕阅读器和移动软键盘未实机验证。
-5. **Bundle**：Web 主 bundle 约 541 kB，构建通过但有 Vite size warning；可在后续阶段做按路由/功能拆分。
+3. **AI release**：真实 interpretation 和 PDF/image import provider 未验收，完整时间语义仍走保守确认。
+4. **Physical validation**：物理设备、两个真实 browser profile、屏幕阅读器、系统缩放和移动软键盘未实机验证。
+5. **Bundle**：Web 主 bundle 约 554 kB，构建通过但有 Vite size warning；可在发布优化中做按功能拆分。
 
-## 11. Spec deviations
+## 12. Spec deviations
 
 - 没有发现新的产品语义偏差。
 - 平台技术选择差异沿用 ADR-001，来自交接允许的 React/Vite、Dexie、Fastify/PostgreSQL 方向。
 - R-01 保持未决；没有以开发默认值冒充生产政策。
 
-## 12. Next gate
+## 13. Next gate
 
-产品开发路线下一步进入 Phase 8，逐条执行 `19_TEST_ACCEPTANCE_SPEC.md` 的 acceptance/hardening，并生成最终实现审计。发布基础设施路线独立保留：拿到外部配置后按 `REAL_POSTGRES_VERIFICATION.md` 完成真实 PostgreSQL、Supabase 与双浏览器验收，再更新本文的 real infrastructure 证据。
+下一步只处理独立 release lanes：产品确定 R-01 后固化生产 reminder policy；拿到外部配置后按 `REAL_POSTGRES_VERIFICATION.md` 完成真实 PostgreSQL、Supabase、双浏览器与真实 AI/import provider 验收；再在物理 Mobile/Windows、屏幕阅读器、系统缩放和软键盘环境执行剩余矩阵。每条外部证据完成后单独更新本审计，不用模拟结果替代。

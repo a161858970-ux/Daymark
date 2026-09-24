@@ -20,11 +20,11 @@ $env:DATABASE_URL = "postgres://USER:PASSWORD@HOST:5432/DB?sslmode=require"
 pnpm db:migrate
 ```
 
-`db:migrate` 按文件名执行 `backend/migrations/001_initial.sql` 与 `002_collection_sync.sql`，并在 `schema_migrations` 记录已应用文件。重复执行不会重复应用迁移。
+`db:migrate` 按文件名执行 `backend/migrations/001_initial.sql`、`002_collection_sync.sql` 与 `003_course_import.sql`，并在 `schema_migrations` 记录已应用文件。重复执行不会重复应用迁移。
 
 ## 2. 运行隔离的真实 PostgreSQL 集成测试
 
-该测试需要连接账号具有 `CREATE SCHEMA`/`DROP SCHEMA` 权限。它创建随机 schema、应用两份正式迁移、执行 SemesterWeek collection sync、核对 canonical ID/revision/change-log，最后删除随机 schema。
+该测试需要连接账号具有 `CREATE SCHEMA`/`DROP SCHEMA` 权限。它创建随机 schema、应用三份正式迁移（包括 recoverable course import tables）、执行 SemesterWeek collection sync、核对 canonical ID/revision/change-log，最后删除随机 schema。
 
 ```powershell
 $env:REAL_DATABASE_URL = "postgres://USER:PASSWORD@HOST:5432/DISPOSABLE_DB?sslmode=require"
@@ -92,7 +92,7 @@ pnpm verify:live-api
 
 只有以下证据齐全时，审计中的“真实基础设施验证”才能从 BLOCKED 改为 PASS：
 
-- `pnpm db:migrate` 在目标 PostgreSQL 成功并显示两份 migration；
+- `pnpm db:migrate` 在目标 PostgreSQL 成功并显示三份 migration；
 - `pnpm test:postgres` PASS；
 - `pnpm verify:live-api` 对真实用户 token PASS；
 - 两个独立浏览器 profile 完成上述 1–9 并保存 actual result；
