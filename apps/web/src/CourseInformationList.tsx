@@ -15,6 +15,7 @@ export function CourseInformationList({
   onDelete,
 }: Props) {
   const [content, setContent] = useState("");
+  const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
 
@@ -24,25 +25,43 @@ export function CourseInformationList({
     try {
       await onAdd(content);
       setContent("");
+      setAdding(false);
     } catch {
       // The parent presents the storage error; retain the unsaved text.
     }
   }
 
   return (
-    <section aria-label="课程信息">
-      <form
-        className="course-item-form"
-        onSubmit={(event) => void submit(event)}
-      >
-        <input
-          value={content}
-          onChange={(event) => setContent(event.target.value)}
-          placeholder="记录关于这门课的信息……"
-          aria-label="新增课程信息"
-        />
-        <button type="submit">＋ 添加课程信息</button>
-      </form>
+    <section className="course-information" aria-label="课程信息">
+      <div className="subsection-header">
+        <div>
+          <h2>课程信息</h2>
+          <p>长期有效的课堂要求、老师说明与课程上下文。</p>
+        </div>
+        <button
+          type="button"
+          className="secondary-action"
+          aria-expanded={adding}
+          onClick={() => setAdding(!adding)}
+        >
+          {adding ? "收起" : "＋ 添加课程信息"}
+        </button>
+      </div>
+      {adding && (
+        <form
+          className="course-item-form inline-reveal"
+          onSubmit={(event) => void submit(event)}
+        >
+          <input
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+            placeholder="记录关于这门课的信息……"
+            aria-label="新增课程信息"
+            autoFocus
+          />
+          <button type="submit">保存信息</button>
+        </form>
+      )}
       {information.length === 0 && (
         <p className="empty-state">还没有课程信息。</p>
       )}

@@ -7,6 +7,7 @@ interface Props {
   targetSemesterId: string | null;
   semester: Semester | null;
   weeks: SemesterWeek[];
+  incompleteCounts: Record<string, number>;
   onOpen(courseId: string): void;
   onFindCandidate(
     name: string,
@@ -30,6 +31,7 @@ export function CourseIndex({
   targetSemesterId,
   semester,
   weeks,
+  incompleteCounts,
   onOpen,
   onFindCandidate,
   onCreateCourse,
@@ -37,6 +39,7 @@ export function CourseIndex({
   onReplaceWeeks,
 }: Props) {
   const [courseName, setCourseName] = useState("");
+  const [showCourseForm, setShowCourseForm] = useState(false);
   const [candidate, setCandidate] = useState<Course | null>(null);
   const [semesterName, setSemesterName] = useState("");
   const [semesterStart, setSemesterStart] = useState("");
@@ -50,6 +53,7 @@ export function CourseIndex({
       await onCreateCourse(courseName, targetSemesterId, inheritFromId);
       setCourseName("");
       setCandidate(null);
+      setShowCourseForm(false);
       setError(null);
     } catch (cause) {
       setError(String(cause));
@@ -93,22 +97,44 @@ export function CourseIndex({
   }
 
   return (
-    <>
-      <form
-        className="course-create"
-        onSubmit={(event) => void submitCourse(event)}
-      >
-        <input
-          value={courseName}
-          onChange={(event) => {
-            setCourseName(event.target.value);
+    <section className="course-index" aria-label="课程索引">
+      <div className="course-index-intro">
+        <div>
+          <p className="section-kicker">{semester?.name ?? "无学期归属"}</p>
+          <h2>课程索引</h2>
+          <p>打开一门课程，查看它的事项与课程信息。</p>
+        </div>
+        <button
+          type="button"
+          className="secondary-action"
+          aria-expanded={showCourseForm}
+          onClick={() => {
+            setShowCourseForm(!showCourseForm);
             setCandidate(null);
+            setError(null);
           }}
-          placeholder="课程名称"
-          aria-label="课程名称"
-        />
-        <button type="submit">＋ 添加课程</button>
-      </form>
+        >
+          {showCourseForm ? "收起" : "＋ 添加课程"}
+        </button>
+      </div>
+      {showCourseForm && (
+        <form
+          className="course-create inline-reveal"
+          onSubmit={(event) => void submitCourse(event)}
+        >
+          <input
+            value={courseName}
+            onChange={(event) => {
+              setCourseName(event.target.value);
+              setCandidate(null);
+            }}
+            placeholder="输入课程名称"
+            aria-label="课程名称"
+            autoFocus
+          />
+          <button type="submit">保存课程</button>
+        </form>
+      )}
       {candidate && (
         <section className="course-candidate" aria-label="同名课程确认">
           <p>此前学期有同名课程“{candidate.name}”。这是同一门课程吗？</p>
@@ -148,8 +174,13 @@ export function CourseIndex({
         {courses.map((course) => (
           <li key={course.id}>
             <button type="button" onClick={() => onOpen(course.id)}>
-              <strong>{course.name}</strong>
-              <span>查看课程事项</span>
+              <span className="course-row-copy">
+                <strong>{course.name}</strong>
+                <span>{incompleteCounts[course.id] ?? 0} 项未完成</span>
+              </span>
+              <span className="course-row-arrow" aria-hidden="true">
+                →
+              </span>
             </button>
           </li>
         ))}
@@ -219,6 +250,6 @@ export function CourseIndex({
           </form>
         )}
       </div>
-    </>
+    </section>
   );
 }

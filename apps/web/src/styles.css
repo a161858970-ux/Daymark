@@ -313,13 +313,46 @@ select:focus-visible {
 }
 .semester-switcher select {
   border: 1px solid var(--line);
-  border-radius: 6px;
-  background: transparent;
+  border-radius: 18px;
+  background: rgb(250 248 243 / 72%);
   color: inherit;
-  padding: 8px 10px;
+  padding: 8px 30px 8px 12px;
+}
+.page-title-block {
+  min-width: 0;
+}
+.page-deck {
+  max-width: 560px;
+  margin: 11px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.page-header-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+.back-link:hover {
+  color: var(--accent);
 }
 .semester-create-area {
-  margin-top: 36px;
+  margin-top: 54px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
 }
 .semester-create-area > .quiet-button {
   margin-right: 18px;
@@ -468,7 +501,7 @@ select:focus-visible {
 }
 .eyebrow {
   font-size: 11px;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.24em;
   color: #8b948d;
   font-weight: 700;
   margin: 0 0 10px;
@@ -476,21 +509,26 @@ select:focus-visible {
 h1 {
   font-size: clamp(28px, 3vw, 37px);
   line-height: 1.15;
-  font-weight: 560;
+  font-family: ui-serif, "Songti SC", "STSong", serif;
+  font-weight: 650;
   margin: 0;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.025em;
 }
 h2 {
   font-weight: 600;
 }
 .section-heading {
-  color: #45504a;
-  font-size: 15px;
-  letter-spacing: 0.025em;
-  margin: 0 0 17px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  margin: 0 0 15px;
+}
+.item-list {
+  max-width: 840px;
 }
 .item-list section {
-  margin-bottom: 46px;
+  margin-bottom: 43px;
 }
 .item-list ul,
 .course-list {
@@ -500,13 +538,31 @@ h2 {
   border-top: 1px solid var(--line);
 }
 .item-row {
+  position: relative;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   border-bottom: 1px solid var(--line);
-  min-height: 72px;
+  min-height: 78px;
+  isolation: isolate;
   transition:
     opacity var(--motion-short) ease,
-    transform var(--motion-medium) ease;
+    transform var(--motion-medium) ease,
+    background-color var(--motion-fast) ease-out;
+}
+.item-row::after {
+  content: "";
+  position: absolute;
+  inset: 7px -8px;
+  z-index: -1;
+  border-radius: var(--radius-small);
+  background: transparent;
+  transition: background-color var(--motion-fast) ease-out;
+}
+.item-row:hover::after {
+  background: rgb(255 253 248 / 58%);
+}
+.item-row.selected::after {
+  background: rgb(223 231 224 / 58%);
 }
 .item-row.leaving {
   animation: item-leave 420ms ease both;
@@ -523,23 +579,32 @@ h2 {
   }
 }
 .completion-target {
-  flex: 0 0 50px;
-  width: 50px;
-  min-height: 65px;
+  flex: 0 0 52px;
+  width: 52px;
+  min-height: 72px;
   display: grid;
   place-items: center;
   border: 0;
   background: transparent;
   color: var(--accent);
-  font-size: 22px;
   padding: 0;
+  border-radius: var(--radius-small);
 }
 .completion-target:hover {
-  background: #e8ebe6;
+  background: rgb(223 231 224 / 72%);
 }
 .completion-target.checked {
-  font-size: 18px;
   color: #7b857f;
+}
+.completion-indicator {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 1;
 }
 .item-body {
   flex: 1;
@@ -547,24 +612,25 @@ h2 {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 5px;
+  gap: 6px;
   background: transparent;
   border: 0;
-  padding: 14px 5px 16px 0;
+  padding: 16px 8px 17px 3px;
   text-align: left;
   color: inherit;
 }
 .item-title {
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.45;
-  font-weight: 550;
+  font-weight: 610;
+  letter-spacing: 0.005em;
   overflow-wrap: anywhere;
 }
 .item-meta,
 .detail-meta {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--muted);
-  line-height: 1.5;
+  line-height: 1.55;
 }
 .item-row.completed .item-title {
   text-decoration: line-through;
@@ -581,14 +647,39 @@ h2 {
   text-align: left;
   border: 0;
   background: transparent;
-  padding: 0;
+  padding: 8px 0;
   cursor: pointer;
+}
+.section-chevron {
+  width: 8px;
+  height: 8px;
+  margin: 2px 4px 0 0;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--motion-short) ease-out;
+}
+.section-chevron.open {
+  transform: translateY(4px) rotate(225deg);
 }
 .empty-state {
   color: var(--muted);
   font-size: 14px;
   line-height: 1.6;
   padding: 22px 0;
+}
+.item-empty-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+}
+.item-empty-state > span {
+  color: var(--line-strong);
+  font-size: 20px;
+}
+.item-empty-state p {
+  margin: 0;
 }
 .quick-capture {
   position: fixed;
@@ -641,16 +732,16 @@ h2 {
   display: flex;
   gap: 10px;
   max-width: 620px;
-  margin-bottom: 32px;
+  margin-bottom: 28px;
 }
 .course-create input,
 .course-item-form input,
 .detail-panel input,
 .detail-panel select {
   min-height: 44px;
-  background: #fff;
+  background: var(--surface-raised);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-small);
   padding: 10px 13px;
   color: inherit;
 }
@@ -674,8 +765,72 @@ h2 {
   background: var(--accent);
   border: 1px solid var(--accent);
   color: white;
-  border-radius: 6px;
+  border-radius: var(--radius-small);
   padding: 10px 16px;
+}
+.course-index {
+  max-width: 840px;
+}
+.course-index-intro,
+.subsection-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px;
+  margin-bottom: 25px;
+}
+.course-index-intro h2,
+.subsection-header h2 {
+  margin: 0 0 7px;
+  color: var(--ink);
+  font-family: ui-serif, "Songti SC", "STSong", serif;
+  font-size: 21px;
+  font-weight: 650;
+}
+.course-index-intro p,
+.subsection-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+.course-index-intro .section-kicker {
+  margin-bottom: 8px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.secondary-action {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 9px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 20px;
+  background: rgb(250 248 243 / 62%);
+  color: var(--accent-strong);
+  font-size: 12px;
+  transition:
+    border-color var(--motion-fast) ease-out,
+    background-color var(--motion-fast) ease-out;
+}
+.secondary-action:hover {
+  border-color: #9fac9f;
+  background: var(--surface-raised);
+}
+.inline-reveal {
+  animation: inline-reveal var(--motion-medium) ease-out both;
+}
+@keyframes inline-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .course-list li {
   border-bottom: 1px solid var(--line);
@@ -687,22 +842,43 @@ h2 {
   align-items: center;
   border: 0;
   background: transparent;
-  padding: 19px 5px;
+  padding: 20px 8px 20px 5px;
   text-align: left;
   color: inherit;
+  transition:
+    background-color var(--motion-fast) ease-out,
+    padding var(--motion-fast) ease-out;
 }
-.course-list button:hover,
-.item-body:hover {
-  background: #ecefe9;
+.course-list button:hover {
+  padding-left: 11px;
+  background: rgb(255 253 248 / 58%);
+}
+.course-row-copy {
+  display: grid;
+  gap: 6px;
+}
+.course-row-copy strong {
+  font-family: ui-serif, "Songti SC", "STSong", serif;
+  font-size: 17px;
+  font-weight: 650;
 }
 .course-list span {
   color: var(--muted);
   font-size: 12px;
 }
+.course-list .course-row-arrow {
+  color: var(--faint);
+  font-size: 17px;
+  transition: transform var(--motion-fast) ease-out;
+}
+.course-list button:hover .course-row-arrow {
+  transform: translateX(3px);
+}
 .course-tabs {
   display: flex;
-  gap: 26px;
-  margin-bottom: 28px;
+  gap: 30px;
+  max-width: 840px;
+  margin-bottom: 30px;
   border-bottom: 1px solid var(--line);
   color: #8b918c;
 }
@@ -717,7 +893,9 @@ h2 {
   border: 0;
   background: transparent;
   color: #8b918c;
-  padding: 0 3px 13px;
+  padding: 0 3px 14px;
+  font-size: 13px;
+  transition: color var(--motion-fast) ease-out;
 }
 .course-tabs button.selected {
   color: var(--accent);
@@ -729,17 +907,22 @@ h2 {
   margin: 0;
   border-top: 1px solid var(--line);
 }
+.course-information {
+  max-width: 840px;
+}
 .information-list li {
   display: flex;
   justify-content: space-between;
   gap: 20px;
   align-items: center;
   border-bottom: 1px solid var(--line);
-  padding: 12px 0;
+  min-height: 62px;
+  padding: 13px 4px;
 }
 .information-list li p {
   margin: 0;
-  line-height: 1.6;
+  color: var(--ink-soft);
+  line-height: 1.65;
 }
 .information-list li div {
   display: flex;
@@ -1201,9 +1384,41 @@ h2 {
     padding: 76px clamp(18px, 5vw, 28px) 168px;
   }
   .page-header {
+    flex-direction: column;
     align-items: flex-start;
+    gap: 20px;
     margin-bottom: 35px;
     padding-bottom: 14px;
+  }
+  .page-header > .semester-switcher,
+  .page-header-tools {
+    width: 100%;
+  }
+  .page-header-tools {
+    justify-content: space-between;
+  }
+  .course-page-header .page-header-tools {
+    align-items: flex-end;
+  }
+  .page-deck {
+    font-size: 12px;
+  }
+  .course-index-intro,
+  .subsection-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 17px;
+  }
+  .course-index-intro .secondary-action,
+  .subsection-header .secondary-action {
+    align-self: flex-start;
+  }
+  .item-row {
+    min-height: 76px;
+  }
+  .completion-target {
+    flex-basis: 48px;
+    width: 48px;
   }
   .quick-capture {
     right: 20px;

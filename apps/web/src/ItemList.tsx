@@ -5,41 +5,50 @@ interface Props {
   items: Item[];
   courses: Course[];
   pendingMoveIds: Set<string>;
+  selectedItemId?: string | null;
+  emptyLabel?: string;
   onOpen(item: Item): void;
   onComplete(item: Item): void;
 }
 
 function timeLabel(item: Item): string {
-  const time =
-    item.due_at ??
-    item.occurrence_start_at ??
-    item.start_at ??
-    item.occurrence_end_at;
-  return time
-    ? new Date(time).toLocaleString("zh-CN", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      })
-    : "时间未定";
+  const format = (value: string) =>
+    new Date(value).toLocaleString("zh-CN", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  if (item.occurrence_start_at && item.occurrence_end_at)
+    return `发生 ${format(item.occurrence_start_at)} — ${format(item.occurrence_end_at)}`;
+  if (item.occurrence_start_at)
+    return `发生 ${format(item.occurrence_start_at)}`;
+  if (item.start_at && item.due_at)
+    return `${format(item.start_at)} — ${format(item.due_at)}`;
+  if (item.due_at) return `截止 ${format(item.due_at)}`;
+  if (item.start_at) return `开始 ${format(item.start_at)}`;
+  return "时间未定";
 }
 
 function Row({
   item,
   courses,
   leaving,
+  selected,
   onOpen,
   onComplete,
 }: {
   item: Item;
   courses: Course[];
   leaving: boolean;
+  selected: boolean;
   onOpen: (item: Item) => void;
   onComplete: (item: Item) => void;
 }) {
   const course = courses.find((value) => value.id === item.course_id);
   return (
     <li
-      className={`item-row ${item.status === "COMPLETE" ? "completed" : ""} ${leaving ? "leaving" : ""}`}
+      className={`item-row ${item.status === "COMPLETE" ? "completed" : ""} ${leaving ? "leaving" : ""} ${selected ? "selected" : ""}`}
     >
       {item.status === "INCOMPLETE" || leaving ? (
         <button
@@ -48,14 +57,21 @@ function Row({
           aria-label={`完成 ${item.title}`}
           onClick={() => onComplete(item)}
         >
-          <span>{item.status === "COMPLETE" ? "✓" : "○"}</span>
+          <span className="completion-indicator">
+            {item.status === "COMPLETE" ? "✓" : ""}
+          </span>
         </button>
       ) : (
         <span className="completion-target checked" aria-hidden="true">
-          ✓
+          <span className="completion-indicator">✓</span>
         </span>
       )}
-      <button className="item-body" type="button" onClick={() => onOpen(item)}>
+      <button
+        className="item-body"
+        type="button"
+        aria-current={selected ? "true" : undefined}
+        onClick={() => onOpen(item)}
+      >
         <span className="item-title">{item.title}</span>
         <span className="item-meta">
           {course?.name ?? "无课程"} · {timeLabel(item)}
@@ -69,6 +85,8 @@ export function ItemList({
   items,
   courses,
   pendingMoveIds,
+  selectedItemId = null,
+  emptyLabel = "没有未完成事项",
   onOpen,
   onComplete,
 }: Props) {
@@ -93,13 +111,17 @@ export function ItemList({
                 item={item}
                 courses={courses}
                 leaving={pendingMoveIds.has(item.id)}
+                selected={selectedItemId === item.id}
                 onOpen={onOpen}
                 onComplete={onComplete}
               />
             ))}
           </ul>
         ) : (
-          <p className="empty-state">没有未完成事项</p>
+          <div className="empty-state item-empty-state">
+            <span aria-hidden="true">○</span>
+            <p>{emptyLabel}</p>
+          </div>
         )}
       </section>
       <section aria-labelledby="completed-heading">
@@ -111,7 +133,10 @@ export function ItemList({
           onClick={() => setCompletedOpen(!completedOpen)}
         >
           已完成 · {completed.length}{" "}
-          <span aria-hidden="true">{completedOpen ? "⌃" : "⌄"}</span>
+          <span
+            className={`section-chevron ${completedOpen ? "open" : ""}`}
+            aria-hidden="true"
+          />
         </button>
         {completedOpen && (
           <ul>
@@ -121,6 +146,7 @@ export function ItemList({
                 item={item}
                 courses={courses}
                 leaving={false}
+                selected={selectedItemId === item.id}
                 onOpen={onOpen}
                 onComplete={onComplete}
               />

@@ -497,6 +497,20 @@ export function App() {
       ? course.semester_id === selectedSemesterId
       : course.semester_id === activeSemesterId || course.semester_id === null,
   );
+  const incompleteCounts = Object.fromEntries(
+    courses.map((course) => [
+      course.id,
+      allItems.filter(
+        (item) =>
+          item.course_id === course.id &&
+          item.status === "INCOMPLETE" &&
+          item.deleted_at === null,
+      ).length,
+    ]),
+  );
+  const activeCourseSemester = semesters.find(
+    (semester) => semester.id === activeCourse?.semester_id,
+  );
   const pendingQuestions = unresolved.filter(
     (capture) => !dismissedThisLaunch.has(capture.id),
   );
@@ -546,9 +560,12 @@ export function App() {
         {!initializing && page === "overview" && (
           <>
             <header className="page-header">
-              <div>
+              <div className="page-title-block">
                 <p className="eyebrow">ITEMS</p>
                 <h1>事项总览</h1>
+                <p className="page-deck">
+                  按课程与时间，核对还需要处理的事项。
+                </p>
               </div>
               <SemesterSwitcher
                 semesters={semesters}
@@ -599,6 +616,7 @@ export function App() {
               items={overviewItems}
               courses={courses}
               pendingMoveIds={pendingMoveIds}
+              selectedItemId={selectedItem?.id ?? null}
               onOpen={(item) => void openItem(item)}
               onComplete={(item) => void complete(item)}
             />
@@ -607,40 +625,51 @@ export function App() {
         )}
         {!initializing && page === "courses" && (
           <>
-            <header className="page-header">
-              <div>
-                <p className="eyebrow">COURSES</p>
-                <h1>{activeCourse?.name ?? "课程"}</h1>
-              </div>
-              <SemesterSwitcher
-                semesters={semesters}
-                selectedId={selectedSemesterId}
-                onChange={(id) => {
-                  setSelectedSemesterId(id);
-                  setCurrentCourseId(null);
-                }}
-              />
-              {activeCourse && (
-                <div className="course-header-actions">
+            <header
+              className={`page-header ${activeCourse ? "course-page-header" : ""}`}
+            >
+              <div className="page-title-block">
+                {activeCourse && (
                   <button
                     type="button"
-                    className="quiet-button"
+                    className="back-link"
                     onClick={() => {
                       setCurrentCourseId(null);
                       setShowCourseDelete(false);
                     }}
                   >
-                    全部课程
+                    <span aria-hidden="true">←</span> 全部课程
                   </button>
-                  <button
-                    type="button"
-                    className="quiet-button"
-                    onClick={() => setShowCourseDelete(true)}
-                  >
-                    删除课程
-                  </button>
-                </div>
-              )}
+                )}
+                <p className="eyebrow">COURSES</p>
+                <h1>{activeCourse?.name ?? "课程"}</h1>
+                <p className="page-deck">
+                  {activeCourse
+                    ? `${activeCourseSemester?.name ?? "无学期归属"} · ${incompleteCounts[activeCourse.id] ?? 0} 项未完成`
+                    : "按课程查看事项，并保存长期有效的课程信息。"}
+                </p>
+              </div>
+              <div className="page-header-tools">
+                <SemesterSwitcher
+                  semesters={semesters}
+                  selectedId={selectedSemesterId}
+                  onChange={(id) => {
+                    setSelectedSemesterId(id);
+                    setCurrentCourseId(null);
+                  }}
+                />
+                {activeCourse && (
+                  <div className="course-header-actions">
+                    <button
+                      type="button"
+                      className="text-button danger"
+                      onClick={() => setShowCourseDelete(true)}
+                    >
+                      删除课程
+                    </button>
+                  </div>
+                )}
+              </div>
             </header>
             {activeCourse ? (
               <>
@@ -705,6 +734,8 @@ export function App() {
                       items={courseItems}
                       courses={courses}
                       pendingMoveIds={pendingMoveIds}
+                      selectedItemId={selectedItem?.id ?? null}
+                      emptyLabel="这门课还没有未完成事项"
                       onOpen={(item) => void openItem(item)}
                       onComplete={(item) => void complete(item)}
                     />
@@ -735,6 +766,7 @@ export function App() {
                 weeks={semesterWeeks.filter(
                   (value) => value.semester_id === targetSemesterId,
                 )}
+                incompleteCounts={incompleteCounts}
                 onOpen={(courseId) => {
                   setCurrentCourseId(courseId);
                   setShowCourseDelete(false);
