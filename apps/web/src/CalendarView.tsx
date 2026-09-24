@@ -96,7 +96,12 @@ export function CalendarView({
   useEffect(() => {
     if (!showDay) return;
     function handleEscape(event: KeyboardEvent) {
-      if (event.key !== "Escape" || document.querySelector(".detail-panel"))
+      if (
+        event.key !== "Escape" ||
+        document.querySelector(
+          ".detail-panel, .search-surface, .account-popover, .quick-capture.expanded",
+        )
+      )
         return;
       event.preventDefault();
       returnToCalendar();

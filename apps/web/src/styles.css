@@ -2100,11 +2100,34 @@ h2 {
     margin-right: 0;
   }
   .detail-panel {
+    padding-right: 108px;
+    padding-bottom: 116px;
     box-shadow: -18px 0 55px rgb(33 43 38 / 16%);
   }
 }
 
 @media (max-width: 767px) {
+  button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  input:not([type="radio"]):not([type="checkbox"]),
+  select,
+  textarea {
+    min-height: 44px;
+  }
+  .semester-create input,
+  .schedule-form input,
+  .schedule-form select,
+  .schedule-form button,
+  .secondary-action,
+  .pending-actions button:not(.quiet-button):not(.text-button),
+  .detail-actions button,
+  .danger-zone .confirm-delete-button,
+  .search-input > button,
+  .account-popover input {
+    min-height: 44px;
+  }
   .main-nav {
     inset: auto 0 0;
     width: auto;
@@ -2873,6 +2896,10 @@ h2 {
   .search-input {
     min-height: 52px;
   }
+  .search-input > button,
+  .account-popover input {
+    min-height: 44px;
+  }
   .search-result-groups li > button {
     min-height: 70px;
   }
@@ -2883,16 +2910,20 @@ h2 {
     left: auto;
   }
   .account-control > button {
-    min-width: 40px;
-    min-height: 40px;
+    min-width: 44px;
+    min-height: 44px;
     padding: 7px 10px;
     background: rgb(250 248 243 / 86%);
   }
   .account-popover {
-    top: 48px;
-    right: 0;
+    position: fixed;
+    top: 66px;
+    right: clamp(18px, 5vw, 28px);
     bottom: auto;
-    left: auto;
+    left: clamp(18px, 5vw, 28px);
+    width: auto;
+    max-width: 330px;
+    margin-left: auto;
   }
   .attention-panel {
     width: 100%;

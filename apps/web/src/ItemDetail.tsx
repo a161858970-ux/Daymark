@@ -26,6 +26,27 @@ interface Props {
   onRemoveAssociation(associationId: string): Promise<void>;
 }
 
+const mobileDetailQuery = "(max-width: 767px)";
+
+function useMobileDetailMode() {
+  const [mobile, setMobile] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia(mobileDetailQuery).matches,
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia(mobileDetailQuery);
+    const update = () => setMobile(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  return mobile;
+}
+
 export function ItemDetail({
   item,
   courses,
@@ -53,6 +74,7 @@ export function ItemDetail({
   const [confirmDeleteItemId, setConfirmDeleteItemId] = useState<string | null>(
     null,
   );
+  const mobileDetail = useMobileDetailMode();
   const { exiting, beginExit } = useExitTransition(
     onClose,
     motionDuration.panel,
@@ -113,7 +135,34 @@ export function ItemDetail({
 
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Tab" && mobileDetail && panelRef.current) {
+        const focusable = Array.from(
+          panelRef.current.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+          ),
+        );
+        const first = focusable[0];
+        const last = focusable.at(-1);
+        if (!first || !last) return;
+        if (!panelRef.current.contains(document.activeElement)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+        } else if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+        return;
+      }
       if (event.key !== "Escape") return;
+      if (
+        document.querySelector(
+          ".search-surface, .account-popover, .quick-capture.expanded",
+        )
+      )
+        return;
       event.preventDefault();
       if (confirmDelete) {
         cancelDelete();
@@ -127,14 +176,14 @@ export function ItemDetail({
     }
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [beginExit, confirmDelete, editing, item.id]);
+  }, [beginExit, confirmDelete, editing, item.id, mobileDetail]);
 
   return (
     <>
       <button
         type="button"
         className={`detail-backdrop ${exiting ? "closing" : ""}`}
-        aria-label="关闭事项详情"
+        aria-hidden="true"
         tabIndex={-1}
         onClick={beginExit}
       />
@@ -142,6 +191,7 @@ export function ItemDetail({
         ref={panelRef}
         className={`detail-panel ${exiting ? "closing" : ""}`}
         role="dialog"
+        aria-modal={mobileDetail || undefined}
         aria-labelledby={headingId}
         tabIndex={-1}
       >

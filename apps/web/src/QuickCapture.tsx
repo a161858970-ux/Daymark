@@ -30,6 +30,8 @@ export function QuickCapture({
     };
     const escape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
       setExpanded(false);
       setSaveState("IDLE");
       window.requestAnimationFrame(() => button.current?.focus());

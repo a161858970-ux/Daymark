@@ -227,6 +227,9 @@ export function App() {
     };
   }, []);
   useEffect(() => {
+    window.scrollTo({ left: 0, top: 0 });
+  }, [currentCourseId, page]);
+  useEffect(() => {
     void courseManager
       .recoverPendingCaptures()
       .then(refresh)

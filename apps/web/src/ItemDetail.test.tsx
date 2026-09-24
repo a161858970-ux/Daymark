@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import type { Course, Item, RawCapture } from "@course-manager/domain";
 import { ItemDetail } from "./ItemDetail.js";
 
@@ -48,6 +48,8 @@ const rawCapture: RawCapture = {
   row_version: 1,
 };
 
+afterEach(() => vi.unstubAllGlobals());
+
 it("keeps view, edit, status, provenance, and delete actions in one detail container", () => {
   const markup = renderToStaticMarkup(
     <ItemDetail
@@ -74,4 +76,32 @@ it("keeps view, edit, status, provenance, and delete actions in one detail conta
   expect(markup).toContain("编辑");
   expect(markup).toContain("原始记录");
   expect(markup).toContain("删除事项");
+});
+
+it("announces the mobile bottom sheet as modal and hides its pointer backdrop", () => {
+  vi.stubGlobal("window", {
+    matchMedia: (query: string) => ({
+      matches: query === "(max-width: 767px)",
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const markup = renderToStaticMarkup(
+    <ItemDetail
+      item={item}
+      courses={[course]}
+      rawCapture={rawCapture}
+      associations={[]}
+      associationCandidates={[]}
+      onClose={() => undefined}
+      onComplete={() => undefined}
+      onRestore={() => undefined}
+      onDelete={async () => true}
+      onSave={async () => undefined}
+      onAssociate={async () => undefined}
+      onRemoveAssociation={async () => undefined}
+    />,
+  );
+  expect(markup).toContain('role="dialog" aria-modal="true"');
+  expect(markup).toContain('class="detail-backdrop " aria-hidden="true"');
 });
