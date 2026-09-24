@@ -40,7 +40,8 @@ const reminderWindow: ReminderWindow = {
 };
 
 function setup() {
-  const db = new CourseManagerDb(`acceptance-${crypto.randomUUID()}`);
+  const name = `acceptance-${crypto.randomUUID()}`;
+  const db = new CourseManagerDb(name);
   databases.push(db);
   const repo = new DexieLocalRepository(db);
   let now = "2026-09-22T08:00:00.000Z";
@@ -49,6 +50,7 @@ function setup() {
     id: () => crypto.randomUUID(),
   };
   return {
+    name,
     db,
     repo,
     manager: new CourseManager(repo, runtime),
@@ -63,6 +65,30 @@ afterEach(async () => {
     db.close();
     await db.delete();
   }
+});
+
+it("T-AI-004/005/010 and T-REC-004 keep deferred ambiguity across restart until explicit deletion", async () => {
+  const { name, db, manager } = setup();
+  const raw = await manager.capture("第四周前交作业");
+  expect(await manager.processClearCapture(raw.id)).toBeNull();
+  await manager.deferRawCapture(raw.id);
+  expect((await manager.unresolvedCaptures()).map((value) => value.id)).toEqual([
+    raw.id,
+  ]);
+
+  db.close();
+  const reopened = new CourseManagerDb(name);
+  databases.push(reopened);
+  const resumed = new CourseManager(new DexieLocalRepository(reopened));
+  expect((await resumed.unresolvedCaptures()).map((value) => value.id)).toEqual([
+    raw.id,
+  ]);
+  expect(await reopened.items.count()).toBe(0);
+
+  await resumed.deleteUnresolvedCapture(raw.id);
+  expect(await resumed.unresolvedCaptures()).toEqual([]);
+  expect((await reopened.raw_captures.get(raw.id))?.deleted_at).toBeTruthy();
+  expect(await reopened.items.count()).toBe(0);
 });
 
 it("T-ITEM-001..007 keeps one canonical Item through capture, projections, reminders, edit, complete, delete, and Undo", async () => {
