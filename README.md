@@ -44,6 +44,6 @@ AI 解释接口只在已配置认证和数据库的 API 上注册；设置服务
 
 快速记录先保存原文。明确单一行动可自动形成 Item，明确课程事实可形成 CourseInformation；有时间语义或分类不清的输入保留为待确认记录，由用户决定。明确多个行动时只提出拆分候选；用户选择拆分后，一条 RawCapture 可关联多个 Item；选择保持一条则只创建一个 Item。人工编辑时间不会改写原文。课程安排单独保存，不进入日历；日历只投影有时间的 Item。
 
-同步冲突支持本机值、已同步值和显式值；远端已删除对象不能经冲突接口任意恢复。CourseSchedule 与 SemesterWeek 使用单 command、collection version、替换前快照、单事务与单 envelope 的整组同步。永久拒绝的 mutation 进入可检查的 ACTION_REQUIRED 流程，用户可重交当前内容或明确采用已同步状态，决定会保留 provenance。当前 A–K 协议场景已在两个独立 Dexie 数据库 + Fastify + PGlite 中通过；真实 PostgreSQL/Supabase、物理设备生命周期和旧 IndexedDB 升级演练仍未完成。
+同步冲突支持本机值、已同步值和显式值；远端已删除对象不能经冲突接口任意恢复。CourseSchedule 与 SemesterWeek 使用单 command、collection version、替换前快照、单事务与单 envelope 的整组同步。永久拒绝的 mutation 进入可检查的 ACTION_REQUIRED 流程，用户可重交当前内容或明确采用已同步状态，决定会保留 provenance。当前 A–K 协议场景已在两个独立 Dexie 数据库 + Fastify + PGlite 中通过；旧 IndexedDB v5 → v6 升级演练已本地通过。真实 PostgreSQL/Supabase 与物理设备生命周期仍待外部环境验证。
 
-当前解析器只覆盖安全的确定性子集；AI 解释需要在线账号、服务端密钥和用户确认，未在真实模型上验收。提醒计划引擎已有纯逻辑和本地缓存，生产数字策略仍是 R-01 gate，尚未接通设备通知/云端 lease。完整时间解析、搜索和课表导入尚未实现。
+当前解析器只覆盖安全的确定性子集；AI 解释需要在线账号、服务端密钥和用户确认，未在真实模型上验收。提醒计划引擎已有纯逻辑和本地缓存，生产数字策略仍是 R-01 gate，尚未接通设备通知/云端 lease。全局本地关键词搜索已实现，并直接定位同一 Item、Course 或 CourseInformation；完整时间解析和课表导入尚未实现。

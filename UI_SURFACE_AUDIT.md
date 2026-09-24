@@ -10,7 +10,7 @@
 
 ## Phase 7 progress — 2026-09-24
 
-以下状态记录基线审计之后的实施结果。后续 20 个 surface 条目保留改造前证据，7A–7E 的当前状态以本节为准。
+以下状态记录基线审计之后的实施结果。后续 20 个 surface 条目保留改造前证据，7A–7F 的当前状态以本节为准。
 
 ### 7A — Shell / Navigation / Tokens — PASS locally
 
@@ -52,9 +52,18 @@
 - 翻月/翻周使用统一短方向 transition；today、selected、overflow、empty 和 reduced-motion 状态均已覆盖。
 - desktop 与 390×844 viewport 已人工检查；Calendar/domain 自动测试、Web build、全仓测试、lint 和 format 均通过。
 
+### 7F — Search / Attention / Account / State surfaces — PASS locally
+
+- Windows 左侧固定入口与各页面 header shortcut 打开同一套全局搜索；Mobile 只保留 header 入口，搜索不进入一级导航。
+- 搜索在本机按规范化关键词匹配 Item 标题/详情、Course 名称/教师与 CourseInformation 内容，按对象类型分组并保持源顺序，不加入复杂筛选、AI 相关性排名或第二套详情对象。
+- Item 结果打开现有 Item Detail；Course 进入原课程页；CourseInformation 进入对应课程信息位置并提供短暂到达提示。
+- unresolved、field/collection conflict 与 ACTION_REQUIRED 使用统一轻量摘要；待确认记录启动时展开，冲突与修复默认收起，展开后仍保留既有字段选择、整组选择、删除边界和二次确认。
+- 账户入口在无外部配置时也显示“仅本机”；已建模 signed-out、offline、syncing、up-to-date、needs-attention 与 error 文案。后台同步保持安静，不显示持续 spinner 或内部队列术语。
+- Search、账户 popover、attention disclosure 的 Escape、外部关闭与焦点返回已验证；desktop 与 390×844 viewport 人工检查通过。
+- 全仓 build/test/lint/format 通过：82 passed，1 个真实 PostgreSQL gate skipped。
+
 ### Remaining
 
-- **7F**：Search、Ambiguity、Conflict、ACTION_REQUIRED、Account/Sync 和剩余状态 surface。
 - **7G**：全局 motion consistency、Calendar 完成态与跨 surface polish。
 - **7H**：完整 responsive/accessibility matrix 与最终视觉 acceptance。
 
@@ -265,4 +274,5 @@
 - **7C — PASS locally**：Quick Capture 连续形变、键盘/外部点击、保存/失败反馈。
 - **7D — PASS locally**：detail/edit、completion/delete/undo；desktop 单容器、mobile sheet。
 - **7E — PASS locally**：Calendar month/week/day、连续 range、移动日视图、方向 motion 与焦点返回。
-- **7F–7H — PENDING**：未完成项保留在本审计中，继续按阶段验证。
+- **7F — PASS locally**：全局 Search、unresolved、Conflict、ACTION_REQUIRED、Account/Sync 与状态 surface。
+- **7G–7H — PENDING**：未完成项保留在本审计中，继续按阶段验证。
