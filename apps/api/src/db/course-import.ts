@@ -10,6 +10,8 @@ import {
   type CourseImportSourceType,
 } from "@course-manager/contracts";
 import type { CourseInformation, Semester } from "@course-manager/domain";
+import { ProviderError } from "../ai/chat-provider.js";
+import { CourseImportParseError } from "../ai/pdf-source.js";
 import { recordExternalCollectionReplacement } from "./collections.js";
 import { CloudError, type CloudDatabase, type QueryPort } from "./cloud.js";
 
@@ -135,6 +137,21 @@ async function logEntity(
   );
 }
 
+/**
+ * Failures stay inside the recoverable import job and are reported in product
+ * language: engineering causes (status codes, provider kinds, stack traces)
+ * never reach the user.
+ */
+export function importFailureMessage(cause: unknown): string {
+  if (cause instanceof CourseImportParseError) return cause.userMessage;
+  if (cause instanceof ProviderError) {
+    if (cause.kind === "AUTH" || cause.kind === "INVALID_REQUEST")
+      return "智能整理暂时无法使用，请检查服务配置后重试。";
+    return "智能整理暂时不可用，文件已保留，请稍后重试。";
+  }
+  return "无法可靠识别该课程表，请重新上传清晰文件。";
+}
+
 export class CloudCourseImportManager {
   constructor(
     private readonly db: CloudDatabase,
@@ -231,8 +248,8 @@ export class CloudCourseImportManager {
           contentBase64: bytes.toString("base64"),
         }),
       );
-    } catch {
-      const message = "无法可靠识别该课程表，请重新上传清晰文件。";
+    } catch (error) {
+      const message = importFailureMessage(error);
       await this.db.query(
         `UPDATE course_import_jobs SET status='FAILED',error_message=$3,
          source_name=$4,source_media_type=$5,updated_at=now()

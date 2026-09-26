@@ -274,7 +274,7 @@ Phase 7A–7H 已把原工程基线收敛为统一视觉、响应式和动效系
 
 - **Current implementation**：Item Detail/Edit 可查看并设置 OFF/NORMAL/HIGH；无全局 notification settings。
 - **Spec requirements**：提醒附属于已有 Item；不做自动规划；生产 numeric policy 保持 release gate。
-- **Missing**：平台权限/通知可用性状态、quiet hours 等全局设置 UI 尚未实现；R-01 仍未决。
+- **Missing**：平台通知权限/可用性状态、quiet hours 的用户设置 UI 尚未实现（quiet hours 当前按产品 v1 默认 23:00–08:00 生效）；R-01 已于 2026-09-26 固化为产品 v1 policy。
 - **Visually incorrect**：提醒等级只是普通 select/文本，没有解释语义。
 - **Interactionally incorrect**：无法区分“Item 关闭提醒”和“系统通知不可用”。
 - **Responsive issue**：详情内字段可共享；未来设置 surface 需适配 desktop/mobile。

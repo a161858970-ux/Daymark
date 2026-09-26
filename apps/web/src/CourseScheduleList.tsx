@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { CourseSchedule } from "@course-manager/domain";
+import { toUserMessage } from "./errors.js";
 
 export type ScheduleFields = Pick<
   CourseSchedule,
@@ -64,7 +65,7 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
       setStageLabel("");
       setError(null);
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     }
   }
 
@@ -73,7 +74,7 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
       await onReplace(schedules.filter((value) => value.id !== id).map(fields));
       setError(null);
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     }
   }
 

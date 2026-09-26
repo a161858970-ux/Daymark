@@ -16,6 +16,7 @@
     "@course-manager/application": "workspace:*",
     "@course-manager/contracts": "workspace:*",
     "@course-manager/domain": "workspace:*",
+    "@napi-rs/canvas": "^1.0.9",
     "fastify": "^5.12.5",
     "jose": "^6.2.12",
     "pdfjs-dist": "^6.3.289",

@@ -12,7 +12,7 @@
 
 - Phase 0 已完整读取 README、00–21 与产品基线，共 24 份 Markdown，并建立 Product/Object/Interaction/State/Data Flow/Architecture/Test Map；结果在根目录 `IMPLEMENTATION_CONTEXT.md`。
 - `21_SPEC_AUDIT.md` 的 pre-development gate 为 PASS，未解决 P0 为 0。
-- 唯一明确的产品参数 gate 仍是 R-01 Numeric Reminder Policy。Reminder Engine 只接受注入配置和测试 fixture，没有擅自写入生产数值。
+- R-01 Numeric Reminder Policy 曾是唯一的产品参数 gate，已于 2026-09-26 按产品指令固化为 v1（`packages/application/src/reminderPolicy.ts`，version `r01-v1`）；`VITE_REMINDER_POLICY` 仅作实验/测试覆盖，引擎默认使用产品 v1。
 - 本轮没有改变 Capture First、RawCapture provenance、Course-oriented、Calendar 只投影 Item、二态 Item、删除 Undo、AI 不把猜测当事实等产品不变量。
 
 ## 2. Phase 1 — Project Foundation
@@ -101,7 +101,7 @@
 
 - 云端 device registration、notification claim/lease、delivery acknowledgement 与浏览器通知适配器已于 2026-09-26 接入（`004_reminder_delivery.sql`、`apps/api/src/db/notifications.ts`、`apps/web/src/reminders.ts`），并有 PGlite 与 Web 自动测试。
 - 真实设备上的系统通知、后台执行与长周期 lease 生命周期仍未实机验收。
-- R-01 生产数值未决；未注入 `VITE_REMINDER_POLICY` 时引擎不启动，生产提醒不能 release-complete。
+- R-01 已固化为产品 v1 policy（含 same-day cadence、per-level daily budget、occurrence-after 初次偏移、quiet hours 23:00–08:00、dedup 60min、“提醒我”默认 HIGH），本地 acceptance 全部继续通过。
 
 ## 7. Phase 6 — Offline / Sync / Conflict
 
@@ -250,9 +250,9 @@
 
 ### 9.2 Final local gate
 
-- `pnpm test`：**112 passed，1 skipped**（2026-09-26 换机后重新执行）。
-  - domain：11 passed；application：6 passed；storage：32 passed；API：30 passed + 1 real PostgreSQL skipped；Web：33 passed。
-- `pnpm build`：PASS；Vite 主 bundle 约 554 kB，只有非阻塞 size warning。
+- `pnpm test`：**136 passed，1 skipped**（2026-09-26 Release Candidate Hardening gate）。
+  - domain：11 passed；application：17 passed；storage：32 passed；API：41 passed + 1 real PostgreSQL skipped；Web：35 passed。
+- `pnpm build`：PASS；entry chunk 由 555.89 kB 降为 348.28 kB（react-vendor 独立分包 218.83 kB），>500 kB warning 消失。
 - `pnpm lint`、`pnpm format:check`、`git diff --check`：PASS。
 - 运行态检查：Web `http://127.0.0.1:5173/` HTTP 200；API `/api/v1/health` HTTP 200 / `status=ok`。
 - 运行中的 Vite 页面完成 Course Import desktop/mobile entry、review surface、无水平溢出与触控目标检查；Phase 7 的完整 viewport/motion evidence 继续有效。
@@ -261,7 +261,7 @@
 
 > **PHASE 8 LOCAL ACCEPTANCE: PASS WITH EXTERNAL RELEASE GATES**
 
-本地自动、浏览器和模拟基础设施的规格证据已经闭合。R-01、真实 PostgreSQL/Supabase、真实 AI/import provider、平台通知和物理 accessibility/device matrix 仍保持独立 gate，因此当前状态不是 production release PASS。
+本地自动、浏览器和模拟基础设施的规格证据已经闭合，R-01 已解决，真实 MiMo provider 已通过 `pnpm verify:ai --with-import` smoke。真实 PostgreSQL/Supabase、物理设备通知与 accessibility/device matrix 仍保持独立 gate，因此当前状态不是 production release PASS。
 
 ## 10. Current test evidence
 
@@ -284,18 +284,53 @@
 ## 11. Known limitations and release blockers
 
 1. **External sync validation**：真实 PostgreSQL/Supabase/双浏览器尚未执行。
-2. **Reminder release**：R-01 未定；云端 lease/ack 与浏览器通知适配器已完成，真实设备通知、后台执行未实机验收。
-3. **AI release**：真实 interpretation 和 PDF/image import provider 未验收，完整时间语义仍走保守确认。
+2. **Reminder release**：R-01 已定为 v1；云端 lease/ack 与浏览器通知适配器已完成，真实设备通知、后台执行未实机验收。
+3. **AI release**：真实 interpretation 与 PDF（含扫描版）/image import provider 已通过 `pnpm verify:ai --with-import` smoke；完整自然语言时间语义仍走保守确认。
 4. **Physical validation**：物理设备、两个真实 browser profile、屏幕阅读器、系统缩放和移动软键盘未实机验证。
-5. **Bundle**：Web 主 bundle 约 554 kB，构建通过但有 Vite size warning；可在发布优化中做按功能拆分。
+5. **Bundle**：已通过 vendor 分包把 entry 降到 348.28 kB 并消除 size warning；更深度的按路由懒加载与依赖裁剪记为 POST-RELEASE PERFORMANCE OPTIMIZATION。
 
 ## 12. Spec deviations
 
 - 没有发现新的产品语义偏差。
 - 平台技术选择差异沿用 ADR-001，来自交接允许的 React/Vite、Dexie、Fastify/PostgreSQL 方向。
-- AI provider 由 OpenAI Responses 改为用户指定的 MiMo Chat Completions（`AI_BASE_URL`/`AI_MODEL` 可配置），属于 provider 实现替换：确定性优先、严格 schema、失败不建正式对象等产品语义不变；PDF 源改为服务端页文字提取，因为该端点不接受 file 输入。
-- R-01 保持未决；没有以开发默认值冒充生产政策。
+- AI provider 由 OpenAI Responses 改为用户指定的 MiMo Chat Completions（`AI_BASE_URL`/`AI_MODEL` 可配置），属于 provider 实现替换：确定性优先、严格 schema、失败不建正式对象等产品语义不变；PDF 源改为服务端按页处理：有文本层走页文字，无可信文本层栅格化为受控图片后走既有图片输入（ADR-006），因为该端点不接受 file 输入。
+- R-01 按产品指令固化为 v1，数值集中在一个数据对象里，未散落在引擎代码中；测试夹具数值仍标注为 fixture。
 
 ## 13. Next gate
 
-下一步只处理独立 release lanes：产品确定 R-01 后固化生产 reminder policy；拿到外部配置后按 `REAL_POSTGRES_VERIFICATION.md` 完成真实 PostgreSQL、Supabase、双浏览器与真实 AI/import provider 验收；再在物理 Mobile/Windows、屏幕阅读器、系统缩放和软键盘环境执行剩余矩阵。每条外部证据完成后单独更新本审计，不用模拟结果替代。
+R-01 与真实 AI provider smoke 已完成。剩余 release lanes：拿到外部配置后按 `REAL_POSTGRES_VERIFICATION.md` 完成真实 PostgreSQL、Supabase、双浏览器验收；再在物理 Mobile/Windows、屏幕阅读器、系统缩放和软键盘环境执行剩余矩阵（含系统通知与后台执行）。每条外部证据完成后单独更新本审计，不用模拟结果替代。
+
+## 14. Release Candidate Hardening（2026-09-26）
+
+范围冻结：不新增规格外功能、不重开 Phase 7、不重构 `App.tsx`。
+
+### IMPLEMENTED
+
+- 扫描版 PDF 按页 fallback：无可信文本层的页栅格化为受控 JPEG（≤1600px/q72，总图 ≤6MB、≤8 页、单请求 ≤4 图），分批结果按课程名合并；超限用中文产品文案，job 保持可恢复（ADR-006）。
+- Provider 错误分类 + 仅瞬时错误重试一次 + 导入 300s / 解释 90s 超时；无密钥时 `pnpm verify:ai` 输出 `REAL_AI_REQUIRED`（退出码 2）。
+- 工程错误到产品文案的两层映射：服务端 `importFailureMessage()`、Web `toUserMessage()`。
+- R-01 固化为产品 v1 policy，引擎补齐 same-day cadence、per-level daily budget、occurrence-after 初次偏移；“提醒我”默认 HIGH。
+- Vite vendor 分包（仅配置，行为不变）。
+
+### VERIFIED LOCALLY
+
+- `pnpm test` 134 passed + 1 skipped；`pnpm build` / `pnpm lint` / `pnpm format:check` / `git diff --check` 全部 PASS。
+- 新增测试：扫描 PDF fallback、栅格/页数/payload 限制、不可读文件、15MB 超限、provider 401/500/超时/非 JSON、重试次数、batch 合并、R-01 十项行为、产品错误文案。
+
+### VERIFIED REAL
+
+- `pnpm verify:ai --with-import`：`PASS interpretation 28240ms`、`PASS import 37633ms courses=3`（真实 MiMo mimo-v2.6-flash，strict json_schema，2 页扫描 fixture 走栅格化路径）。
+
+### BLOCKED BY EXTERNAL CONFIGURATION
+
+- `REAL_DATABASE_URL`、Supabase 项目/测试账号/token、两个独立 browser profile。
+
+### NOT RUN PHYSICAL
+
+- 物理手机/Windows 设备的系统通知与后台执行、屏幕阅读器、系统缩放、移动软键盘。
+
+### RELEASE BLOCKER
+
+- 无新增 P0；上述外部配置与实机矩阵仍需完成后才可宣称 production release。
+
+> **RC HARDENING: COMPLETE**

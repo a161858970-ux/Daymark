@@ -10,6 +10,8 @@ import {
   type CourseImportParser,
 } from "./course-import.js";
 import { CloudCourseManager, type CloudDatabase } from "./cloud.js";
+import { ProviderError } from "../ai/chat-provider.js";
+import { CourseImportParseError } from "../ai/pdf-source.js";
 
 const owner = "11111111-1111-4111-8111-111111111111";
 const otherOwner = "22222222-2222-4222-8222-222222222222";
@@ -394,6 +396,110 @@ it("keeps a failed parse recoverable and commits no partial Course data", async 
     expect(
       (await cloud.listCourses(owner, semester.id, null, 50)).data,
     ).toHaveLength(2);
+  } finally {
+    await server.close();
+    await postgres.close();
+  }
+});
+
+it("maps provider and source failures to product messages and stays recoverable", async () => {
+  let mode: "provider" | "too_large" | "valid" = "provider";
+  const parser: CourseImportParser = {
+    parse: async () => {
+      if (mode === "provider") throw new ProviderError("UNAVAILABLE", 503);
+      if (mode === "too_large")
+        throw new CourseImportParseError(
+          "TOO_LARGE",
+          "课程表文件图像内容过大，无法安全解析，请压缩后重试。",
+        );
+      return parsedCourses;
+    },
+  };
+  const { postgres, academic, imports, server } = await harness(parser);
+  try {
+    const semester = await academic.createSemester(owner, randomUUID(), {
+      name: "2026 秋季学期",
+      start_date: "2026-09-01",
+      end_date: "2026-12-31",
+    });
+    const source = {
+      file_name: "课程表.png",
+      media_type: "image/png",
+      content_base64: Buffer.from("image fixture").toString("base64"),
+    };
+    const job = await imports.start(owner, semester.id, "IMAGE");
+
+    await expect(
+      imports.parseSource(owner, job.id, source),
+    ).rejects.toMatchObject({
+      code: "IMPORT_FAILED",
+      message: "智能整理暂时不可用，文件已保留，请稍后重试。",
+    });
+    expect(await imports.get(owner, job.id)).toMatchObject({
+      status: "FAILED",
+      error_message: "智能整理暂时不可用，文件已保留，请稍后重试。",
+    });
+
+    mode = "too_large";
+    await expect(
+      imports.parseSource(owner, job.id, source),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("过大"),
+    });
+    const failed = await imports.get(owner, job.id);
+    expect(failed.status).toBe("FAILED");
+    expect(failed.error_message).not.toMatch(
+      /ProviderError|base64|payload|stack/i,
+    );
+
+    // Oversized sources are refused before any provider call.
+    const oversized = {
+      ...source,
+      content_base64: Buffer.alloc(16 * 1024 * 1024).toString("base64"),
+    };
+    await expect(
+      imports.parseSource(owner, job.id, oversized),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: expect.stringContaining("15 MB"),
+    });
+
+    mode = "valid";
+    const recovered = await imports.parseSource(owner, job.id, source);
+    expect(recovered.status).toBe("READY");
+    expect(recovered.error_message).toBeNull();
+  } finally {
+    await server.close();
+    await postgres.close();
+  }
+});
+
+it("refuses a source whose media type does not match the declared import type", async () => {
+  const { postgres, academic, imports, server } = await harness({
+    parse: async () => parsedCourses,
+  });
+  try {
+    const semester = await academic.createSemester(owner, randomUUID(), {
+      name: "2026 秋季学期",
+      start_date: "2026-09-01",
+      end_date: "2026-12-31",
+    });
+    const job = await imports.start(owner, semester.id, "IMAGE");
+    const response = await request(
+      server,
+      "POST",
+      `/api/v1/course-imports/${job.id}/source`,
+      {
+        file_name: "课程表.pdf",
+        media_type: "application/pdf",
+        content_base64: Buffer.from("not an image").toString("base64"),
+      },
+    );
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("VALIDATION_ERROR");
+    expect(await imports.get(owner, job.id)).toMatchObject({
+      status: "AWAITING_SOURCE",
+    });
   } finally {
     await server.close();
     await postgres.close();

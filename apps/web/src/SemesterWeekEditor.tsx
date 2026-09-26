@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { Semester, SemesterWeek } from "@course-manager/domain";
+import { toUserMessage } from "./errors.js";
 
 export type WeekFields = Pick<
   SemesterWeek,
@@ -38,7 +39,7 @@ export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
       setEndDate("");
       setError(null);
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     }
   }
 
@@ -55,7 +56,7 @@ export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
       );
       setError(null);
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     }
   }
 

@@ -4,7 +4,7 @@
 
 **功能/验收基线**：`1dcdf18 Record Phase 8 acceptance audit`
 
-**换机复验（2026-09-26，Windows 11 / Node v24.19.0 / pnpm 11.25.0）**：`pnpm install --frozen-lockfile`、`pnpm test`（97 passed + 1 skipped）、`pnpm build`、`pnpm lint`、`pnpm format:check`、`git diff --check` 全部通过，与本文记录一致。真实 PostgreSQL 测试仍按预期 skipped（缺 `REAL_DATABASE_URL`），未计为 PASS。
+**换机复验（2026-09-26，Windows 11 / Node v24.19.0 / pnpm 11.25.0）**：`pnpm install --frozen-lockfile`、`pnpm test`、`pnpm build`、`pnpm lint`、`pnpm format:check`、`git diff --check` 全部通过。当时快照为 97 passed + 1 skipped，随后进入 Release Candidate Hardening，最新 gate 见 §2 与 §9。真实 PostgreSQL 测试仍按预期 skipped（缺 `REAL_DATABASE_URL`），未计为 PASS。
 
 **当前阶段**：Phase 6 工程实现与 Phase 7A–7H 已封存；Phase 8 本地 acceptance/hardening 已逐项执行。真实基础设施、真实 AI provider、平台通知和物理设备验证仍是独立发布 gate。
 
@@ -37,13 +37,13 @@
 
 ## 2. 已有自动测试证据
 
-当前完整套件在换机后的 gate 重新执行：**112 项通过，1 项真实 PostgreSQL 测试因缺少 URL 跳过**。
+当前完整套件在 Release Candidate Hardening gate 重新执行：**136 项通过，1 项真实 PostgreSQL 测试因缺少 URL 跳过**。
 
 - domain：11 passed；
-- application：6 passed；
+- application：17 passed；
 - storage：32 passed；
-- API：30 passed，1 skipped；
-- Web：33 passed。
+- API：41 passed，1 skipped；
+- Web：35 passed。
 
 Phase 6 的自动证据包括：
 
@@ -79,7 +79,7 @@ Phase 6 的自动证据包括：
 
 ### 发布
 
-- Reminder 生产数值（R-01）与真实设备上的通知实机验收；device registration、claim/lease、delivery acknowledgement 与浏览器通知适配器已实现并通过自动测试。
+- 真实设备上的系统通知、后台执行与长周期 lease 实机验收；R-01 已固化为产品 v1 policy，device registration、claim/lease、delivery acknowledgement 与浏览器通知适配器已实现并通过自动测试。
 - 真实 AI interpretation/import provider、完整自然语言时间理解。
 - 物理手机、Windows 设备、屏幕阅读器、系统缩放与移动软键盘验收。
 
@@ -91,7 +91,7 @@ Phase 6 的自动证据包括：
 - “ACTION_REQUIRED 只能重跑整轮同步”已过时：现有逐 mutation 检查、重交/明确放弃和 provenance。
 - “ItemAssociation 只有类型和表”已过时：本地 use case、REST、sync create/delete/pull 和测试已闭合。
 - “Course/CourseInformation 正式写 API 缺失”已过时：当前接口已补齐。
-- 26/35/44/48/64/66/72/75/82/87/88/92/96 等数字是历史阶段快照，不能代表当前覆盖；当前 gate 使用 97 passed + 1 externally gated skip。
+- 26/35/44/48/64/66/72/75/82/87/88/92/96/97/112 等数字是历史阶段快照，不能代表当前覆盖；当前 gate 使用 136 passed + 1 externally gated skip。
 
 `docs/IMPLEMENTATION_AUDIT.md` 已按 Implemented、Verified locally、Verified simulated、Verified real、Not implemented、Blocked、Release blocker 重新整理。
 
@@ -99,7 +99,7 @@ Phase 6 的自动证据包括：
 
 1. **EXTERNAL CONFIGURATION REQUIRED**：真实 PostgreSQL 连接与 Supabase 项目/测试用户/token 缺失，无法产出真实基础设施证据。
 2. **ENVIRONMENT VERIFICATION REQUIRED**：尚未在两个独立浏览器 profile 或物理设备执行 A–K 的网络/生命周期验收。
-3. **PRODUCT RELEASE GATE**：R-01 numeric Reminder Policy 尚未确定（未注入时引擎不启动）；notification lease/ack 已在 API 与 Web 接通，真实设备上的平台通知、后台执行仍待实机验收。
+3. **R-01 已解决**：提醒数值固化为产品 v1 policy（`packages/application/src/reminderPolicy.ts`，version `r01-v1`），安静时段 23:00–08:00，`VITE_REMINDER_POLICY` 仅作覆盖。**剩余实机 gate**：真实设备上的平台通知、后台执行与长周期 lease。
 4. **EXTERNAL AI VERIFICATION REQUIRED**：真实 OpenAI interpretation 与 PDF/image import 尚未执行。
 5. **PHYSICAL ACCESSIBILITY VERIFICATION REQUIRED**：屏幕阅读器、系统缩放与移动软键盘尚未实机执行。
 
@@ -127,9 +127,9 @@ Phase 6 的自动证据包括：
 
 ### 下一步
 
-1. **Reminder delivery engineering**：继续实现 device registration、claim/lease、delivery acknowledgement、completion/deletion/time-change cancellation 和平台 notification adapters。保持 `ReminderPolicy` 可配置，在 R-01 确定前不得写死生产数字。
+1. ~~Reminder delivery engineering~~ 已完成（见 §8）；R-01 已按产品指令固化为 v1（见 §9）。下一步是外部环境验收 lane：真实 PostgreSQL / Supabase / 双 browser profile / 物理设备矩阵。
 2. **External integration lane**：拿到配置后依次运行三份 migration、`pnpm test:postgres`、真实 Supabase 登录/同步、两个独立 browser profile、真实 OpenAI interpretation/import file 和物理设备矩阵。
-3. **Release optimization**：主功能闭合后再处理约 554 kB 的 Vite bundle warning；它当前不是 build failure，也不应通过删减产品 surface 解决。
+3. ~~Release optimization~~ 主 bundle warning 已在 RC Hardening 内用零行为变化的 vendor 分包解决（entry 555.89 → 348.28 kB，react-vendor 独立 218.83 kB）；更深度的按路由懒加载记入 §10 技术债。
 
 ### 本轮关键决定
 
@@ -148,7 +148,7 @@ Phase 6 的自动证据包括：
 
 ### 当前风险与需要总控提供的输入
 
-- **需要产品拍板**：R-01 Numeric Reminder Policy。
+- ~~需要产品拍板：R-01 Numeric Reminder Policy~~ 已于 2026-09-26 固化为产品 v1 policy。
 - **需要外部配置**：可丢弃的真实 PostgreSQL、Supabase project/test user/token、OpenAI key/model。
 - **需要实机资源**：Mobile/Windows 设备、两个独立 browser profile、屏幕阅读器、系统缩放与移动软键盘环境。
 - 当前未发现 P0 规格冲突、未提交有效代码、调试残留、个人绝对路径或误跟踪密钥。
@@ -159,5 +159,49 @@ Phase 6 的自动证据包括：
 - **PDF 导入改为服务端提取页文字**：MiMo 只接受 bmp/gif/png/jpeg/webp，`file` 输入返回 400；因此 PDF 用 `pdfjs-dist` 提取页面文本后随 prompt 发送，提取不到文字时明确报错，不再伪装成功。图片仍走 base64 `image_url`。
 - **Reminder delivery engineering**：新增 `backend/migrations/004_reminder_delivery.sql`（`devices` 与 `notification_deliveries` 增列：`logical_key`、`state`、lease、ack、cancel 等），`apps/api/src/db/notifications.ts` 提供 device registration、跨设备 claim/lease、delivery acknowledgement 与按 key 取消，服务端 claim 自带 stale guard（完成/删除/静音 → CANCELED）；新增路由 `POST /api/v1/devices`、`POST /api/v1/notifications/claim`、`POST /api/v1/notifications/{id}/delivered`、`POST /api/v1/notifications/cancel`。
 - **Web 交付实现**：`apps/web/src/reminders.ts` 提供 `BrowserNotificationAdapter`（平台通知、点击打开当前 Item 并消费该次通知、无权限回退应用内提示、首次手势申请权限）、`WebReminderDeliveryPort`（在线走服务端 lease + ack，离线/未登录本地交付）、`ReminderScheduler`（reconcile + deliverDue，防重入）；`App.tsx` 在注入策略后启动，15 s 轮询、页面可见与每次 `refresh()` 后触发，完成/删除/改期的取消因此立即生效。
-- **新增自动测试**：`apps/api/src/db/notifications.test.ts`（4）、`apps/web/src/reminders.test.ts`（8）、`packages/application/src/reminders.test.ts` 的 `createReminderWindow`（2）；总数 97 → 112 passed + 1 skipped。
-- **提醒策略仍由配置注入**：`VITE_REMINDER_POLICY`（可选 `VITE_REMINDER_QUIET_HOURS`）未设置时引擎不启动；仓库内没有生产数值，R-01 仍是发布 gate。
+- **新增自动测试**：`apps/api/src/db/notifications.test.ts`（4）、`apps/web/src/reminders.test.ts`（8）、`packages/application/src/reminders.test.ts` 的 `createReminderWindow`（2）；该轮总数 97 → 112 passed + 1 skipped（RC Hardening 后为 136 + 1，见 §9）。
+- **提醒策略当时仍由配置注入**：该轮 R-01 未定，引擎默认不启动；RC Hardening 期间已按产品指令固化为 v1，见 §9。
+
+## 9. Release Candidate Hardening（2026-09-26）
+
+本阶段不是功能新增，目标是把“本地 acceptance 通过”推进为“具备真实环境验收条件的 RC”。范围冻结：不新增规格外产品功能、不重开 Phase 7、不重构 App.tsx（见 §10 技术债）。
+
+### IMPLEMENTED
+
+- **扫描版 PDF fallback**：`preparePdfSource()` 按页判断文本层，无可信文本的页栅格化为受控 JPEG（≤1600px / q72，总图 ≤6MB，≤8 页，单请求 ≤4 图分批），结果按课程名合并；超页数/超扫描页/超 payload 给出中文产品文案，job 保持可恢复。详见 `docs/ADR-006-scanned-pdf-import.md`。
+- **Provider 边界**：`ProviderError` 分类（AUTH/RATE_LIMITED/TIMEOUT/UNAVAILABLE/INVALID_REQUEST/MALFORMED）+ 仅瞬时错误重试一次；导入 300s、解释 90s 超时；解释与导入共用 strict `json_schema`。
+- **失败文案**：`importFailureMessage()` 与 Web `toUserMessage()` 把工程消息映射为产品语言，UI 不再出现 mutation/row_version/outbox/SQL/状态码。
+- **R-01 固化**：`REMINDER_POLICY_V1`（version `r01-v1`）——NORMAL due 24h/2h、same-day 6h、上限 3/天、逾期 24h、occurrence 前 30min、occurrence 后 24h 且每日一次；HIGH due 24h/4h/1h/15min、same-day 3h、上限 5/天、逾期 6h、occurrence 前 1h/15min、occurrence 后 8h 再每 12h；start 恰好一次；dedup 60min；quiet hours 23:00–08:00。引擎支持 same-day cadence、per-level daily budget、occurrence-after initial offset；“提醒我”默认 HIGH（`reminderLevelForCapture`）。
+- **安静时段同时约束交付**：`ReminderScheduler.tick()` 在 `window.nextAllowedTime(now) > now` 时只做 reconcile 不发送，夜间到点的提醒顺延到 08:00 之后，而不是在安静时段打断（浏览器实测 23:21 本地时间 0 条发送）。
+- **真实 provider smoke 入口**：`pnpm verify:ai [--with-import]`，无密钥时输出 `REAL_AI_REQUIRED` 并以退出码 2 结束，绝不伪造 PASS。
+
+### VERIFIED LOCALLY
+
+- `pnpm test`：**134 passed + 1 skipped**（domain 11、application 17、storage 32、web 34、API 40 + 1 真实 PostgreSQL skip）。
+- `pnpm build`：PASS；主 chunk 由 555.89 kB 降为 **348.28 kB**，react-vendor 218.83 kB 独立分包，Vite >500kB warning 消失（仅配置级 `codeSplitting`，行为不变）。
+- `pnpm lint` / `pnpm format:check` / `git diff --check`：PASS。
+- 新增覆盖：扫描 PDF fallback、栅格化/页数/payload 限制、不可读文件、超大导入（15MB）、provider 不可用/超时/401/非 JSON、瞬时失败重试、batch 合并去重、R-01 全部 10 项行为、产品错误文案、`reminderLevelForCapture`。
+
+### VERIFIED REAL
+
+- `pnpm verify:ai --with-import`：`PASS interpretation 28240ms`（MiMo mimo-v2.6-flash，strict json_schema）、`PASS import 37633ms courses=3`（2 页扫描 fixture 全程栅格化路径）。
+
+### BLOCKED BY EXTERNAL CONFIGURATION
+
+- 真实 PostgreSQL（`REAL_DATABASE_URL`）与 Supabase 项目/测试账号/token。
+- 两个独立 browser profile / 物理设备的同步与通知生命周期。
+
+### NOT RUN PHYSICAL
+
+- 物理手机与 Windows 设备上的系统通知、后台执行、屏幕阅读器、系统缩放、移动软键盘。
+
+### RELEASE BLOCKER
+
+- 无新增 P0；剩余发布阻塞为上述外部配置与实机矩阵。
+
+### §10 技术债（本阶段明确不做）
+
+- **POST-RELEASE TECHNICAL DEBT**：`apps/web/src/App.tsx` 体量大，暂不重构（未发现 correctness bug 或 state race）。
+- **POST-RELEASE PERFORMANCE OPTIMIZATION**：进一步按路由懒加载与依赖裁剪（本轮只做了零行为变化的 vendor 分包）。
+- 规格 `16_API_CONTRACT.md` §22 要求的 AI 端点 rate limit 尚未实现（单用户本地部署，风险低），留到发布前安全复核。
+- AI 端点 quiet-hour / 通知权限的系统级设置 UI 尚未提供（当前 quiet hours 为产品默认值，通知权限走浏览器手势申请）。

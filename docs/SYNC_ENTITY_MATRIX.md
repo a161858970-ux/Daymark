@@ -39,4 +39,4 @@
 
 ## 当前缺口
 
-真实 PostgreSQL/Supabase 尚无凭据可运行；Reminder 云端 delivery/lease API、设备通知平台与 R-01 生产数值仍是独立发布阻塞项。它们没有被当前 Phase 6 的模拟结果冒充为已验证。
+真实 PostgreSQL/Supabase 尚无凭据可运行；Reminder 云端 claim/lease 与 delivery acknowledgement API 已实现并有自动测试（`004_reminder_delivery.sql`），R-01 生产数值已固化为 v1；剩余阻塞是真实设备上的通知平台与后台执行。它们没有被模拟结果冒充为已验证。

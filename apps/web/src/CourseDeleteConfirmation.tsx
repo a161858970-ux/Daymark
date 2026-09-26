@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Course, Item } from "@course-manager/domain";
+import { toUserMessage } from "./errors.js";
 
 type Strategy = "DELETE_ASSOCIATED_ITEMS" | "UNLINK_ASSOCIATED_ITEMS";
 
@@ -25,7 +26,7 @@ export function CourseDeleteConfirmation({
       await onConfirm(strategy);
       setError(null);
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     } finally {
       setBusy(false);
     }

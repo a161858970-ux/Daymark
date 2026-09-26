@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from "react";
 import {
   preprocessCapture,
+  reminderLevelForCapture,
   type ManualCaptureResolution,
 } from "@course-manager/application";
 import type { Course, RawCapture } from "@course-manager/domain";
 import { fromLocalInput, toLocalInput } from "./timeInputs.js";
 import type { CaptureInterpretation } from "./authSync.js";
+import { toUserMessage } from "./errors.js";
 
 interface Props {
   capture: RawCapture;
@@ -93,7 +95,7 @@ export function PendingCapture({
         setKind("COURSE_INFORMATION");
       }
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     } finally {
       setBusy(false);
     }
@@ -116,11 +118,11 @@ export function PendingCapture({
             occurrence_start_at: null,
             occurrence_end_at: null,
             due_at: null,
-            reminder_level: "NORMAL",
+            reminder_level: reminderLevelForCapture(capture.raw_text),
           })),
         );
       } catch (cause) {
-        setError(String(cause));
+        setError(toUserMessage(cause));
       } finally {
         setBusy(false);
       }
@@ -153,12 +155,12 @@ export function PendingCapture({
               occurrence_start_at: fromLocalInput(occurrenceStartAt),
               occurrence_end_at: fromLocalInput(occurrenceEndAt),
               due_at: fromLocalInput(dueAt),
-              reminder_level: "NORMAL",
+              reminder_level: reminderLevelForCapture(capture.raw_text),
             }
           : { kind, course_id: courseId, content: title.trim() };
       await onResolve(resolution, kind === "ITEM" && splitTitles.length > 1);
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     } finally {
       setBusy(false);
     }

@@ -1,5 +1,19 @@
 import type { CourseImportParser } from "../db/course-import.js";
-import { structuredContent } from "./chat-provider.js";
+import {
+  ProviderError,
+  providerFailure,
+  providerResponse,
+  structuredContent,
+  withProviderRetry,
+} from "./chat-provider.js";
+import {
+  CourseImportParseError,
+  DEFAULT_PDF_LIMITS,
+  imageBatches,
+  mergeCoursePreviews,
+  preparePdfSource,
+  type PdfPrepareLimits,
+} from "./pdf-source.js";
 
 const nullableString = { type: ["string", "null"] } as const;
 const nullablePositiveInteger = {
@@ -62,35 +76,20 @@ const instructions = [
   "Exclude headings, personal identifiers, and unrelated text.",
 ].join(" ");
 
-/**
- * The MiMo endpoint accepts bmp/gif/png/jpeg/webp only, so PDF sources are
- * converted to page text here instead of being sent as file input.
- */
-export async function extractPdfText(contentBase64: string): Promise<string> {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const data = Uint8Array.from(Buffer.from(contentBase64, "base64"));
-  const loadingTask = pdfjs.getDocument({ data, useSystemFonts: false });
-  const document = await loadingTask.promise;
-  try {
-    const pages: string[] = [];
-    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
-      const page = await document.getPage(pageNumber);
-      const content = await page.getTextContent();
-      const line = content.items
-        .map((item) => ("str" in item ? item.str : ""))
-        .join(" ")
-        .replace(/\s+/g, " ")
-        .trim();
-      if (line) pages.push(`Page ${pageNumber}: ${line}`);
-      page.cleanup();
-    }
-    return pages.join("\n");
-  } finally {
-    await loadingTask.destroy();
-  }
+type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+const introPart: ContentPart = {
+  type: "text",
+  text: "Extract a course preview for user review. Do not commit anything.",
+};
+
+interface RequestBatch {
+  parts: ContentPart[];
 }
 
-/** Server-only adapter. The source file is sent for one request and is not stored. */
+/** Chosen so a single request stays comfortably inside provider payload caps. */
 export class ChatCompletionsCourseImportParser implements CourseImportParser {
   constructor(
     private readonly config: {
@@ -98,6 +97,7 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
       model: string;
       baseUrl?: string;
       timeoutMs?: number;
+      limits?: PdfPrepareLimits;
     },
     private readonly transport: typeof fetch = fetch,
   ) {}
@@ -105,52 +105,116 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
   async parse(
     input: Parameters<CourseImportParser["parse"]>[0],
   ): Promise<unknown> {
-    const endpoint = `${(this.config.baseUrl ?? "https://api.xiaomimimo.com/v1").replace(/\/$/, "")}/chat/completions`;
-    const parts: Record<string, unknown>[] = [
-      {
-        type: "text",
-        text: "Extract a course preview for user review. Do not commit anything.",
-      },
-    ];
-    if (input.sourceType === "PDF") {
-      const text = await extractPdfText(input.contentBase64);
-      if (!text)
-        throw new Error(
-          "PDF has no extractable text; upload the timetable as an image",
+    const batches = await this.batches(input);
+    const results: unknown[] = [];
+    for (const batch of batches)
+      results.push(await this.request(batch, input.sourceType === "PDF"));
+    return results.length === 1 ? results[0] : mergeCoursePreviews(results);
+  }
+
+  private async batches(
+    input: Parameters<CourseImportParser["parse"]>[0],
+  ): Promise<RequestBatch[]> {
+    const limits = this.config.limits ?? DEFAULT_PDF_LIMITS;
+    if (input.sourceType === "IMAGE") {
+      const payloadBytes = Math.ceil((input.contentBase64.length * 3) / 4);
+      if (payloadBytes > limits.maxImagePayloadBytes)
+        throw new CourseImportParseError(
+          "TOO_LARGE",
+          "课程表图片过大，无法安全解析，请压缩后重试。",
         );
-      parts.push({ type: "text", text: `PDF content:\n${text}` });
-    } else {
-      parts.push({
-        type: "image_url",
-        image_url: {
-          url: `data:${input.mediaType};base64,${input.contentBase64}`,
+      return [
+        {
+          parts: [
+            introPart,
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${input.mediaType};base64,${input.contentBase64}`,
+              },
+            },
+          ],
         },
-      });
+      ];
     }
-    const response = await this.transport(endpoint, {
-      method: "POST",
-      headers: {
-        authorization: ["Bearer", this.config.apiKey].join(" "),
-        "content-type": "application/json",
-      },
-      signal: AbortSignal.timeout(this.config.timeoutMs ?? 300_000),
-      body: JSON.stringify({
-        model: this.config.model,
-        messages: [
-          { role: "system", content: instructions },
-          { role: "user", content: parts },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "course_timetable_import",
-            strict: true,
-            schema,
-          },
+    const prepared = await preparePdfSource(input.contentBase64, limits);
+    const textParts: ContentPart[] = prepared.text
+      ? [{ type: "text", text: `PDF content:\n${prepared.text}` }]
+      : [];
+    const imageGroups = imageBatches(prepared.images);
+    if (!imageGroups.length) return [{ parts: [introPart, ...textParts] }];
+    return [
+      { parts: [introPart, ...textParts, ...toParts(imageGroups[0]!)] },
+      ...imageGroups.slice(1).map((group) => ({
+        parts: [introPart, ...toParts(group)],
+      })),
+    ];
+  }
+
+  private async request(
+    batch: RequestBatch,
+    includeHint: boolean,
+  ): Promise<unknown> {
+    const endpoint = `${(this.config.baseUrl ?? "https://api.xiaomimimo.com/v1").replace(/\/$/, "")}/chat/completions`;
+    const payload = JSON.stringify({
+      model: this.config.model,
+      messages: [
+        {
+          role: "system",
+          content: includeHint
+            ? `${instructions} Pages may be supplied as page text or as page images.`
+            : instructions,
         },
-      }),
+        { role: "user", content: batch.parts },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "course_timetable_import",
+          strict: true,
+          schema,
+        },
+      },
     });
-    if (!response.ok) throw new Error(`Provider HTTP ${response.status}`);
-    return structuredContent(await response.json());
+    return withProviderRetry(async () => {
+      let attempt: Response;
+      try {
+        attempt = await this.transport(endpoint, {
+          method: "POST",
+          headers: {
+            authorization: ["Bearer", this.config.apiKey].join(" "),
+            "content-type": "application/json",
+          },
+          signal: AbortSignal.timeout(this.config.timeoutMs ?? 300_000),
+          body: payload,
+        });
+      } catch (error) {
+        throw providerFailure(error);
+      }
+      const failure = await providerResponse(attempt);
+      if (failure) throw failure;
+      let body: unknown;
+      try {
+        body = await attempt.json();
+      } catch {
+        throw new ProviderError("MALFORMED");
+      }
+      try {
+        return structuredContent(body);
+      } catch {
+        throw new ProviderError("MALFORMED");
+      }
+    }, 2);
   }
 }
+
+function toParts(
+  images: { mediaType: string; base64: string }[],
+): ContentPart[] {
+  return images.map((image) => ({
+    type: "image_url",
+    image_url: { url: `data:${image.mediaType};base64,${image.base64}` },
+  }));
+}
+
+export { CourseImportParseError };

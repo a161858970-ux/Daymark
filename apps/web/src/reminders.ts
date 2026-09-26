@@ -1,5 +1,7 @@
 import type { Item } from "@course-manager/domain";
 import {
+  REMINDER_POLICY_V1,
+  REMINDER_QUIET_HOURS_V1,
   ReminderCoordinator,
   createReminderWindow,
   type QuietHours,
@@ -14,20 +16,22 @@ export const reminderPolicySource = (): string | null =>
   (import.meta.env.VITE_REMINDER_POLICY as string | undefined) ?? null;
 
 /**
- * Production reminder numbers stay product-gated (R-01): the engine only runs
- * when a policy is injected through configuration.
+ * R-01 is fixed as product policy v1, so the engine runs with it by default.
+ * `VITE_REMINDER_POLICY` stays an override for experiments and tests, and a
+ * malformed override falls back to the product policy instead of silently
+ * disabling reminders.
  */
 export function loadReminderPolicy(
   source = reminderPolicySource(),
-): ReminderPolicy | null {
-  if (!source) return null;
+): ReminderPolicy {
+  if (!source) return REMINDER_POLICY_V1;
   try {
     const value = JSON.parse(source) as ReminderPolicy;
     if (!value.version || !value.levels?.NORMAL || !value.levels?.HIGH)
-      return null;
+      return REMINDER_POLICY_V1;
     return value;
   } catch {
-    return null;
+    return REMINDER_POLICY_V1;
   }
 }
 
@@ -40,11 +44,15 @@ export function loadReminderRuntimeConfig(
   source: string | null = (import.meta.env.VITE_REMINDER_QUIET_HOURS as
     string | undefined) ?? null,
 ): ReminderRuntimeConfig {
-  if (!source) return {};
+  if (!source) return { quietHours: REMINDER_QUIET_HOURS_V1 };
   try {
-    return JSON.parse(source) as ReminderRuntimeConfig;
+    const parsed = JSON.parse(source) as ReminderRuntimeConfig;
+    return {
+      ...parsed,
+      quietHours: parsed.quietHours ?? REMINDER_QUIET_HOURS_V1,
+    };
   } catch {
-    return {};
+    return { quietHours: REMINDER_QUIET_HOURS_V1 };
   }
 }
 
@@ -275,10 +283,11 @@ export class ReminderScheduler {
         this.options.policy,
         window,
       );
-      return await this.coordinator.deliverDue(
-        this.options.now?.() ?? new Date().toISOString(),
-        this.options.policy,
-      );
+      const now = this.options.now?.() ?? new Date().toISOString();
+      // Quiet hours gate delivery too: an already-due reminder waits for the
+      // next allowed slot instead of interrupting the night.
+      if (Date.parse(window.nextAllowedTime(now)) > Date.parse(now)) return 0;
+      return await this.coordinator.deliverDue(now, this.options.policy);
     } finally {
       this.running = false;
     }

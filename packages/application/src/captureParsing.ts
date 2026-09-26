@@ -104,3 +104,11 @@ export function preprocessCapture(input: {
     splitCandidates,
   };
 }
+
+/**
+ * R-01: an explicit "提醒我" request defaults the new Item to HIGH; everything
+ * else keeps the ordinary default. The user can still change it afterwards.
+ */
+export function reminderLevelForCapture(rawText: string): "NORMAL" | "HIGH" {
+  return /提醒我|提醒一下我|记得提醒/.test(rawText) ? "HIGH" : "NORMAL";
+}

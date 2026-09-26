@@ -1,46 +1,51 @@
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { ChatCompletionsCourseImportParser } from "./course-import-chat-parser.js";
+import { ProviderError } from "./chat-provider.js";
 
-// Minimal one-page PDF containing "Environment Econ Wed 14:00-15:40 Wk1-13 Room101".
-const pdfFixture =
-  "JVBERi0xLjcKJcK1wrYKJSBXcml0dGVuIGJ5IE11UERGIDEuMjguMgoKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFIvSW5mbzw8L1Byb2R1Y2VyKE11UERGIDEuMjguMik+Pj4+CmVuZG9iagoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0NvdW50IDEvS2lkc1s0IDAgUl0+PgplbmRvYmoKCjMgMCBvYmoKPDwvRm9udDw8L2hlbHYgNSAwIFI+Pj4+CmVuZG9iagoKNCAwIG9iago8PC9UeXBlL1BhZ2UvTWVkaWFCb3hbMCAwIDMwMCAxMjBdL1JvdGF0ZSAwL1Jlc291cmNlcyAzIDAgUi9QYXJlbnQgMiAwIFIvQ29udGVudHNbNiAwIFJdPj4KZW5kb2JqCgo1IDAgb2JqCjw8L1R5cGUvRm9udC9TdWJ0eXBlL1R5cGUxL0Jhc2VGb250L0hlbHZldGljYS9FbmNvZGluZy9XaW5BbnNpRW5jb2Rpbmc+PgplbmRvYmoKCjYgMCBvYmoKPDwvTGVuZ3RoIDExNi9GaWx0ZXIvRmxhdGVEZWNvZGU+PgpzdHJlYW0KeNodjD0KQkEMBvucIjcwP7tZBbEQbOwebPewUN4uFlrYeH6/SJqZCQl96NxJWTDKJrwX7m/aPcfrywqevB5LjdEiDs1ixogt0osJumcxqQ0NxdWL311cbANXcAHn/uH6bw7LPzPScHG69StdOi30A9+RID4KZW5kc3RyZWFtCmVuZG9iagoKeHJlZgowIDcKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDQyIDAwMDAwIG4gCjAwMDAwMDAxMjAgMDAwMDAgbiAKMDAwMDAwMDE3MiAwMDAwMCBuIAowMDAwMDAwMjEzIDAwMDAwIG4gCjAwMDAwMDAzMjAgMDAwMDAgbiAKMDAwMDAwMDQwOSAwMDAwMCBuIAoKdHJhaWxlcgo8PC9TaXplIDcvUm9vdCAxIDAgUi9JRFs8MzU3NDYzQzNBQkMyOEVDMzhCQzJCN0MzQjE3NkMyQjE+PDU5MkM3RjExRDhGMTUzM0ZBMTRBQzA4NzMzRTRERjkwPl0+PgpzdGFydHhyZWYKNTk0CiUlRU9GCg==";
+async function fixture(name: string): Promise<string> {
+  const path = fileURLToPath(
+    new URL(`./__fixtures__/${name}`, import.meta.url),
+  );
+  return (await readFile(path)).toString("base64");
+}
 
-const transportFor = (
-  sent: { value: Record<string, unknown> | null },
-  status = 200,
-) =>
-  (async (_url: RequestInfo | URL, init?: RequestInit) => {
-    sent.value = JSON.parse(String(init?.body)) as Record<string, unknown>;
-    return new Response(
-      JSON.stringify({
-        choices: [
-          {
-            finish_reason: "stop",
-            message: {
-              role: "assistant",
-              content: JSON.stringify({
-                courses: [
-                  {
-                    name: "环境经济学",
-                    instructor: null,
-                    schedules: [],
-                  },
-                ],
-              }),
-            },
-          },
-        ],
-      }),
-      { status },
-    );
-  }) as typeof fetch;
+const successBody = {
+  choices: [
+    {
+      finish_reason: "stop",
+      message: {
+        role: "assistant",
+        content: JSON.stringify({
+          courses: [{ name: "环境经济学", instructor: null, schedules: [] }],
+        }),
+      },
+    },
+  ],
+};
+
+const config = { apiKey: "server-secret", model: "configured-model" };
+
+function recorder(responses: (Response | Error)[]) {
+  const calls: Record<string, unknown>[] = [];
+  let index = 0;
+  const transport = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+    calls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    const next = responses[Math.min(index, responses.length - 1)]!;
+    index += 1;
+    if (next instanceof Error) throw next;
+    return next.clone();
+  }) as unknown as typeof fetch;
+  return { calls, transport };
+}
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status });
 
 it("sends an image through the chat-completions structured output request", async () => {
-  const sent: { value: Record<string, unknown> | null } = { value: null };
-  const parser = new ChatCompletionsCourseImportParser(
-    { apiKey: "server-secret", model: "configured-model" },
-    transportFor(sent),
-  );
+  const { calls, transport } = recorder([json(successBody)]);
+  const parser = new ChatCompletionsCourseImportParser(config, transport);
   await expect(
     parser.parse({
       sourceType: "IMAGE",
@@ -49,47 +54,121 @@ it("sends an image through the chat-completions structured output request", asyn
       contentBase64: Buffer.from("fixture").toString("base64"),
     }),
   ).resolves.toMatchObject({ courses: [{ name: "环境经济学" }] });
-  expect(sent.value).toMatchObject({
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({
     model: "configured-model",
-    messages: [
-      { role: "system" },
-      {
-        role: "user",
-        content: [
-          { type: "text" },
-          {
-            type: "image_url",
-            image_url: {
-              url: expect.stringContaining("data:image/png;base64,"),
-            },
-          },
-        ],
-      },
-    ],
     response_format: {
       type: "json_schema",
       json_schema: { name: "course_timetable_import", strict: true },
     },
   });
-  expect(JSON.stringify(sent.value)).not.toContain("server-secret");
+  const content = JSON.stringify(calls[0]);
+  expect(content).toContain("data:image/png;base64,");
+  expect(content).not.toContain("server-secret");
 });
 
-it("extracts PDF page text instead of sending unsupported file input", async () => {
-  const sent: { value: Record<string, unknown> | null } = { value: null };
+it("keeps text PDFs on the text path", async () => {
+  const { calls, transport } = recorder([json(successBody)]);
+  const parser = new ChatCompletionsCourseImportParser(config, transport);
+  await parser.parse({
+    sourceType: "PDF",
+    fileName: "课程表.pdf",
+    mediaType: "application/pdf",
+    contentBase64: await fixture("text-timetable.pdf"),
+  });
+  expect(calls).toHaveLength(1);
+  const content = JSON.stringify(calls[0]);
+  expect(content).toContain("PDF content:");
+  expect(content).toContain("Environmental Economics");
+  expect(content).not.toContain("data:image/");
+});
+
+it("sends a scanned PDF as bounded page images", async () => {
+  const { calls, transport } = recorder([json(successBody)]);
+  const parser = new ChatCompletionsCourseImportParser(config, transport);
+  await parser.parse({
+    sourceType: "PDF",
+    fileName: "扫描版课程表.pdf",
+    mediaType: "application/pdf",
+    contentBase64: await fixture("scanned-timetable.pdf"),
+  });
+  expect(calls).toHaveLength(1);
+  const content = JSON.stringify(calls[0]);
+  expect(content).toContain("data:image/jpeg;base64,");
+  expect(content).not.toContain("data:application/pdf;base64,");
+  expect(content.match(/data:image\/jpeg/g)).toHaveLength(2);
+  // The original PDF bytes never travel as file input.
+  expect(content).not.toContain("input_file");
+});
+
+it("retries a transient provider failure exactly once and returns one preview", async () => {
+  const { calls, transport } = recorder([
+    json({ error: { message: "upstream" } }, 500),
+    json(successBody),
+  ]);
+  const parser = new ChatCompletionsCourseImportParser(config, transport);
+  await expect(
+    parser.parse({
+      sourceType: "IMAGE",
+      fileName: "课表.png",
+      mediaType: "image/png",
+      contentBase64: Buffer.from("fixture").toString("base64"),
+    }),
+  ).resolves.toMatchObject({ courses: [{ name: "环境经济学" }] });
+  expect(calls).toHaveLength(2);
+});
+
+it("does not retry an authentication failure", async () => {
+  const { calls, transport } = recorder([
+    json({ error: { message: "bad key" } }, 401),
+  ]);
+  const parser = new ChatCompletionsCourseImportParser(config, transport);
+  await expect(
+    parser.parse({
+      sourceType: "IMAGE",
+      fileName: "课表.png",
+      mediaType: "image/png",
+      contentBase64: Buffer.from("fixture").toString("base64"),
+    }),
+  ).rejects.toMatchObject({ name: "ProviderError", kind: "AUTH" });
+  expect(calls).toHaveLength(1);
+});
+
+it("classifies timeouts and malformed responses", async () => {
+  const timeout = recorder([
+    Object.assign(new Error("The operation timed out"), {
+      name: "TimeoutError",
+    }),
+    Object.assign(new Error("The operation timed out"), {
+      name: "TimeoutError",
+    }),
+  ]);
   const parser = new ChatCompletionsCourseImportParser(
-    { apiKey: "server-secret", model: "configured-model" },
-    transportFor(sent),
+    config,
+    timeout.transport,
   );
   await expect(
     parser.parse({
-      sourceType: "PDF",
-      fileName: "课程表.pdf",
-      mediaType: "application/pdf",
-      contentBase64: pdfFixture,
+      sourceType: "IMAGE",
+      fileName: "课表.png",
+      mediaType: "image/png",
+      contentBase64: Buffer.from("fixture").toString("base64"),
     }),
-  ).resolves.toMatchObject({ courses: [{ name: "环境经济学" }] });
-  const content = JSON.stringify(sent.value);
-  expect(content).toContain("Environment Econ");
-  expect(content).not.toContain("input_file");
-  expect(content).not.toContain("application/pdf;base64");
+  ).rejects.toBeInstanceOf(ProviderError);
+  expect(timeout.calls).toHaveLength(2);
+
+  const malformed = recorder([new Response("not json", { status: 200 })]);
+  const strict = new ChatCompletionsCourseImportParser(
+    config,
+    malformed.transport,
+  );
+  await expect(
+    strict.parse({
+      sourceType: "IMAGE",
+      fileName: "课表.png",
+      mediaType: "image/png",
+      contentBase64: Buffer.from("fixture").toString("base64"),
+    }),
+  ).rejects.toMatchObject({ kind: "MALFORMED" });
+  expect(malformed.calls).toHaveLength(1);
 });

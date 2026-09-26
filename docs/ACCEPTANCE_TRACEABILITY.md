@@ -18,7 +18,7 @@
 - **BLOCKED — external configuration**：需要当前环境没有提供的真实服务凭据。
 - **NOT RUN — physical environment**：需要物理设备、系统通知或辅助技术实机。
 
-最终本机 gate 为 **112 passed，1 skipped**（2026-09-26 换机后重新执行）：domain 11、application 6、storage 32、API 30 passed + 1 real PostgreSQL skipped、Web 33。`pnpm build`、`pnpm lint`、`pnpm format:check` 与 `git diff --check` 均通过；Web 与 API health 运行态均为 HTTP 200。Vite 只有主 bundle 约 554 kB 的非阻塞 size warning。
+最终本机 gate 为 **136 passed，1 skipped**（2026-09-26 Release Candidate Hardening）：domain 11、application 17、storage 32、API 40 passed + 1 real PostgreSQL skipped、Web 34。`pnpm build`、`pnpm lint`、`pnpm format:check` 与 `git diff --check` 均通过；Web 与 API health 运行态均为 HTTP 200。Vite 主 bundle 已降为 348.28 kB（react-vendor 218.83 kB 独立分包），size warning 消失。
 
 ## 2. Core Item
 
@@ -90,18 +90,18 @@
 
 ## 8. Reminder
 
-- **T-RM-001 — PASS — automated local / RELEASE GATE R-01**：application/storage acceptance 验证 timed incomplete Item 进入引擎。
-- **T-RM-002 — PASS — automated local / RELEASE GATE R-01**：无时间 Item 不产生自动提醒。
-- **T-RM-003 — PASS — automated local / RELEASE GATE R-01**：test policy 可生成多次提醒。
-- **T-RM-004 — PASS — automated local / RELEASE GATE R-01**：等级变化使旧事件 stale 并重算未来事件。
-- **T-RM-005 — PASS — automated local / RELEASE GATE R-01**：完成后未来提醒停止。
-- **T-RM-006 — PASS — automated local / RELEASE GATE R-01**：删除后未来提醒停止。
-- **T-RM-007 — PASS — automated local / RELEASE GATE R-01**：due date 改动取消旧逻辑 key 并生成新计划。
-- **T-RM-008 — PASS — automated local / RELEASE GATE R-01**：未完成逾期事项继续按可配置 policy 产生 continuation。
-- **T-RM-009 — PASS — automated local / RELEASE GATE R-01**：occurrence 结束后使用独立的低频 continuation rule。
-- **T-RM-010 — PASS — automated local / RELEASE GATE R-01**：start-time rule 只生成一次事件。
+- **T-RM-001 — PASS — automated local（R-01 v1）**：application/storage acceptance 验证 timed incomplete Item 进入引擎。
+- **T-RM-002 — PASS — automated local（R-01 v1）**：无时间 Item 不产生自动提醒。
+- **T-RM-003 — PASS — automated local（R-01 v1）**：test policy 可生成多次提醒。
+- **T-RM-004 — PASS — automated local（R-01 v1）**：等级变化使旧事件 stale 并重算未来事件。
+- **T-RM-005 — PASS — automated local（R-01 v1）**：完成后未来提醒停止。
+- **T-RM-006 — PASS — automated local（R-01 v1）**：删除后未来提醒停止。
+- **T-RM-007 — PASS — automated local（R-01 v1）**：due date 改动取消旧逻辑 key 并生成新计划。
+- **T-RM-008 — PASS — automated local（R-01 v1）**：未完成逾期事项继续按可配置 policy 产生 continuation。
+- **T-RM-009 — PASS — automated local（R-01 v1）**：occurrence 结束后使用独立的低频 continuation rule。
+- **T-RM-010 — PASS — automated local（R-01 v1）**：start-time rule 只生成一次事件。
 
-这些结果由 `packages/application/src/reminders.test.ts`、`packages/storage/src/reminders.test.ts` 和 Item acceptance 提供。生产数值仍是 R-01。
+这些结果由 `packages/application/src/reminders.test.ts`、`packages/application/src/reminderPolicy.test.ts`、`packages/storage/src/reminders.test.ts` 和 Item acceptance 提供。R-01 已固化为产品 v1 policy（`r01-v1`），v1 数值本身也有专门验收。
 
 **交付链路补充（2026-09-26）**：`POST /api/v1/devices`、`POST /api/v1/notifications/claim`、`POST /api/v1/notifications/{id}/delivered`、`POST /api/v1/notifications/cancel` 与 `004_reminder_delivery.sql` 已通过 PGlite 自动测试（注册、跨设备 lease 互斥、完成后的 STALE 取消、按 key 取消与 owner 隔离、401）。Web 侧 `ReminderScheduler` 验证到期交付、consume 不改 Item 状态、完成后停止后续提醒；通知权限缺失时回退应用内提示。真实设备通知与后台执行仍为外部 release gap。
 
@@ -139,6 +139,7 @@
 
 - **T-REC-001 — PASS — automated local**：storage test 在 capture 本地 commit 后关闭/重开 IndexedDB，原文和 outbox 保留。
 - **T-REC-002 — PASS — automated local/simulated**：pending capture recovery 与 provider timeout/malformed tests 验证 RawCapture 保留，恢复处理或继续 unresolved。
+- **扫描版 PDF 导入（ADR-006）— PASS — automated local + VERIFIED REAL**：`apps/api/src/ai/pdf-source.test.ts` 覆盖文本页/栅格页分流、页数与 payload 上限、不可读文件文案；`course-import-provider.test.ts` 覆盖分批与重试；真实 MiMo smoke `pnpm verify:ai --with-import` 返回 `PASS import 37633ms courses=3`。
 - **T-REC-003 — PASS — simulated infrastructure**：`apps/api/src/db/course-import.test.ts` 验证 persisted preview 可由新 service instance 恢复、失败解析不写部分 Course、重试可成功、同文件/学期重复 commit 不复制课程。
 - **T-REC-004 — PASS — automated local**：acceptance test 验证 deferred ambiguity 重启后重新出现，直到用户明确删除或解决。
 - **T-REC-005 — PASS — automated local/simulated**：sync restart test 验证 outbox 重启后继续使用原 mutation identity 并恢复 push/pull。
@@ -150,7 +151,7 @@
 
 ## 15. External release gates
 
-1. **R-01 Reminder numeric policy — RELEASE GATE**：接口可配置，测试只使用明确标注的 fixture 数值。
+1. **R-01 Reminder numeric policy — RESOLVED（2026-09-26）**：产品 v1 policy 已固化（`REMINDER_POLICY_V1`），quiet hours 23:00–08:00，dedup 60min，"提醒我"默认 HIGH；测试夹具数值仍标注为 fixture。
 2. **Platform notification delivery — PARTIALLY IMPLEMENTED / NOT RUN on devices**：device registration、cloud claim/lease、delivery acknowledgement、按 key 取消与浏览器通知适配器已实现（`apps/api/src/db/notifications.test.ts`、`apps/web/src/reminders.test.ts`）；真实设备上的系统通知、后台执行与长时间 lease 生命周期仍未实机执行。
 3. **Real PostgreSQL/Supabase — BLOCKED**：缺少 `REAL_DATABASE_URL`、Supabase project/test user/token。
 4. **Real OpenAI interpretation/import — BLOCKED**：缺少 API key/model；PDF/image source adapter、strict schema 与失败恢复已本地测试。

@@ -79,10 +79,22 @@ function harness(
   return { port, adapter, calls, registered };
 }
 
-it("returns null without an injected policy and rejects malformed JSON", () => {
-  expect(loadReminderPolicy(null)).toBeNull();
-  expect(loadReminderPolicy("{not json")).toBeNull();
-  expect(loadReminderPolicy(JSON.stringify({ version: "v1" }))).toBeNull();
+it("uses the product R-01 policy by default and on a bad override", () => {
+  expect(loadReminderPolicy(null).version).toBe("r01-v1");
+  expect(loadReminderPolicy("{not json").version).toBe("r01-v1");
+  expect(loadReminderPolicy(JSON.stringify({ version: "v1" })).version).toBe(
+    "r01-v1",
+  );
+  const override = loadReminderPolicy(
+    JSON.stringify({
+      version: "experiment-v1",
+      levels: { NORMAL: {}, HIGH: {} },
+      start_offset_ms: 0,
+      max_per_local_day: 3,
+      dedup_window_ms: 1000,
+    }),
+  );
+  expect(override.version).toBe("experiment-v1");
 });
 
 it("claims through the server, acknowledges the delivery and shows it once", async () => {
@@ -276,4 +288,42 @@ it("scheduler delivers due records and stops after completion", async () => {
     ),
   ).resolves.toBe(0);
   expect(track.delivered).toHaveLength(1);
+});
+
+it("holds delivery during quiet hours while still reconciling", async () => {
+  const current: Item = { ...item };
+  const repository = memoryRepository(() => current);
+  const track = fakePort();
+  const scheduler = new ReminderScheduler({
+    repository,
+    policy,
+    delivery: track.port,
+    items: () => [current],
+    now: () => "2026-09-26T16:00:00.000Z",
+  });
+  const quietWindow = {
+    from: "2026-09-26T00:00:00.000Z",
+    to: "2026-09-28T00:00:00.000Z",
+    nextAllowedTime: (instant: string) =>
+      instant >= "2026-09-26T15:00:00.000Z" &&
+      instant < "2026-09-27T00:00:00.000Z"
+        ? "2026-09-27T00:00:00.000Z"
+        : instant,
+    localDayKey: (instant: string) => instant.slice(0, 10),
+  };
+
+  // The record is already due, but quiet hours hold the send.
+  await expect(scheduler.tick(quietWindow)).resolves.toBe(0);
+  expect(track.delivered).toHaveLength(0);
+  const pending = [...repository.records.values()];
+  expect(pending.length).toBeGreaterThan(0);
+  expect(pending.every((record) => record.state === "PENDING")).toBe(true);
+
+  // Once the window opens, the same record is delivered exactly once.
+  const openWindow = {
+    ...quietWindow,
+    nextAllowedTime: (instant: string) => instant,
+  };
+  await expect(scheduler.tick(openWindow)).resolves.toBeGreaterThan(0);
+  expect(track.delivered.length).toBeGreaterThan(0);
 });

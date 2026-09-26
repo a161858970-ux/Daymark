@@ -79,6 +79,7 @@ import {
   loadReminderRuntimeConfig,
   localDeviceId,
 } from "./reminders.js";
+import { toUserMessage } from "./errors.js";
 
 export function App() {
   const [page, setPage] = useState<PrimaryPage>("overview");
@@ -234,7 +235,7 @@ export function App() {
   useEffect(() => {
     let active = true;
     void refresh()
-      .catch((cause: unknown) => setError(String(cause)))
+      .catch((cause: unknown) => setError(toUserMessage(cause)))
       .finally(() => {
         if (active) setInitializing(false);
       });
@@ -252,11 +253,10 @@ export function App() {
     };
   }, []);
 
-  // Reminder delivery: derive the schedule, claim while online, then show a
-  // platform notification. No engine runs unless a policy is injected (R-01).
+  // Reminder delivery: derive the schedule with the product R-01 policy,
+  // claim while online, then show a platform notification.
   useEffect(() => {
     const policy = loadReminderPolicy();
-    if (!policy) return;
     const runtime = loadReminderRuntimeConfig();
     let scheduler: ReminderScheduler | null = null;
     const adapter = new BrowserNotificationAdapter(
@@ -328,7 +328,7 @@ export function App() {
     void courseManager
       .recoverPendingCaptures()
       .then(refresh)
-      .catch((cause: unknown) => setError(String(cause)));
+      .catch((cause: unknown) => setError(toUserMessage(cause)));
     void openActionRequiredIssues().then(setSyncIssues);
   }, []);
   useEffect(
@@ -419,9 +419,9 @@ export function App() {
       void courseManager
         .processClearCapture(raw.id, courseId)
         .then(refresh)
-        .catch((cause: unknown) => setError(String(cause)));
+        .catch((cause: unknown) => setError(toUserMessage(cause)));
     } catch (cause) {
-      setError(`记录未能保存在本机：${String(cause)}`);
+      setError(`记录未能保存在本机：${toUserMessage(cause)}`);
       throw cause;
     }
   }
@@ -488,7 +488,7 @@ export function App() {
         }, motionDuration.completionHold + motionDuration.medium),
       );
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     }
   }
 
@@ -499,7 +499,7 @@ export function App() {
       await refresh();
       markItemEntering(item.id);
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     }
   }
 
@@ -541,7 +541,7 @@ export function App() {
       );
       return true;
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
       return false;
     }
   }
@@ -551,7 +551,7 @@ export function App() {
       setSelectedItem(await courseManager.updateItem(item.id, fields));
       await refresh();
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
       throw cause;
     }
   }
@@ -573,7 +573,7 @@ export function App() {
       await courseManager.addCourseInformation(currentCourseId, content);
       await refresh();
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
       throw cause;
     }
   }
@@ -604,7 +604,7 @@ export function App() {
       await courseManager.updateCourseInformation(id, content);
       await refresh();
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
       throw cause;
     }
   }
@@ -614,7 +614,7 @@ export function App() {
       await courseManager.deleteCourseInformation(id);
       await refresh();
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     }
   }
 
@@ -644,7 +644,7 @@ export function App() {
       await courseManager.deferRawCapture(captureId);
       setDismissedThisLaunch((ids) => new Set(ids).add(captureId));
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     }
   }
 
@@ -653,7 +653,7 @@ export function App() {
       await courseManager.deleteUnresolvedCapture(captureId);
       await refresh();
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     }
   }
 
@@ -1189,7 +1189,7 @@ export function App() {
           key={feedback.id}
           feedback={feedback}
           onDismiss={() => setFeedback(null)}
-          onError={(cause) => setError(String(cause))}
+          onError={(cause) => setError(toUserMessage(cause))}
         />
       )}
       {error && (

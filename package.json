@@ -14,7 +14,8 @@
     "db:migrate": "pnpm build && pnpm --filter @course-manager/api db:migrate",
     "db:seed": "pnpm build && pnpm --filter @course-manager/api db:seed",
     "test:postgres": "pnpm build && node scripts/test-real-postgres.mjs",
-    "verify:live-api": "node scripts/verify-live-api.mjs"
+    "verify:live-api": "node scripts/verify-live-api.mjs",
+    "verify:ai": "pnpm --filter @course-manager/api exec tsx scripts/verify-ai-provider.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

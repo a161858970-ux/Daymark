@@ -4,7 +4,13 @@ export interface ReminderCadence {
   due_leads_ms: number[];
   occurrence_leads_ms: number[];
   overdue_interval_ms: number;
+  /** First continuation point after the occurrence ends; defaults to the interval. */
+  occurrence_after_initial_ms?: number;
   occurrence_after_interval_ms: number;
+  /** Cadence of extra reminders during the local day of the due time. */
+  due_same_day_interval_ms?: number;
+  /** Per-level override of the policy daily budget. */
+  max_per_local_day?: number;
 }
 
 /** Numeric values are supplied by product policy; no production defaults live here. */
@@ -72,6 +78,11 @@ function timestamp(value: string): number {
   return parsed;
 }
 
+function assertPositive(value: number, label: string): void {
+  if (!Number.isFinite(value) || value <= 0)
+    throw new Error(`Reminder ${label} is invalid`);
+}
+
 function validatePolicy(policy: ReminderPolicy): void {
   if (!policy.version.trim())
     throw new Error("Reminder policy version is required");
@@ -100,6 +111,17 @@ function validatePolicy(policy: ReminderPolicy): void {
       )
     )
       throw new Error("Reminder lead time is invalid");
+    if (cadence.due_same_day_interval_ms !== undefined)
+      assertPositive(cadence.due_same_day_interval_ms, "same-day cadence");
+    if (cadence.occurrence_after_initial_ms !== undefined)
+      assertPositive(cadence.occurrence_after_initial_ms, "occurrence start");
+    if (cadence.max_per_local_day !== undefined) {
+      if (
+        !Number.isSafeInteger(cadence.max_per_local_day) ||
+        cadence.max_per_local_day < 1
+      )
+        throw new Error("Reminder daily limit is invalid");
+    }
   }
 }
 
@@ -113,7 +135,7 @@ export function deriveReminderSchedule(
   const from = timestamp(window.from);
   const to = timestamp(window.to);
   if (to <= from) throw new Error("Reminder window must be increasing");
-  const events: ReminderEvent[] = [];
+  const events: { event: ReminderEvent; limit: number }[] = [];
   for (const item of items) {
     if (
       item.deleted_at ||
@@ -122,6 +144,7 @@ export function deriveReminderSchedule(
     )
       continue;
     const cadence = policy.levels[item.reminder_level];
+    const itemLimit = cadence.max_per_local_day ?? policy.max_per_local_day;
     const snapshot = itemReminderSnapshotKey(item);
     const emit = (ruleKey: string, occurrenceKey: string, at: number) => {
       if (at < from || at >= to) return;
@@ -131,13 +154,16 @@ export function deriveReminderSchedule(
         throw new Error("Quiet-hour handler moved a reminder earlier");
       if (adjusted >= to) return;
       events.push({
-        logical_key: `${item.id}:${ruleKey}:${policy.version}:${occurrenceKey}`,
-        item_id: item.id,
-        owner_id: item.owner_id,
-        rule_key: ruleKey,
-        scheduled_for: new Date(adjusted).toISOString(),
-        policy_version: policy.version,
-        item_snapshot_key: snapshot,
+        event: {
+          logical_key: `${item.id}:${ruleKey}:${policy.version}:${occurrenceKey}`,
+          item_id: item.id,
+          owner_id: item.owner_id,
+          rule_key: ruleKey,
+          scheduled_for: new Date(adjusted).toISOString(),
+          policy_version: policy.version,
+          item_snapshot_key: snapshot,
+        },
+        limit: itemLimit,
       });
     };
     const before = (
@@ -151,15 +177,36 @@ export function deriveReminderSchedule(
     const continuation = (
       kind: "due" | "occurrence",
       at: number,
+      initial: number,
       interval: number,
     ) => {
-      const first = Math.max(1, Math.ceil((from - at) / interval));
-      for (let ordinal = first; at + ordinal * interval < to; ordinal++)
-        emit(
-          `${kind}:after:${ordinal}`,
-          new Date(at).toISOString(),
-          at + ordinal * interval,
-        );
+      let scheduled = at + initial;
+      let ordinal = 1;
+      if (scheduled < from) {
+        const steps = Math.ceil((from - scheduled) / interval);
+        scheduled += steps * interval;
+        ordinal += steps;
+      }
+      while (scheduled < to) {
+        emit(`${kind}:after:${ordinal}`, new Date(at).toISOString(), scheduled);
+        scheduled += interval;
+        ordinal += 1;
+        if (ordinal > 10_000) throw new Error("Reminder continuation overflow");
+      }
+    };
+    /** Extra points every cadence interval while still on the due's local day. */
+    const sameDay = (at: number, interval: number) => {
+      const dueDay = window.localDayKey(new Date(at).toISOString());
+      let scheduled = at - interval;
+      let step = 1;
+      while (scheduled >= from) {
+        if (window.localDayKey(new Date(scheduled).toISOString()) !== dueDay)
+          break;
+        emit(`due:same-day:${step}`, new Date(at).toISOString(), scheduled);
+        scheduled -= interval;
+        step += 1;
+        if (step > 1000) throw new Error("Reminder same-day cadence overflow");
+      }
     };
     if (item.start_at) {
       const at = timestamp(item.start_at);
@@ -168,7 +215,14 @@ export function deriveReminderSchedule(
     if (item.due_at) {
       const at = timestamp(item.due_at);
       before("due", at, cadence.due_leads_ms);
-      continuation("due", at, cadence.overdue_interval_ms);
+      if (cadence.due_same_day_interval_ms)
+        sameDay(at, cadence.due_same_day_interval_ms);
+      continuation(
+        "due",
+        at,
+        cadence.overdue_interval_ms,
+        cadence.overdue_interval_ms,
+      );
     }
     const occurrenceStart = item.occurrence_start_at ?? item.occurrence_end_at;
     const occurrenceEnd = item.occurrence_end_at ?? item.occurrence_start_at;
@@ -176,27 +230,54 @@ export function deriveReminderSchedule(
       const start = timestamp(occurrenceStart);
       const end = timestamp(occurrenceEnd);
       before("occurrence", start, cadence.occurrence_leads_ms);
-      continuation("occurrence", end, cadence.occurrence_after_interval_ms);
+      continuation(
+        "occurrence",
+        end,
+        cadence.occurrence_after_initial_ms ??
+          cadence.occurrence_after_interval_ms,
+        cadence.occurrence_after_interval_ms,
+      );
     }
   }
-  events.sort(
-    (a, b) =>
-      a.scheduled_for.localeCompare(b.scheduled_for) ||
-      a.logical_key.localeCompare(b.logical_key),
-  );
-  const result: ReminderEvent[] = [];
-  const perDay = new Map<string, number>();
   const seen = new Set<string>();
-  for (const event of events) {
-    if (seen.has(event.logical_key)) continue;
-    seen.add(event.logical_key);
-    const day = window.localDayKey(event.scheduled_for);
+  const unique = events.filter((entry) => {
+    if (seen.has(entry.event.logical_key)) return false;
+    seen.add(entry.event.logical_key);
+    return true;
+  });
+  // The daily budget is spent per Item: explicit lead times are kept first,
+  // then the nearest cadence/continuation points, so the last hours before a
+  // deadline are never crowded out by earlier filler reminders.
+  const explicit = (ruleKey: string) =>
+    ruleKey.startsWith("due:before") ||
+    ruleKey.startsWith("occurrence:before") ||
+    ruleKey.startsWith("start:");
+  unique.sort(
+    (a, b) =>
+      Number(explicit(b.event.rule_key)) - Number(explicit(a.event.rule_key)) ||
+      (explicit(a.event.rule_key)
+        ? a.event.scheduled_for.localeCompare(b.event.scheduled_for)
+        : b.event.scheduled_for.localeCompare(a.event.scheduled_for)) ||
+      a.event.logical_key.localeCompare(b.event.logical_key),
+  );
+  const kept = new Set<string>();
+  const perDay = new Map<string, number>();
+  for (const entry of unique) {
+    const event = entry.event;
+    const day = `${event.item_id}:${window.localDayKey(event.scheduled_for)}`;
     const count = perDay.get(day) ?? 0;
-    if (count >= policy.max_per_local_day) continue;
+    if (count >= entry.limit) continue;
     perDay.set(day, count + 1);
-    result.push(event);
+    kept.add(event.logical_key);
   }
-  return result;
+  return unique
+    .filter((entry) => kept.has(entry.event.logical_key))
+    .map((entry) => entry.event)
+    .sort(
+      (a, b) =>
+        a.scheduled_for.localeCompare(b.scheduled_for) ||
+        a.logical_key.localeCompare(b.logical_key),
+    );
 }
 
 /** Re-check current Item and policy immediately before delivery or opening detail. */

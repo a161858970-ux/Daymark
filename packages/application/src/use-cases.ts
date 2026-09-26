@@ -20,7 +20,10 @@ import {
   visibleOverviewItems,
 } from "@course-manager/domain";
 import { createItemSchema, updateItemSchema } from "@course-manager/contracts";
-import { preprocessCapture } from "./captureParsing.js";
+import {
+  preprocessCapture,
+  reminderLevelForCapture,
+} from "./captureParsing.js";
 import type { LocalRepository } from "./repository.js";
 
 export interface Runtime {
@@ -200,7 +203,7 @@ export class CourseManager {
       occurrence_start_at: null,
       occurrence_end_at: null,
       due_at: null,
-      reminder_level: "NORMAL",
+      reminder_level: reminderLevelForCapture(capture.raw_text),
       completed_at: null,
       raw_capture_id: capture.id,
       created_at: now,

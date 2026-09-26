@@ -5,6 +5,7 @@ import type {
   CourseImportResolution,
 } from "@course-manager/contracts";
 import type { Semester } from "@course-manager/domain";
+import { toUserMessage } from "./errors.js";
 
 interface Props {
   semester: Semester | null;
@@ -166,7 +167,7 @@ export function CourseImportPanel({
         if (request === requestRef.current) setJob(jobs[0] ?? null);
       })
       .catch((cause: unknown) => {
-        if (request === requestRef.current) setError(String(cause));
+        if (request === requestRef.current) setError(toUserMessage(cause));
       })
       .finally(() => {
         if (request === requestRef.current) setLoading(false);
@@ -186,7 +187,7 @@ export function CourseImportPanel({
         job ? await onRetry(job.id, file) : await onStart(semester.id, file),
       );
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
       if (job) {
         const pending = await onLoadPending(semester.id).catch(() => []);
         setJob(pending.find((value) => value.id === job.id) ?? job);
@@ -203,7 +204,7 @@ export function CourseImportPanel({
     try {
       setJob(await onResolve(job.id, resolution));
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     } finally {
       setLoading(false);
     }
@@ -219,7 +220,7 @@ export function CourseImportPanel({
       setJob(null);
       setSuccess(`已建立 ${result.course_ids.length} 门课程。`);
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     } finally {
       setLoading(false);
     }

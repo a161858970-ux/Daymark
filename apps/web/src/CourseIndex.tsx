@@ -7,6 +7,7 @@ import type {
 import type { Course, Semester, SemesterWeek } from "@course-manager/domain";
 import { CourseImportPanel } from "./CourseImportPanel.js";
 import { SemesterWeekEditor, type WeekFields } from "./SemesterWeekEditor.js";
+import { toUserMessage } from "./errors.js";
 
 interface Props {
   courses: Course[];
@@ -80,7 +81,7 @@ export function CourseIndex({
       setShowCourseForm(false);
       setError(null);
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     }
   }
 
@@ -102,7 +103,7 @@ export function CourseIndex({
       if (found) setCandidate(found);
       else await createCourse(null);
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     }
   }
 
@@ -116,7 +117,7 @@ export function CourseIndex({
       setShowSemesterForm(false);
       setError(null);
     } catch (cause) {
-      setError(String(cause));
+      setError(toUserMessage(cause));
     }
   }
 
