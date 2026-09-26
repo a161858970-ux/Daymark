@@ -27,6 +27,13 @@ import {
   conflictResolutionSchema,
 } from "./db/conflicts.js";
 import { CloudCourseImportManager } from "./db/course-import.js";
+import {
+  CloudNotificationManager,
+  deviceRegistrationSchema,
+  notificationAcknowledgeSchema,
+  notificationCancelSchema,
+  notificationClaimSchema,
+} from "./db/notifications.js";
 
 export interface ServerDependencies {
   cloud: CloudCourseManager;
@@ -35,6 +42,7 @@ export interface ServerDependencies {
   interpretation?: CaptureInterpretationService;
   conflicts?: CloudConflictManager;
   courseImports?: CloudCourseImportManager;
+  notifications?: CloudNotificationManager;
   verifyToken(token: string): Promise<string | null>;
 }
 
@@ -407,6 +415,52 @@ export function buildServer(dependencies?: ServerDependencies) {
             id,
             mutationKey(request.headers["idempotency-key"]),
           ),
+          meta: {},
+        };
+      });
+    }
+    if (dependencies.notifications) {
+      server.post("/api/v1/devices", async (request) => {
+        const ownerId = await owner(request.headers.authorization);
+        return {
+          data: await dependencies.notifications!.registerDevice(
+            ownerId,
+            deviceRegistrationSchema.parse(request.body),
+          ),
+          meta: {},
+        };
+      });
+      server.post("/api/v1/notifications/claim", async (request) => {
+        const ownerId = await owner(request.headers.authorization);
+        return {
+          data: await dependencies.notifications!.claim(
+            ownerId,
+            notificationClaimSchema.parse(request.body),
+          ),
+          meta: {},
+        };
+      });
+      server.post("/api/v1/notifications/:id/delivered", async (request) => {
+        const ownerId = await owner(request.headers.authorization);
+        const id = uuidSchema.parse((request.params as { id: string }).id);
+        const body = notificationAcknowledgeSchema.parse(request.body);
+        await dependencies.notifications!.acknowledge(
+          ownerId,
+          id,
+          body.device_id,
+        );
+        return { data: { delivery_id: id, delivered: true }, meta: {} };
+      });
+      server.post("/api/v1/notifications/cancel", async (request) => {
+        const ownerId = await owner(request.headers.authorization);
+        const body = notificationCancelSchema.parse(request.body);
+        return {
+          data: {
+            canceled: await dependencies.notifications!.cancel(
+              ownerId,
+              body.logical_keys,
+            ),
+          },
           meta: {},
         };
       });

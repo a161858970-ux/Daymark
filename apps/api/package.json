@@ -18,6 +18,7 @@
     "@course-manager/domain": "workspace:*",
     "fastify": "^5.12.5",
     "jose": "^6.2.12",
+    "pdfjs-dist": "^6.3.289",
     "pg": "^8.23.0",
     "zod": "4.6.5"
   },

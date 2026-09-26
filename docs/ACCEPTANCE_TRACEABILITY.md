@@ -1,6 +1,7 @@
 # Acceptance Traceability
 
-**执行日期**：2026-09-24  
+**执行日期**：2026-09-24；换机复验 2026-09-26
+
 **规格基线**：`19_TEST_ACCEPTANCE_SPEC.md`  
 **代码基线**：`eca4c14 Format unresolved acceptance coverage`
 
@@ -17,7 +18,7 @@
 - **BLOCKED — external configuration**：需要当前环境没有提供的真实服务凭据。
 - **NOT RUN — physical environment**：需要物理设备、系统通知或辅助技术实机。
 
-最终本机 gate 为 **97 passed，1 skipped**：domain 11、application 4、storage 32、API 25 passed + 1 real PostgreSQL skipped、Web 25。`pnpm build`、`pnpm lint`、`pnpm format:check` 与 `git diff --check` 均通过；Web 与 API health 运行态均为 HTTP 200。Vite 只有主 bundle 约 554 kB 的非阻塞 size warning。
+最终本机 gate 为 **112 passed，1 skipped**（2026-09-26 换机后重新执行）：domain 11、application 6、storage 32、API 30 passed + 1 real PostgreSQL skipped、Web 33。`pnpm build`、`pnpm lint`、`pnpm format:check` 与 `git diff --check` 均通过；Web 与 API health 运行态均为 HTTP 200。Vite 只有主 bundle 约 554 kB 的非阻塞 size warning。
 
 ## 2. Core Item
 
@@ -100,7 +101,9 @@
 - **T-RM-009 — PASS — automated local / RELEASE GATE R-01**：occurrence 结束后使用独立的低频 continuation rule。
 - **T-RM-010 — PASS — automated local / RELEASE GATE R-01**：start-time rule 只生成一次事件。
 
-这些结果由 `packages/application/src/reminders.test.ts`、`packages/storage/src/reminders.test.ts` 和 Item acceptance 提供。生产数值仍是 R-01；平台通知、后台执行和云端 lease 为外部发布缺口。
+这些结果由 `packages/application/src/reminders.test.ts`、`packages/storage/src/reminders.test.ts` 和 Item acceptance 提供。生产数值仍是 R-01。
+
+**交付链路补充（2026-09-26）**：`POST /api/v1/devices`、`POST /api/v1/notifications/claim`、`POST /api/v1/notifications/{id}/delivered`、`POST /api/v1/notifications/cancel` 与 `004_reminder_delivery.sql` 已通过 PGlite 自动测试（注册、跨设备 lease 互斥、完成后的 STALE 取消、按 key 取消与 owner 隔离、401）。Web 侧 `ReminderScheduler` 验证到期交付、consume 不改 Item 状态、完成后停止后续提醒；通知权限缺失时回退应用内提示。真实设备通知与后台执行仍为外部 release gap。
 
 ## 9. Sync and offline
 
@@ -148,7 +151,7 @@
 ## 15. External release gates
 
 1. **R-01 Reminder numeric policy — RELEASE GATE**：接口可配置，测试只使用明确标注的 fixture 数值。
-2. **Platform notification delivery — NOT IMPLEMENTED/NOT RUN**：device registration、cloud claim/lease、delivery acknowledgement、Windows/Mobile 通知和后台执行。
+2. **Platform notification delivery — PARTIALLY IMPLEMENTED / NOT RUN on devices**：device registration、cloud claim/lease、delivery acknowledgement、按 key 取消与浏览器通知适配器已实现（`apps/api/src/db/notifications.test.ts`、`apps/web/src/reminders.test.ts`）；真实设备上的系统通知、后台执行与长时间 lease 生命周期仍未实机执行。
 3. **Real PostgreSQL/Supabase — BLOCKED**：缺少 `REAL_DATABASE_URL`、Supabase project/test user/token。
 4. **Real OpenAI interpretation/import — BLOCKED**：缺少 API key/model；PDF/image source adapter、strict schema 与失败恢复已本地测试。
 5. **Physical platform/accessibility — NOT RUN**：物理手机、Windows 设备、屏幕阅读器、系统缩放与软键盘。

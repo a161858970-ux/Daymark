@@ -9,7 +9,7 @@ import {
   CaptureInterpretationService,
   type InterpretationProvider,
 } from "./interpretation.js";
-import { OpenAIInterpretationProvider } from "./openai-provider.js";
+import { ChatCompletionsInterpretationProvider } from "./chat-provider.js";
 
 const ownerOne = "11111111-1111-4111-8111-111111111111";
 const ownerTwo = "22222222-2222-4222-8222-222222222222";
@@ -163,27 +163,37 @@ it("interprets only unresolved captures owned by the caller and never creates It
 
 it("sends minimal context through a strict structured response request", async () => {
   let sent: Record<string, unknown> | null = null;
-  const transport = async (_url: RequestInfo | URL, init?: RequestInit) => {
+  let endpoint = "";
+  let headers: Record<string, string> = {};
+  const transport = async (url: RequestInfo | URL, init?: RequestInit) => {
+    endpoint = String(url);
+    headers = Object.fromEntries(
+      Object.entries((init?.headers ?? {}) as Record<string, string>).map(
+        ([key, value]) => [key.toLowerCase(), String(value)],
+      ),
+    );
     sent = JSON.parse(String(init?.body)) as Record<string, unknown>;
     return new Response(
       JSON.stringify({
-        output: [
+        choices: [
           {
-            content: [
-              {
-                type: "output_text",
-                text: JSON.stringify({ classification: "AMBIGUOUS" }),
-              },
-            ],
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content: JSON.stringify({ classification: "AMBIGUOUS" }),
+            },
           },
         ],
       }),
       { status: 200 },
     );
   };
-  const provider = new OpenAIInterpretationProvider(
-    "server-secret",
-    "configured-model",
+  const provider = new ChatCompletionsInterpretationProvider(
+    {
+      apiKey: "server-secret",
+      model: "configured-model",
+      baseUrl: "https://chat.example.test/v1",
+    },
     transport as typeof fetch,
   );
   expect(
@@ -196,10 +206,15 @@ it("sends minimal context through a strict structured response request", async (
       currentDate: "2026-09-22",
     }),
   ).toEqual({ classification: "AMBIGUOUS" });
+  expect(endpoint).toBe("https://chat.example.test/v1/chat/completions");
+  expect(headers.authorization).toMatch(/^Bearer /);
   expect(sent).toMatchObject({
     model: "configured-model",
-    store: false,
-    text: { format: { type: "json_schema", strict: true } },
+    messages: [{ role: "system" }, { role: "user" }],
+    response_format: {
+      type: "json_schema",
+      json_schema: { name: "course_capture_interpretation", strict: true },
+    },
   });
   expect(JSON.stringify(sent)).not.toContain("server-secret");
 });

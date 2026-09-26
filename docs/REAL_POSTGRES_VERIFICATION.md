@@ -20,7 +20,7 @@ $env:DATABASE_URL = "postgres://USER:PASSWORD@HOST:5432/DB?sslmode=require"
 pnpm db:migrate
 ```
 
-`db:migrate` 按文件名执行 `backend/migrations/001_initial.sql`、`002_collection_sync.sql` 与 `003_course_import.sql`，并在 `schema_migrations` 记录已应用文件。重复执行不会重复应用迁移。
+`db:migrate` 按文件名执行 `backend/migrations/001_initial.sql`、`002_collection_sync.sql`、`003_course_import.sql` 与 `004_reminder_delivery.sql`，并在 `schema_migrations` 记录已应用文件。重复执行不会重复应用迁移。
 
 ## 2. 运行隔离的真实 PostgreSQL 集成测试
 

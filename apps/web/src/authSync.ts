@@ -25,6 +25,14 @@ export async function sendSignInLink(email: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Access token for background coordination (reminder claim/ack); null when signed out. */
+export async function currentAccessToken(): Promise<string | null> {
+  if (!authClient) return null;
+  const { data, error } = await authClient.auth.getSession();
+  if (error || !data.session) return null;
+  return data.session.access_token;
+}
+
 export type { CaptureInterpretation } from "@course-manager/contracts";
 
 export async function synchronizeAuthenticatedData(): Promise<string> {

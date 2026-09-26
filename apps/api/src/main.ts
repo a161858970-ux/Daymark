@@ -5,10 +5,39 @@ import { CloudCourseManager, PoolCloudDatabase } from "./db/cloud.js";
 import { CloudSync } from "./db/sync.js";
 import { CloudAcademicManager } from "./db/academic.js";
 import { CaptureInterpretationService } from "./ai/interpretation.js";
-import { OpenAIInterpretationProvider } from "./ai/openai-provider.js";
+import { ChatCompletionsInterpretationProvider } from "./ai/chat-provider.js";
 import { CloudConflictManager } from "./db/conflicts.js";
 import { CloudCourseImportManager } from "./db/course-import.js";
-import { OpenAICourseImportParser } from "./ai/course-import-provider.js";
+import { CloudNotificationManager } from "./db/notifications.js";
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+/** Repo-root .env keeps secrets out of the shell; real environment wins. */
+function loadRootEnvFile(): void {
+  const path = fileURLToPath(new URL("../../../.env", import.meta.url));
+  let contents: string;
+  try {
+    contents = readFileSync(path, "utf8");
+  } catch {
+    return;
+  }
+  for (const line of contents.split(/\r?\n/)) {
+    if (line.trimStart().startsWith("#")) continue;
+    const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+    if (!match) continue;
+    const key = match[1]!;
+    let value = match[2]!.trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"') && value.length > 1) ||
+      (value.startsWith("'") && value.endsWith("'") && value.length > 1)
+    )
+      value = value.slice(1, -1);
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+}
+loadRootEnvFile();
+import { ChatCompletionsCourseImportParser } from "./ai/course-import-chat-parser.js";
 
 const port = Number(process.env.PORT ?? 3100);
 const databaseUrl = process.env.DATABASE_URL;
@@ -19,10 +48,22 @@ const pool = databaseUrl
   ? new pg.Pool({ connectionString: databaseUrl })
   : null;
 const cloudDatabase = pool ? new PoolCloudDatabase(pool) : null;
-const apiKey = process.env.OPENAI_API_KEY;
-const model = process.env.OPENAI_MODEL;
-if (apiKey && !model)
-  throw new Error("OPENAI_MODEL is required when OPENAI_API_KEY is set");
+const apiKey =
+  process.env.AI_API_KEY ??
+  process.env.MIMO_API_KEY ??
+  process.env.OPENAI_API_KEY;
+// Provider is the OpenAI-compatible MiMo endpoint; any other compatible
+// endpoint can be selected with AI_BASE_URL.
+const model =
+  process.env.AI_MODEL ??
+  process.env.MIMO_MODEL ??
+  process.env.OPENAI_MODEL ??
+  "mimo-v2.6-flash";
+const baseUrl =
+  process.env.AI_BASE_URL ??
+  process.env.MIMO_BASE_URL ??
+  "https://api.xiaomimimo.com/v1";
+const providerConfig = apiKey ? { apiKey, model, baseUrl } : null;
 const cloud = cloudDatabase ? new CloudCourseManager(cloudDatabase) : null;
 const academic = cloudDatabase ? new CloudAcademicManager(cloudDatabase) : null;
 const server = buildServer(
@@ -32,15 +73,18 @@ const server = buildServer(
         sync: new CloudSync(cloudDatabase!),
         conflicts: new CloudConflictManager(cloudDatabase!),
         academic: academic!,
+        notifications: new CloudNotificationManager(cloudDatabase!),
         courseImports: new CloudCourseImportManager(
           cloudDatabase!,
-          apiKey && model ? new OpenAICourseImportParser(apiKey, model) : null,
+          providerConfig
+            ? new ChatCompletionsCourseImportParser(providerConfig)
+            : null,
         ),
         interpretation: new CaptureInterpretationService(
           cloud!,
           academic!,
-          apiKey && model
-            ? new OpenAIInterpretationProvider(apiKey, model)
+          providerConfig
+            ? new ChatCompletionsInterpretationProvider(providerConfig)
             : null,
         ),
         verifyToken: createSupabaseVerifier(supabaseUrl),

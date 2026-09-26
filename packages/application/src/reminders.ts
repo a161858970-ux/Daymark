@@ -361,3 +361,85 @@ export class ReminderCoordinator {
     return item;
   }
 }
+
+/** Quiet hours are "HH:MM" local wall-clock bounds; start may be after end (crosses midnight). */
+export interface QuietHours {
+  start: string;
+  end: string;
+}
+
+function quietMinutes(value: string): number {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) throw new Error("Invalid quiet-hour bound");
+  const minutes = Number(match[1]) * 60 + Number(match[2]);
+  if (minutes > 1439) throw new Error("Invalid quiet-hour bound");
+  return minutes;
+}
+
+function localParts(instant: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(instant));
+  const get = (type: string) =>
+    Number(parts.find((part) => part.type === type)!.value);
+  return {
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    minutes: get("hour") * 60 + get("minute"),
+  };
+}
+
+/**
+ * Quiet-hour window: a delivery may be delayed into the next allowed slot but
+ * is never moved earlier. Without configured quiet hours this is identity.
+ */
+export function createReminderWindow(options: {
+  from: string;
+  to: string;
+  timeZone?: string;
+  quietHours?: QuietHours | null;
+}): ReminderWindow {
+  const timeZone =
+    options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const quiet = options.quietHours ?? null;
+  const quietStart = quiet ? quietMinutes(quiet.start) : null;
+  const quietEnd = quiet ? quietMinutes(quiet.end) : null;
+  const suppressed = (minutes: number) => {
+    if (quietStart === null || quietEnd === null || quietStart === quietEnd)
+      return false;
+    return quietStart < quietEnd
+      ? minutes >= quietStart && minutes < quietEnd
+      : minutes >= quietStart || minutes < quietEnd;
+  };
+  return {
+    from: options.from,
+    to: options.to,
+    nextAllowedTime(instant: string): string {
+      if (!quiet) return instant;
+      let allowed = timestamp(instant);
+      const hardStop = allowed + 48 * 60 * 60 * 1000;
+      while (
+        suppressed(
+          localParts(new Date(allowed).toISOString(), timeZone).minutes,
+        )
+      ) {
+        allowed += 60 * 1000;
+        if (allowed > hardStop)
+          throw new Error("Quiet-hour window did not open");
+      }
+      return new Date(allowed).toISOString();
+    },
+    localDayKey(instant: string): string {
+      const parts = localParts(instant, timeZone);
+      const pad = (value: number) => String(value).padStart(2, "0");
+      return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
+    },
+  };
+}

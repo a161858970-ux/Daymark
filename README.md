@@ -22,7 +22,7 @@ pnpm format:check
 
 PostgreSQL 迁移由 `DATABASE_URL` 指定连接后执行 `pnpm db:migrate`。真实 PostgreSQL 隔离测试使用 `REAL_DATABASE_URL` 和 `pnpm test:postgres`；缺少 URL 时该命令会明确失败。开发 seed 使用 `ALLOW_DEVELOPMENT_SEED=1`、`SEED_OWNER_ID` 和 `pnpm db:seed`。真实认证 API 的只读 smoke check 使用 `pnpm verify:live-api`。完整步骤见 [`docs/REAL_POSTGRES_VERIFICATION.md`](docs/REAL_POSTGRES_VERIFICATION.md)。
 
-AI 解释和 PDF/图片课程导入解析只在已配置认证、数据库、`OPENAI_API_KEY` 与 `OPENAI_MODEL` 的 API 上调用 provider。导入先生成可恢复预览，要求用户处理跨学期同名候选，再原子提交；原始文件字节不持久化。未设置外部服务时，确定性解析、手动确认、手工课程和手工 CourseSchedule 仍可使用。环境变量示例见 `.env.example`。
+AI 解释和 PDF/图片课程导入解析只在已配置认证、数据库与 `AI_API_KEY` 的 API 上调用 provider。provider 使用 OpenAI 兼容的 Chat Completions 接口，默认 `AI_BASE_URL=https://api.xiaomimimo.com/v1`、`AI_MODEL=mimo-v2.6-flash`（MiMo）；PDF 源在服务端提取页面文字后送模型，图片源按 base64 图片输入。导入先生成可恢复预览，要求用户处理跨学期同名候选，再原子提交；原始文件字节不持久化。未设置外部服务时，确定性解析、手动确认、手工课程和手工 CourseSchedule 仍可使用。环境变量示例见 `.env.example`。
 
 ## 目录
 
@@ -48,3 +48,5 @@ AI 解释和 PDF/图片课程导入解析只在已配置认证、数据库、`OP
 同步冲突支持本机值、已同步值和显式值；远端已删除对象不能经冲突接口任意恢复。CourseSchedule 与 SemesterWeek 使用单 command、collection version、替换前快照、单事务与单 envelope 的整组同步。永久拒绝的 mutation 进入可检查的 ACTION_REQUIRED 流程，用户可重交当前内容或明确采用已同步状态，决定会保留 provenance。当前 A–K 协议场景已在两个独立 Dexie 数据库 + Fastify + PGlite 中通过；旧 IndexedDB v5 → v6 升级演练已本地通过。真实 PostgreSQL/Supabase 与物理设备生命周期仍待外部环境验证。
 
 当前本地解析器只覆盖安全的确定性子集；AI 解释需要在线账号、服务端密钥和用户确认，尚未在真实模型上验收。课程导入的 job/preview/duplicate decision/atomic commit/recovery 已实现，真实 PDF/图片识别仍需要同一外部 provider 配置。提醒计划引擎已有纯逻辑和本地缓存，生产数字策略仍是 R-01 gate，尚未接通设备通知/云端 lease。全局本地关键词搜索已实现，并直接定位同一 Item、Course 或 CourseInformation。
+
+提醒交付链路已接通：本地 ReminderEngine 从 Item 时间与 `ReminderPolicy` 派生计划，在线时先向 `POST /api/v1/notifications/claim` 申请跨设备 lease，避免手机与 Windows 重复提醒，发送后经 `POST /api/v1/notifications/{id}/delivered` 确认，设备通过 `POST /api/v1/devices` 注册；完成、删除与改期会在下一次 reconcile 中取消对应逻辑提醒。离线或未登录时直接本地交付，保证提醒不丢。浏览器 Notification 作为 Windows/移动 Web 的通知适配器，无权限时回退为应用内提示；通知点击打开当前 Item 详情（不读取旧快照）并消费该次通知。生产提醒数值仍由 `VITE_REMINDER_POLICY` 注入，R-01 未定时引擎不启动。

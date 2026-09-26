@@ -99,8 +99,9 @@
 
 ### Not implemented / release blocker
 
-- 云端 device registration、notification claim/lease、delivery acknowledgement、Windows/Mobile 通知和后台执行未接入。
-- R-01 生产数值未决；生产提醒不能 release-complete。
+- 云端 device registration、notification claim/lease、delivery acknowledgement 与浏览器通知适配器已于 2026-09-26 接入（`004_reminder_delivery.sql`、`apps/api/src/db/notifications.ts`、`apps/web/src/reminders.ts`），并有 PGlite 与 Web 自动测试。
+- 真实设备上的系统通知、后台执行与长周期 lease 生命周期仍未实机验收。
+- R-01 生产数值未决；未注入 `VITE_REMINDER_POLICY` 时引擎不启动，生产提醒不能 release-complete。
 
 ## 7. Phase 6 — Offline / Sync / Conflict
 
@@ -249,8 +250,8 @@
 
 ### 9.2 Final local gate
 
-- `pnpm test`：**97 passed，1 skipped**。
-  - domain：11 passed；application：4 passed；storage：32 passed；API：25 passed + 1 real PostgreSQL skipped；Web：25 passed。
+- `pnpm test`：**112 passed，1 skipped**（2026-09-26 换机后重新执行）。
+  - domain：11 passed；application：6 passed；storage：32 passed；API：30 passed + 1 real PostgreSQL skipped；Web：33 passed。
 - `pnpm build`：PASS；Vite 主 bundle 约 554 kB，只有非阻塞 size warning。
 - `pnpm lint`、`pnpm format:check`、`git diff --check`：PASS。
 - 运行态检查：Web `http://127.0.0.1:5173/` HTTP 200；API `/api/v1/health` HTTP 200 / `status=ok`。
@@ -273,6 +274,9 @@
 - `apps/api/src/db/collection-sync.test.ts`：collection/association/academic concurrency。
 - `apps/api/src/db/multi-device.test.ts`：A–I/K 与 `T-SYNC-005..008` exact acceptance。
 - `apps/api/src/db/course-import.test.ts`：Course Import preview/recovery/duplicate decision/atomic commit/idempotency。
+- `apps/api/src/db/notifications.test.ts`：device registration、跨设备 claim/lease、delivery ack、完成后的 stale 取消与 owner 隔离。
+- `apps/api/src/ai/*.test.ts`：MiMo Chat Completions 结构化输出与 PDF 页文字提取。
+- `apps/web/src/reminders.test.ts`：策略注入、lease/离线交付、ack、取消、通知点击打开当前 Item、权限缺失回退与调度器完成停止。
 - `apps/api/src/db/resource-coverage.test.ts`：正式 REST 资源覆盖。
 - `apps/api/src/db/real-postgres.integration.test.ts`：真实 PostgreSQL gate；当前 skipped。
 - `apps/web/src/*.test.tsx` 与 `motion.test.ts`：导航、Course/Item 层级、Quick Capture 单控件 identity、Detail surface/mobile modal、删除/恢复 motion class、Calendar range/day/position semantics、Search 分组、attention/account 状态、transient notice、reduced-motion timing、Conflict 与 SyncRepair 安全展示。
@@ -280,7 +284,7 @@
 ## 11. Known limitations and release blockers
 
 1. **External sync validation**：真实 PostgreSQL/Supabase/双浏览器尚未执行。
-2. **Reminder release**：R-01、云端 lease、平台通知和后台能力未完成。
+2. **Reminder release**：R-01 未定；云端 lease/ack 与浏览器通知适配器已完成，真实设备通知、后台执行未实机验收。
 3. **AI release**：真实 interpretation 和 PDF/image import provider 未验收，完整时间语义仍走保守确认。
 4. **Physical validation**：物理设备、两个真实 browser profile、屏幕阅读器、系统缩放和移动软键盘未实机验证。
 5. **Bundle**：Web 主 bundle 约 554 kB，构建通过但有 Vite size warning；可在发布优化中做按功能拆分。
@@ -289,6 +293,7 @@
 
 - 没有发现新的产品语义偏差。
 - 平台技术选择差异沿用 ADR-001，来自交接允许的 React/Vite、Dexie、Fastify/PostgreSQL 方向。
+- AI provider 由 OpenAI Responses 改为用户指定的 MiMo Chat Completions（`AI_BASE_URL`/`AI_MODEL` 可配置），属于 provider 实现替换：确定性优先、严格 schema、失败不建正式对象等产品语义不变；PDF 源改为服务端页文字提取，因为该端点不接受 file 输入。
 - R-01 保持未决；没有以开发默认值冒充生产政策。
 
 ## 13. Next gate

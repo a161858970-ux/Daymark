@@ -22,7 +22,7 @@ import type {
   Semester,
   SemesterWeek,
 } from "@course-manager/domain";
-import { courseManager } from "./services.js";
+import { courseManager, localRepository } from "./services.js";
 import { ItemList } from "./ItemList.js";
 import { ItemDetail, type EditableItemFields } from "./ItemDetail.js";
 import { QuickCapture } from "./QuickCapture.js";
@@ -31,6 +31,7 @@ import { PendingCapture } from "./PendingCapture.js";
 import {
   authClient,
   abandonActionRequiredIssue,
+  currentAccessToken,
   openActionRequiredIssues,
   requestCaptureInterpretation,
   resolveSyncConflict,
@@ -69,6 +70,15 @@ import {
   type FeedbackNotice,
 } from "./TransientNotice.js";
 import { motionDuration } from "./motion.js";
+import {
+  BrowserNotificationAdapter,
+  ReminderScheduler,
+  WebReminderDeliveryPort,
+  createAppReminderWindow,
+  loadReminderPolicy,
+  loadReminderRuntimeConfig,
+  localDeviceId,
+} from "./reminders.js";
 
 export function App() {
   const [page, setPage] = useState<PrimaryPage>("overview");
@@ -140,6 +150,11 @@ export function App() {
   const deletionTimersRef = useRef<Map<string, number>>(new Map());
   const enteringTimersRef = useRef<Map<string, number>>(new Map());
   const feedbackIdRef = useRef(0);
+  const allItemsRef = useRef<Item[]>([]);
+  allItemsRef.current = allItems;
+  const openItemRef = useRef<(item: Item) => void>(() => {});
+  openItemRef.current = openItem;
+  const reminderTickRef = useRef<(() => Promise<number>) | null>(null);
 
   const refresh = useCallback(async () => {
     const now = new Date().toISOString();
@@ -211,6 +226,9 @@ export function App() {
         else if (next) setSelectedItem(next);
       }
     }
+    // Completion, deletion and time edits land here, so stale reminder keys
+    // are canceled promptly instead of waiting for the interval.
+    void reminderTickRef.current?.();
   }, [currentCourseId, selectedItem?.id, selectedSemesterId]);
 
   useEffect(() => {
@@ -231,6 +249,76 @@ export function App() {
     return () => {
       window.removeEventListener("online", update);
       window.removeEventListener("offline", update);
+    };
+  }, []);
+
+  // Reminder delivery: derive the schedule, claim while online, then show a
+  // platform notification. No engine runs unless a policy is injected (R-01).
+  useEffect(() => {
+    const policy = loadReminderPolicy();
+    if (!policy) return;
+    const runtime = loadReminderRuntimeConfig();
+    let scheduler: ReminderScheduler | null = null;
+    const adapter = new BrowserNotificationAdapter(
+      (item, logicalKey) => {
+        void scheduler?.consume(logicalKey);
+        openItemRef.current(item);
+      },
+      (title) =>
+        showFeedback({
+          message: `提醒：${title}`,
+          duration: motionDuration.feedback,
+        }),
+    );
+    adapter.armPermissionRequest();
+    let registered = false;
+    const delivery = new WebReminderDeliveryPort(adapter, {
+      deviceId: localDeviceId,
+      getItem: (itemId) => localRepository.getItem(itemId),
+      accessToken: currentAccessToken,
+      registerDevice: async (platform) => {
+        if (registered) return;
+        const token = await currentAccessToken();
+        if (!token) return;
+        registered = true;
+        await fetch("/api/v1/devices", {
+          method: "POST",
+          headers: {
+            authorization: ["Bearer", token].join(" "),
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ device_id: localDeviceId(), platform }),
+        }).catch(() => undefined);
+      },
+    });
+    scheduler = new ReminderScheduler({
+      repository: localRepository,
+      policy,
+      delivery,
+      items: () => allItemsRef.current,
+    });
+    const engine = scheduler;
+    const windowFor = () =>
+      createAppReminderWindow(
+        new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
+        new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        runtime,
+      );
+    const tick = () => engine.tick(windowFor());
+    reminderTickRef.current = tick;
+    void tick().catch(() => undefined);
+    const interval = window.setInterval(
+      () => void tick().catch(() => undefined),
+      15_000,
+    );
+    const onVisible = () => {
+      if (!document.hidden) void tick().catch(() => undefined);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      reminderTickRef.current = null;
     };
   }, []);
   useEffect(() => {

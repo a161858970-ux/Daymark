@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Item } from "@course-manager/domain";
 import {
+  createReminderWindow,
   deriveReminderSchedule,
   reminderIsCurrent,
   reminderMayDeliver,
@@ -200,5 +201,42 @@ describe("configurable reminder derivation", () => {
         limited,
       ),
     ).toBe(false);
+  });
+});
+
+describe("createReminderWindow", () => {
+  const timeZone = "Asia/Shanghai";
+
+  it("is identity when no quiet hours are configured", () => {
+    const identity = createReminderWindow({
+      from: "2026-09-26T00:00:00.000Z",
+      to: "2026-09-28T00:00:00.000Z",
+      timeZone,
+    });
+    expect(identity.nextAllowedTime("2026-09-26T15:30:00.000Z")).toBe(
+      "2026-09-26T15:30:00.000Z",
+    );
+    expect(identity.localDayKey("2026-09-26T16:00:00.000Z")).toBe("2026-09-27");
+  });
+
+  it("delays suppressed deliveries to the next allowed slot and never earlier", () => {
+    const windowWithQuiet = createReminderWindow({
+      from: "2026-09-26T00:00:00.000Z",
+      to: "2026-09-28T00:00:00.000Z",
+      timeZone,
+      quietHours: { start: "23:00", end: "07:00" },
+    });
+    // 15:30Z = 23:30 in Shanghai, inside quiet hours.
+    expect(windowWithQuiet.nextAllowedTime("2026-09-26T15:30:00.000Z")).toBe(
+      "2026-09-26T23:00:00.000Z",
+    );
+    // 00:00Z = 08:00 in Shanghai, already allowed.
+    expect(windowWithQuiet.nextAllowedTime("2026-09-26T00:00:00.000Z")).toBe(
+      "2026-09-26T00:00:00.000Z",
+    );
+    // A delivery inside quiet hours is delayed, never pulled forward.
+    expect(
+      Date.parse(windowWithQuiet.nextAllowedTime("2026-09-26T15:30:00.000Z")),
+    ).toBeGreaterThan(Date.parse("2026-09-26T15:30:00.000Z"));
   });
 });

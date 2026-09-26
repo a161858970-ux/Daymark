@@ -37,13 +37,13 @@
 
 ## 2. 已有自动测试证据
 
-当前完整套件在本轮最终 gate 重新执行：**97 项通过，1 项真实 PostgreSQL 测试因缺少 URL 跳过**。
+当前完整套件在换机后的 gate 重新执行：**112 项通过，1 项真实 PostgreSQL 测试因缺少 URL 跳过**。
 
 - domain：11 passed；
-- application：4 passed；
+- application：6 passed；
 - storage：32 passed；
-- API：25 passed，1 skipped；
-- Web：25 passed。
+- API：30 passed，1 skipped；
+- Web：33 passed。
 
 Phase 6 的自动证据包括：
 
@@ -79,7 +79,7 @@ Phase 6 的自动证据包括：
 
 ### 发布
 
-- Reminder 云端 device registration、claim/lease、delivery acknowledgement 和平台通知；R-01 生产提醒数值仍是 release gate。
+- Reminder 生产数值（R-01）与真实设备上的通知实机验收；device registration、claim/lease、delivery acknowledgement 与浏览器通知适配器已实现并通过自动测试。
 - 真实 AI interpretation/import provider、完整自然语言时间理解。
 - 物理手机、Windows 设备、屏幕阅读器、系统缩放与移动软键盘验收。
 
@@ -99,7 +99,7 @@ Phase 6 的自动证据包括：
 
 1. **EXTERNAL CONFIGURATION REQUIRED**：真实 PostgreSQL 连接与 Supabase 项目/测试用户/token 缺失，无法产出真实基础设施证据。
 2. **ENVIRONMENT VERIFICATION REQUIRED**：尚未在两个独立浏览器 profile 或物理设备执行 A–K 的网络/生命周期验收。
-3. **PRODUCT RELEASE GATE**：R-01 numeric Reminder Policy 尚未确定；平台 notification/lease 尚未接通。
+3. **PRODUCT RELEASE GATE**：R-01 numeric Reminder Policy 尚未确定（未注入时引擎不启动）；notification lease/ack 已在 API 与 Web 接通，真实设备上的平台通知、后台执行仍待实机验收。
 4. **EXTERNAL AI VERIFICATION REQUIRED**：真实 OpenAI interpretation 与 PDF/image import 尚未执行。
 5. **PHYSICAL ACCESSIBILITY VERIFICATION REQUIRED**：屏幕阅读器、系统缩放与移动软键盘尚未实机执行。
 
@@ -142,7 +142,7 @@ Phase 6 的自动证据包括：
 
 - **现象**：普通 `pnpm test` 显示 1 skipped，而 `pnpm test:postgres` 在同一机器直接失败。**原因**：前者允许缺少 `REAL_DATABASE_URL` 时跳过真实 PostgreSQL 文件，后者是显式外部 gate。**解决**：本地回归使用 `pnpm test`；只在提供可丢弃真实数据库后运行 `pnpm test:postgres`，不得把 skipped 写成真实 PASS。
 - **现象**：当前环境直接执行 `pnpm exec prettier ...` 报找不到命令。**原因**：本机 pnpm command shim 没有通过该调用解析 root dev binary。**解决**：使用已验证的项目脚本 `pnpm format` 或 `pnpm format:check`。
-- **现象**：旧验证文档只列两份 migration。**原因**：Course Import 后新增 `003_course_import.sql`，历史说明未同步。**解决**：文档已修正；真实数据库必须依次应用 `001_initial.sql`、`002_collection_sync.sql`、`003_course_import.sql`。
+- **现象**：旧验证文档只列两份 migration。**原因**：Course Import 后新增 `003_course_import.sql`，历史说明未同步。**解决**：文档已修正；真实数据库必须依次应用 `001_initial.sql`、`002_collection_sync.sql`、`003_course_import.sql`、`004_reminder_delivery.sql`。
 - **现象**：无外部配置时 API 只有 health，Course Import 不能上传解析。**原因**：认证业务路由要求同时配置 `DATABASE_URL` 与 `SUPABASE_URL`，provider 另需 OpenAI key/model。**解决**：本地继续使用 IndexedDB、确定性解析和手工 Course/CourseSchedule；外部 lane 按 `docs/REAL_POSTGRES_VERIFICATION.md` 配置。
 - 仓库当前没有 Git remote，结项没有 push。新增 remote 或发布目标前先由总控确认。
 
@@ -152,3 +152,12 @@ Phase 6 的自动证据包括：
 - **需要外部配置**：可丢弃的真实 PostgreSQL、Supabase project/test user/token、OpenAI key/model。
 - **需要实机资源**：Mobile/Windows 设备、两个独立 browser profile、屏幕阅读器、系统缩放与移动软键盘环境。
 - 当前未发现 P0 规格冲突、未提交有效代码、调试残留、个人绝对路径或误跟踪密钥。
+
+## 8. 换机后本轮新增（2026-09-26）
+
+- **AI provider 换为 MiMo（不调用 GPT）**：`apps/api/src/ai/chat-provider.ts` 与 `course-import-chat-parser.ts` 改用 OpenAI 兼容的 Chat Completions 接口，默认 `AI_BASE_URL=https://api.xiaomimimo.com/v1`、`AI_MODEL=mimo-v2.6-flash`；旧 `openai-provider.ts` / `course-import-provider.ts`（Responses 接口）已删除。环境变量 `AI_API_KEY`/`AI_MODEL`/`AI_BASE_URL`，并兼容旧名 `MIMO_*` / `OPENAI_*`。解释与导入均使用 strict `response_format: json_schema`，已对真实 endpoint 各跑通一次（解释约 40 s，图片导入约 36 s）。
+- **PDF 导入改为服务端提取页文字**：MiMo 只接受 bmp/gif/png/jpeg/webp，`file` 输入返回 400；因此 PDF 用 `pdfjs-dist` 提取页面文本后随 prompt 发送，提取不到文字时明确报错，不再伪装成功。图片仍走 base64 `image_url`。
+- **Reminder delivery engineering**：新增 `backend/migrations/004_reminder_delivery.sql`（`devices` 与 `notification_deliveries` 增列：`logical_key`、`state`、lease、ack、cancel 等），`apps/api/src/db/notifications.ts` 提供 device registration、跨设备 claim/lease、delivery acknowledgement 与按 key 取消，服务端 claim 自带 stale guard（完成/删除/静音 → CANCELED）；新增路由 `POST /api/v1/devices`、`POST /api/v1/notifications/claim`、`POST /api/v1/notifications/{id}/delivered`、`POST /api/v1/notifications/cancel`。
+- **Web 交付实现**：`apps/web/src/reminders.ts` 提供 `BrowserNotificationAdapter`（平台通知、点击打开当前 Item 并消费该次通知、无权限回退应用内提示、首次手势申请权限）、`WebReminderDeliveryPort`（在线走服务端 lease + ack，离线/未登录本地交付）、`ReminderScheduler`（reconcile + deliverDue，防重入）；`App.tsx` 在注入策略后启动，15 s 轮询、页面可见与每次 `refresh()` 后触发，完成/删除/改期的取消因此立即生效。
+- **新增自动测试**：`apps/api/src/db/notifications.test.ts`（4）、`apps/web/src/reminders.test.ts`（8）、`packages/application/src/reminders.test.ts` 的 `createReminderWindow`（2）；总数 97 → 112 passed + 1 skipped。
+- **提醒策略仍由配置注入**：`VITE_REMINDER_POLICY`（可选 `VITE_REMINDER_QUIET_HOURS`）未设置时引擎不启动；仓库内没有生产数值，R-01 仍是发布 gate。
