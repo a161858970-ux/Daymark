@@ -20,6 +20,9 @@ it("keeps product copy, translates engineering messages and hides internals", ()
   expect(toUserMessage(new Error("AI_UNAVAILABLE"))).toBe(
     "智能整理暂时不可用，请稍后重试。",
   );
+  expect(toUserMessage(new Error("RATE_LIMITED"))).toBe(
+    "请求过于频繁，请稍后重试。",
+  );
   expect(toUserMessage(new Error("If-Match row version is required"))).toBe(
     "这条内容已在其他设备更新，请刷新后重试。",
   );

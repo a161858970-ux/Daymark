@@ -16,7 +16,7 @@ Phase 7A–7H 已把原工程基线收敛为统一视觉、响应式和动效系
 - 未配置认证/database/provider 时 surface 明确显示仅本机限制，并保留手工创建 Course/CourseSchedule 的可用路径；不会伪造导入成功。
 - Desktop 浏览器已验证 Course index → 展开 import → semester/source/review 文案 → 收起。390×844 下 panel 纵向堆叠、无水平溢出，面板宽约 336px，可见按钮与 file input 命中区约 44px。
 - `apps/web/src/CourseImportPanel.test.tsx` 验证 review-first flow 与 duplicate decision；`apps/api/src/db/course-import.test.ts` 验证 preview checkpoint、失败重试、owner isolation、明确 duplicate decision、atomic commit 和相同 source 去重。
-- 真实 OpenAI file/image provider 没有外部 key/model，状态为 BLOCKED；本地 UI、API/PGlite 与 provider payload contract 已验证。
+- 真实 provider 为 MiMo（`mimo-v2.6-flash`，OpenAI 兼容 Chat Completions）：interpretation 与 scanned-PDF/image import smoke 已 PASS（`pnpm verify:ai` / `--with-import`）；本地 UI、API/PGlite 与 payload contract 已验证。
 
 ## Phase 7 progress — 2026-09-24
 
@@ -274,7 +274,7 @@ Phase 7A–7H 已把原工程基线收敛为统一视觉、响应式和动效系
 
 - **Current implementation**：Item Detail/Edit 可查看并设置 OFF/NORMAL/HIGH；无全局 notification settings。
 - **Spec requirements**：提醒附属于已有 Item；不做自动规划；生产 numeric policy 保持 release gate。
-- **Missing**：平台通知权限/可用性状态、quiet hours 的用户设置 UI 尚未实现（quiet hours 当前按产品 v1 默认 23:00–08:00 生效）；R-01 已于 2026-09-26 固化为产品 v1 policy。
+- **规格判定（2026-09-26，不作为 feature gap）**：复核 `06_REMINDER_POLICY` §12、`17_SYNC_NOTIFICATION_ENGINEERING` §17、`产品真相基线` §62（“用户无需管理这些延后细节”）与 `11/13/19` —— 规格只要求尊重设备安静时段与平台通知能力，**没有**要求用户可设置 quiet hours 或通知偏好。因此 quiet hours 使用 R-01 v1 产品默认 23:00–08:00，通知权限走平台原生流程（手势申请 + 无权限回退应用内提示）；用户级自定义列为未来 enhancement，本轮不新增 UI。R-01 已于 2026-09-26 固化为产品 v1 policy。
 - **Visually incorrect**：提醒等级只是普通 select/文本，没有解释语义。
 - **Interactionally incorrect**：无法区分“Item 关闭提醒”和“系统通知不可用”。
 - **Responsive issue**：详情内字段可共享；未来设置 surface 需适配 desktop/mobile。

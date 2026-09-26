@@ -3,7 +3,7 @@
 **执行日期**：2026-09-24；换机复验 2026-09-26
 
 **规格基线**：`19_TEST_ACCEPTANCE_SPEC.md`  
-**代码基线**：`eca4c14 Format unresolved acceptance coverage`
+**代码基线**：`PENDING_BASELINE`（Final Release Gate Preparation 的代码提交）
 
 ## 1. Result
 
@@ -18,7 +18,7 @@
 - **BLOCKED — external configuration**：需要当前环境没有提供的真实服务凭据。
 - **NOT RUN — physical environment**：需要物理设备、系统通知或辅助技术实机。
 
-最终本机 gate 为 **136 passed，1 skipped**（2026-09-26 Release Candidate Hardening）：domain 11、application 17、storage 32、API 40 passed + 1 real PostgreSQL skipped、Web 34。`pnpm build`、`pnpm lint`、`pnpm format:check` 与 `git diff --check` 均通过；Web 与 API health 运行态均为 HTTP 200。Vite 主 bundle 已降为 348.28 kB（react-vendor 218.83 kB 独立分包），size warning 消失。
+最终本机 gate 为 **144 passed，1 skipped**（2026-09-26 Release Candidate Hardening）：domain 11、application 17、storage 32、API 40 passed + 1 real PostgreSQL skipped、Web 34。`pnpm build`、`pnpm lint`、`pnpm format:check` 与 `git diff --check` 均通过；Web 与 API health 运行态均为 HTTP 200。Vite 主 bundle 已降为 348.28 kB（react-vendor 218.83 kB 独立分包），size warning 消失。
 
 ## 2. Core Item
 
@@ -86,7 +86,7 @@
 - **T-AI-009 — PASS — automated local**：storage split test 验证一个 RawCapture、多个 RawCaptureOutput，重复处理不复制输出。
 - **T-AI-010 — PASS — automated local**：acceptance/storage tests 验证显式删除 unresolved RawCapture 后不再出现且不创建 Item。
 
-真实 OpenAI provider 调用为 **BLOCKED — external configuration**。本地 acceptance 验证的是 deterministic boundary、严格 schema 和失败安全，不把模拟 provider 写成真实模型通过。
+真实 provider 为 **MiMo `mimo-v2.6-flash`**：`pnpm verify:ai` → `PASS interpretation 28240ms`、`pnpm verify:ai --with-import` → `PASS import 37633ms courses=3`（含扫描 PDF 栅格化路径），状态 **VERIFIED REAL**。本地 acceptance 仍独立验证 deterministic boundary、严格 schema 与失败安全；完整自然语言时间理解继续走保守确认路径，生产长期稳定性待持续观察。
 
 ## 8. Reminder
 
@@ -149,12 +149,19 @@
 - **PASS — manual browser + automated structure**：360px 可见操作目标约 44px；完成状态同时有勾选、删除线和文字；Windows 核心操作可键盘到达；focus-visible、Escape 返回焦点、Mobile modal/Tab loop 与 reduced-motion 均验证。
 - **NOT RUN — physical environment**：物理屏幕阅读器、Windows 系统缩放和移动软键盘未执行。浏览器 landmark/ARIA 检查不能替代这些实机项目。
 
+## 14.5 Security limits（AI endpoint rate limit）
+
+- **`RATE_LIMITED` — PASS — automated local**：`apps/api/src/rateLimit.test.ts` 覆盖边界（第 N 次允许、N+1 拒绝）、窗口过期恢复、per-owner 隔离、`Retry-After` 随窗口递减、`AI_RATE_LIMIT_PER_OWNER`/`AI_RATE_LIMIT_WINDOW_MS` 默认与非法值回落。
+- **解释端点限流 — PASS — automated local**：`apps/api/src/ai/interpretation-rate-limit.test.ts` 验证确定性路径 5 次全部 200 且 provider 调用数 0（不扣 AI 配额）、AI 路径第 3 次 429 + `Retry-After` + `RATE_LIMITED` + 中文文案、响应不含实现词汇、RawCapture 保留且 Item 数 0、另一 owner 不受影响。
+- **导入端点限流 — PASS — automated local**：`apps/api/src/db/course-import.test.ts` 验证首次解析 200、再次 429 + `Retry-After`，job 保持 `READY`、`error_message` 仍为 null、未 commit 任何 Course。
+- 规格依据：`16_API_CONTRACT.md` §22.4 与 §19 的 `RATE_LIMITED` 错误码；数字为可配置 security default（ADR-007），非产品行为。
+
 ## 15. External release gates
 
 1. **R-01 Reminder numeric policy — RESOLVED（2026-09-26）**：产品 v1 policy 已固化（`REMINDER_POLICY_V1`），quiet hours 23:00–08:00，dedup 60min，"提醒我"默认 HIGH；测试夹具数值仍标注为 fixture。
 2. **Platform notification delivery — PARTIALLY IMPLEMENTED / NOT RUN on devices**：device registration、cloud claim/lease、delivery acknowledgement、按 key 取消与浏览器通知适配器已实现（`apps/api/src/db/notifications.test.ts`、`apps/web/src/reminders.test.ts`）；真实设备上的系统通知、后台执行与长时间 lease 生命周期仍未实机执行。
 3. **Real PostgreSQL/Supabase — BLOCKED**：缺少 `REAL_DATABASE_URL`、Supabase project/test user/token。
-4. **Real OpenAI interpretation/import — BLOCKED**：缺少 API key/model；PDF/image source adapter、strict schema 与失败恢复已本地测试。
+4. ~~Real OpenAI interpretation/import~~ **真实 MiMo interpretation/scanned-PDF import — VERIFIED REAL**（`pnpm verify:ai`、`--with-import`）；生产长期稳定性观察与真实文件（用户真实课表）抽检仍待外部验收 lane 执行。
 5. **Physical platform/accessibility — NOT RUN**：物理手机、Windows 设备、屏幕阅读器、系统缩放与软键盘。
 
 当前没有未解决的 P0 规格冲突，也没有发现需要偏离产品语义才能通过的 acceptance item。

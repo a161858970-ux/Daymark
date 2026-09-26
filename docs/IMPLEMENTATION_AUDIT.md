@@ -68,7 +68,7 @@
 
 ### Blocked by external configuration
 
-- 没有 OpenAI key/model，真实 PDF/图片识别未运行；手工 Course/CourseSchedule 不依赖该 provider。
+- 真实 MiMo key/model 已就位，`pnpm verify:ai --with-import` 已 PASS（含扫描 PDF）；手工 Course/CourseSchedule 不依赖该 provider。
 
 ## 5. Phase 4 — AI Pipeline
 
@@ -84,7 +84,7 @@
 
 ### Blocked by external configuration
 
-- 无 OpenAI API key/model，真实模型调用未验收。
+- 真实 MiMo 模型调用已通过 `pnpm verify:ai` smoke（interpretation PASS）；确定性优先与失败安全仍由本地测试独立覆盖。
 
 ## 6. Phase 5 — Reminder Engine
 
@@ -246,12 +246,12 @@
 - 增加 exact sync acceptance：并发 complete 无冲突、不同 due date 显式冲突、非重叠字段安全合并、tombstone 传播。
 - 增加 deferred ambiguity 重启验收：defer 后关闭/重开 IndexedDB 仍显示 unresolved，明确删除后不再提示且不创建 Item。
 - 补齐 Calendar month overlap/week-boundary、Overview completed separation/default collapse 的直接 acceptance 证据。
-- Course Import 补齐正式 contracts、migration `003_course_import.sql`、recoverable service/API、OpenAI file/image adapter、review UI、failure recovery、source hash idempotency 与自动测试。
+- Course Import 补齐正式 contracts、migration `003_course_import.sql`、recoverable service/API、MiMo file/image adapter（OpenAI 兼容协议）、review UI、failure recovery、source hash idempotency 与自动测试。
 
 ### 9.2 Final local gate
 
-- `pnpm test`：**136 passed，1 skipped**（2026-09-26 Release Candidate Hardening gate）。
-  - domain：11 passed；application：17 passed；storage：32 passed；API：41 passed + 1 real PostgreSQL skipped；Web：35 passed。
+- `pnpm test`：**144 passed，1 skipped**（2026-09-26 Release Candidate Hardening gate）。
+  - domain：11 passed；application：17 passed；storage：32 passed；API：49 passed + 1 real PostgreSQL skipped；Web：35 passed。
 - `pnpm build`：PASS；entry chunk 由 555.89 kB 降为 348.28 kB（react-vendor 独立分包 218.83 kB），>500 kB warning 消失。
 - `pnpm lint`、`pnpm format:check`、`git diff --check`：PASS。
 - 运行态检查：Web `http://127.0.0.1:5173/` HTTP 200；API `/api/v1/health` HTTP 200 / `status=ok`。
@@ -334,3 +334,34 @@ R-01 与真实 AI provider smoke 已完成。剩余 release lanes：拿到外部
 - 无新增 P0；上述外部配置与实机矩阵仍需完成后才可宣称 production release。
 
 > **RC HARDENING: COMPLETE**
+
+## 15. Final Release Gate Preparation（2026-09-26）
+
+### IMPLEMENTED
+
+- **AI endpoint rate limit**：`16_API_CONTRACT.md` §22.4 / `14_TECHNICAL_ARCHITECTURE.md` §2.5 / `18_AI_PIPELINE_SPEC.md` 要求限流但未给数字 → 采用可配置 security default（20 次/owner/分钟，`AI_RATE_LIMIT_PER_OWNER`、`AI_RATE_LIMIT_WINDOW_MS`），只在 provider 实际调用前判定，authenticated owner 为桶键，返回 429 + `RATE_LIMITED` + `Retry-After`，判定在服务端、客户端无法绕过，失败无副作用。决定与验证见 `docs/ADR-007-ai-rate-limit.md`。
+- **Notification settings 规格判定**：规格（06 §12、17 §17、产品真相基线 §62、11/13/19）只要求尊重设备安静时段并明示“用户无需管理这些延后细节”，没有用户可设置项 → **不新增 UI**；quiet hours = R-01 v1 默认 23:00–08:00，权限走平台原生流程，用户自定义列为未来 enhancement。
+- **`docs/FINAL_RELEASE_VALIDATION.md`**：外部验收跑道（PostgreSQL / Supabase / 双 profile / Windows / Mobile / 屏幕阅读器），只定义步骤与记录格式，不产生任何 VERIFIED 标记。
+
+### VERIFIED LOCAL
+
+- `pnpm test` **144 passed + 1 skipped**；`pnpm build` / `pnpm lint` / `pnpm format:check` / `git diff --check` 全部 PASS（同一次运行）。
+- 限流覆盖：边界、窗口过期、per-owner 隔离、env 默认与非法值回落、Retry-After 数值、确定性路径不扣配额、429 文案与不泄漏实现、RawCapture/Item/import job 无副作用、另一 owner 不受影响。
+
+### VERIFIED REAL
+
+- `pnpm verify:ai` 与 `pnpm verify:ai --with-import` 均 PASS（MiMo `mimo-v2.6-flash`）。
+
+### BLOCKED — EXTERNAL CONFIGURATION
+
+- 真实 PostgreSQL（`REAL_DATABASE_URL`）、Supabase 项目/测试账号/token、两个独立 browser profile。
+
+### NOT RUN — PHYSICAL
+
+- 物理 Windows / 手机的系统通知与后台执行、屏幕阅读器、系统缩放、移动软键盘。
+
+### RELEASE BLOCKER
+
+- 无新的 P0；production release 仍被上述外部与实机项阻塞。
+
+> **FINAL RELEASE GATE PREPARATION: COMPLETE**

@@ -37,12 +37,12 @@
 
 ## 2. 已有自动测试证据
 
-当前完整套件在 Release Candidate Hardening gate 重新执行：**136 项通过，1 项真实 PostgreSQL 测试因缺少 URL 跳过**。
+当前完整套件在 Release Candidate Hardening gate 重新执行：**144 项通过，1 项真实 PostgreSQL 测试因缺少 URL 跳过**。
 
 - domain：11 passed；
 - application：17 passed；
 - storage：32 passed；
-- API：41 passed，1 skipped；
+- API：49 passed，1 skipped；
 - Web：35 passed。
 
 Phase 6 的自动证据包括：
@@ -66,7 +66,7 @@ Phase 6 的自动证据包括：
 - 正式 `pg` 连接、迁移器、`001`–`003` 三份 migration、开发 seed 和隔离 schema 集成测试已准备；没有 `REAL_DATABASE_URL`，所以真实 PostgreSQL 测试未执行。
 - Supabase JWT/JWKS 验证、浏览器 Auth 登录/会话监听、受保护 API 和只读 live smoke script 已准备；没有项目 URL、publishable key、测试账号/access token，所以真实登录链路未执行。
 - 双设备测试使用两个独立 Dexie 数据库与正式 worker/HTTP route，但数据库仍是同进程 PGlite，认证仍是固定测试 owner；不是两个物理设备或真实网络生命周期验收。
-- OpenAI interpretation 与 PDF/image Course Import provider、strict structured output 校验存在；没有真实模型 key/model/file 验收。
+- MiMo interpretation 与 PDF/image Course Import provider、strict structured output 校验存在；真实 MiMo（`mimo-v2.6-flash`，OpenAI 兼容 Chat Completions）interpretation 与 scanned-PDF import smoke 已 PASS，生产长期稳定性仍待持续观察。
 - Reminder claim/deliver/cancel port、本地计划与数据库表存在；没有真实 Windows/Mobile 通知、后台执行、云端 lease API 或时区切换验收。
 
 ## 4. 当前真正未实现或未闭合
@@ -91,7 +91,7 @@ Phase 6 的自动证据包括：
 - “ACTION_REQUIRED 只能重跑整轮同步”已过时：现有逐 mutation 检查、重交/明确放弃和 provenance。
 - “ItemAssociation 只有类型和表”已过时：本地 use case、REST、sync create/delete/pull 和测试已闭合。
 - “Course/CourseInformation 正式写 API 缺失”已过时：当前接口已补齐。
-- 26/35/44/48/64/66/72/75/82/87/88/92/96/97/112 等数字是历史阶段快照，不能代表当前覆盖；当前 gate 使用 136 passed + 1 externally gated skip。
+- 26/35/44/48/64/66/72/75/82/87/88/92/96/97/112 等数字是历史阶段快照，不能代表当前覆盖；当前 gate 使用 144 passed + 1 externally gated skip。
 
 `docs/IMPLEMENTATION_AUDIT.md` 已按 Implemented、Verified locally、Verified simulated、Verified real、Not implemented、Blocked、Release blocker 重新整理。
 
@@ -100,7 +100,7 @@ Phase 6 的自动证据包括：
 1. **EXTERNAL CONFIGURATION REQUIRED**：真实 PostgreSQL 连接与 Supabase 项目/测试用户/token 缺失，无法产出真实基础设施证据。
 2. **ENVIRONMENT VERIFICATION REQUIRED**：尚未在两个独立浏览器 profile 或物理设备执行 A–K 的网络/生命周期验收。
 3. **R-01 已解决**：提醒数值固化为产品 v1 policy（`packages/application/src/reminderPolicy.ts`，version `r01-v1`），安静时段 23:00–08:00，`VITE_REMINDER_POLICY` 仅作覆盖。**剩余实机 gate**：真实设备上的平台通知、后台执行与长周期 lease。
-4. **EXTERNAL AI VERIFICATION REQUIRED**：真实 OpenAI interpretation 与 PDF/image import 尚未执行。
+4. **真实 AI smoke 已完成**：`pnpm verify:ai` → `PASS interpretation 28240ms`；`pnpm verify:ai --with-import` → `PASS import 37633ms courses=3`（MiMo `mimo-v2.6-flash`，扫描 PDF 走栅格化路径）。剩余：完整自然语言时间理解继续走保守确认路径，生产稳定性需持续观察。
 5. **PHYSICAL ACCESSIBILITY VERIFICATION REQUIRED**：屏幕阅读器、系统缩放与移动软键盘尚未实机执行。
 
 旧逐成员 collection outbox 的可重复 fake IndexedDB v5 → v6 演练已经完成；当前没有未闭合的 Phase 6 本地工程 blocker。
@@ -128,7 +128,7 @@ Phase 6 的自动证据包括：
 ### 下一步
 
 1. ~~Reminder delivery engineering~~ 已完成（见 §8）；R-01 已按产品指令固化为 v1（见 §9）。下一步是外部环境验收 lane：真实 PostgreSQL / Supabase / 双 browser profile / 物理设备矩阵。
-2. **External integration lane**：拿到配置后依次运行三份 migration、`pnpm test:postgres`、真实 Supabase 登录/同步、两个独立 browser profile、真实 OpenAI interpretation/import file 和物理设备矩阵。
+2. **External integration lane**：拿到配置后依次运行四份 migration、`pnpm test:postgres`、真实 Supabase 登录/同步、两个独立 browser profile 和物理设备矩阵（执行步骤见 `docs/FINAL_RELEASE_VALIDATION.md`；真实 MiMo interpretation/import smoke 已完成）。
 3. ~~Release optimization~~ 主 bundle warning 已在 RC Hardening 内用零行为变化的 vendor 分包解决（entry 555.89 → 348.28 kB，react-vendor 独立 218.83 kB）；更深度的按路由懒加载记入 §10 技术债。
 
 ### 本轮关键决定
@@ -143,13 +143,13 @@ Phase 6 的自动证据包括：
 - **现象**：普通 `pnpm test` 显示 1 skipped，而 `pnpm test:postgres` 在同一机器直接失败。**原因**：前者允许缺少 `REAL_DATABASE_URL` 时跳过真实 PostgreSQL 文件，后者是显式外部 gate。**解决**：本地回归使用 `pnpm test`；只在提供可丢弃真实数据库后运行 `pnpm test:postgres`，不得把 skipped 写成真实 PASS。
 - **现象**：当前环境直接执行 `pnpm exec prettier ...` 报找不到命令。**原因**：本机 pnpm command shim 没有通过该调用解析 root dev binary。**解决**：使用已验证的项目脚本 `pnpm format` 或 `pnpm format:check`。
 - **现象**：旧验证文档只列两份 migration。**原因**：Course Import 后新增 `003_course_import.sql`，历史说明未同步。**解决**：文档已修正；真实数据库必须依次应用 `001_initial.sql`、`002_collection_sync.sql`、`003_course_import.sql`、`004_reminder_delivery.sql`。
-- **现象**：无外部配置时 API 只有 health，Course Import 不能上传解析。**原因**：认证业务路由要求同时配置 `DATABASE_URL` 与 `SUPABASE_URL`，provider 另需 OpenAI key/model。**解决**：本地继续使用 IndexedDB、确定性解析和手工 Course/CourseSchedule；外部 lane 按 `docs/REAL_POSTGRES_VERIFICATION.md` 配置。
+- **现象**：无外部配置时 API 只有 health，Course Import 不能上传解析。**原因**：认证业务路由要求同时配置 `DATABASE_URL` 与 `SUPABASE_URL`，provider 另需 `AI_API_KEY`（MiMo）。**解决**：本地继续使用 IndexedDB、确定性解析和手工 Course/CourseSchedule；外部 lane 按 `docs/REAL_POSTGRES_VERIFICATION.md` 配置。
 - 仓库当前没有 Git remote，结项没有 push。新增 remote 或发布目标前先由总控确认。
 
 ### 当前风险与需要总控提供的输入
 
 - ~~需要产品拍板：R-01 Numeric Reminder Policy~~ 已于 2026-09-26 固化为产品 v1 policy。
-- **需要外部配置**：可丢弃的真实 PostgreSQL、Supabase project/test user/token、OpenAI key/model。
+- **需要外部配置**：可丢弃的真实 PostgreSQL、Supabase project/test user/token（MiMo key 已就位并通过 smoke）。
 - **需要实机资源**：Mobile/Windows 设备、两个独立 browser profile、屏幕阅读器、系统缩放与移动软键盘环境。
 - 当前未发现 P0 规格冲突、未提交有效代码、调试残留、个人绝对路径或误跟踪密钥。
 
@@ -159,7 +159,7 @@ Phase 6 的自动证据包括：
 - **PDF 导入改为服务端提取页文字**：MiMo 只接受 bmp/gif/png/jpeg/webp，`file` 输入返回 400；因此 PDF 用 `pdfjs-dist` 提取页面文本后随 prompt 发送，提取不到文字时明确报错，不再伪装成功。图片仍走 base64 `image_url`。
 - **Reminder delivery engineering**：新增 `backend/migrations/004_reminder_delivery.sql`（`devices` 与 `notification_deliveries` 增列：`logical_key`、`state`、lease、ack、cancel 等），`apps/api/src/db/notifications.ts` 提供 device registration、跨设备 claim/lease、delivery acknowledgement 与按 key 取消，服务端 claim 自带 stale guard（完成/删除/静音 → CANCELED）；新增路由 `POST /api/v1/devices`、`POST /api/v1/notifications/claim`、`POST /api/v1/notifications/{id}/delivered`、`POST /api/v1/notifications/cancel`。
 - **Web 交付实现**：`apps/web/src/reminders.ts` 提供 `BrowserNotificationAdapter`（平台通知、点击打开当前 Item 并消费该次通知、无权限回退应用内提示、首次手势申请权限）、`WebReminderDeliveryPort`（在线走服务端 lease + ack，离线/未登录本地交付）、`ReminderScheduler`（reconcile + deliverDue，防重入）；`App.tsx` 在注入策略后启动，15 s 轮询、页面可见与每次 `refresh()` 后触发，完成/删除/改期的取消因此立即生效。
-- **新增自动测试**：`apps/api/src/db/notifications.test.ts`（4）、`apps/web/src/reminders.test.ts`（8）、`packages/application/src/reminders.test.ts` 的 `createReminderWindow`（2）；该轮总数 97 → 112 passed + 1 skipped（RC Hardening 后为 136 + 1，见 §9）。
+- **新增自动测试**：`apps/api/src/db/notifications.test.ts`（4）、`apps/web/src/reminders.test.ts`（8）、`packages/application/src/reminders.test.ts` 的 `createReminderWindow`（2）；该轮总数 97 → 112 passed + 1 skipped（RC Hardening 后 136 + 1，Final Release Gate Preparation 后 144 + 1，见 §9）。
 - **提醒策略当时仍由配置注入**：该轮 R-01 未定，引擎默认不启动；RC Hardening 期间已按产品指令固化为 v1，见 §9。
 
 ## 9. Release Candidate Hardening（2026-09-26）
@@ -199,9 +199,32 @@ Phase 6 的自动证据包括：
 
 - 无新增 P0；剩余发布阻塞为上述外部配置与实机矩阵。
 
-### §10 技术债（本阶段明确不做）
+### 技术债（本阶段明确不做）
 
 - **POST-RELEASE TECHNICAL DEBT**：`apps/web/src/App.tsx` 体量大，暂不重构（未发现 correctness bug 或 state race）。
 - **POST-RELEASE PERFORMANCE OPTIMIZATION**：进一步按路由懒加载与依赖裁剪（本轮只做了零行为变化的 vendor 分包）。
 - 规格 `16_API_CONTRACT.md` §22 要求的 AI 端点 rate limit 尚未实现（单用户本地部署，风险低），留到发布前安全复核。
 - AI 端点 quiet-hour / 通知权限的系统级设置 UI 尚未提供（当前 quiet hours 为产品默认值，通知权限走浏览器手势申请）。
+
+## 10. Final Release Gate Preparation（2026-09-26）
+
+### IMPLEMENTED
+
+- **AI endpoint rate limit（规格级安全缺口，已关闭）**：`apps/api/src/rateLimit.ts` 固定窗口限流，只在真正调用 provider 前判定；桶键为 authenticated owner；`main.ts` 注入解释服务与导入服务共用同一预算。默认 `AI_RATE_LIMIT_PER_OWNER=20` / `AI_RATE_LIMIT_WINDOW_MS=60000`（**security default，可配置，不是产品行为**；规格 16 §22/14 §2.5/18 要求限流但未给数字）。触发返回 **429 + `RATE_LIMITED` + `Retry-After`**，文案“请求过于频繁，请稍后再试。”，无副作用：解释限流不改 RawCapture、不建 Item；导入限流不写 FAILED、不 commit。确定性解析路径不扣配额，普通 capture/sync 接口完全不受影响。详见 `docs/ADR-007-ai-rate-limit.md`。
+- **Notification settings 判定（不新增 UI）**：复核 `06_REMINDER_POLICY` §12、`17_SYNC_NOTIFICATION_ENGINEERING` §17、`产品真相基线` §62、`11/13/19` —— 规格只要求“尊重设备安静时段”“用户无需管理这些延后细节”，**没有**要求用户可设置 quiet hours 或通知偏好 → 结论 B：quiet hours 用 R-01 v1 产品默认（23:00–08:00），通知权限走平台原生流程（浏览器手势申请 + 无权限回退应用内提示），用户级自定义记为未来 enhancement。
+- **`docs/FINAL_RELEASE_VALIDATION.md`**：真实 PostgreSQL / Supabase / 双独立 browser profile（14 步）/ 物理 Windows / 物理移动端 / 屏幕阅读器的可执行跑道，每项含 Initial state·Operation·Expected·Actual·Result·Evidence。
+
+### VERIFIED LOCAL
+
+- `pnpm test`：**144 passed + 1 skipped**（domain 11、application 17、storage 32、web 35、API 49 + 1 真实 PostgreSQL skip）；`pnpm build`、`pnpm lint`、`pnpm format:check`、`git diff --check` 全部 PASS。
+- 新增 8 项限流测试：`rateLimit.test.ts`(5)、`ai/interpretation-rate-limit.test.ts`(2)、`db/course-import.test.ts`(1)。
+
+### VERIFIED REAL
+
+- `pnpm verify:ai` → `PASS interpretation`；`pnpm verify:ai --with-import` → `PASS import … courses=3`（MiMo `mimo-v2.6-flash`）。
+
+### 状态结论
+
+> **FINAL RELEASE GATE PREPARATION: COMPLETE**
+
+剩余 release gates 全部属于外部环境（见 `docs/FINAL_RELEASE_VALIDATION.md`）：真实 PostgreSQL、Supabase、双独立 browser profile、物理设备与屏幕阅读器；R-01 与真实 AI provider 均已完成，不再是 gate。

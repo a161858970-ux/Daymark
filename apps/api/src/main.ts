@@ -9,6 +9,7 @@ import { ChatCompletionsInterpretationProvider } from "./ai/chat-provider.js";
 import { CloudConflictManager } from "./db/conflicts.js";
 import { CloudCourseImportManager } from "./db/course-import.js";
 import { CloudNotificationManager } from "./db/notifications.js";
+import { RateLimiter, rateLimitFromEnv } from "./rateLimit.js";
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -65,6 +66,8 @@ const baseUrl =
   "https://api.xiaomimimo.com/v1";
 const providerConfig = apiKey ? { apiKey, model, baseUrl } : null;
 const cloud = cloudDatabase ? new CloudCourseManager(cloudDatabase) : null;
+// Security default (configurable): AI endpoints only, per authenticated owner.
+const aiRateLimiter = new RateLimiter(rateLimitFromEnv());
 const academic = cloudDatabase ? new CloudAcademicManager(cloudDatabase) : null;
 const server = buildServer(
   pool && supabaseUrl
@@ -79,6 +82,7 @@ const server = buildServer(
           providerConfig
             ? new ChatCompletionsCourseImportParser(providerConfig)
             : null,
+          aiRateLimiter,
         ),
         interpretation: new CaptureInterpretationService(
           cloud!,
@@ -86,6 +90,7 @@ const server = buildServer(
           providerConfig
             ? new ChatCompletionsInterpretationProvider(providerConfig)
             : null,
+          aiRateLimiter,
         ),
         verifyToken: createSupabaseVerifier(supabaseUrl),
       }

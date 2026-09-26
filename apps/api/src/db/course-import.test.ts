@@ -12,11 +12,12 @@ import {
 import { CloudCourseManager, type CloudDatabase } from "./cloud.js";
 import { ProviderError } from "../ai/chat-provider.js";
 import { CourseImportParseError } from "../ai/pdf-source.js";
+import { RateLimiter } from "../rateLimit.js";
 
 const owner = "11111111-1111-4111-8111-111111111111";
 const otherOwner = "22222222-2222-4222-8222-222222222222";
 
-async function harness(parser: CourseImportParser) {
+async function harness(parser: CourseImportParser, limiter?: RateLimiter) {
   const postgres = new PGlite();
   for (const name of [
     "001_initial.sql",
@@ -39,7 +40,11 @@ async function harness(parser: CourseImportParser) {
   };
   const cloud = new CloudCourseManager(database);
   const academic = new CloudAcademicManager(database);
-  const imports = new CloudCourseImportManager(database, parser);
+  const imports = new CloudCourseImportManager(
+    database,
+    parser,
+    limiter ?? null,
+  );
   const server = buildServer({
     cloud,
     academic,
@@ -500,6 +505,61 @@ it("refuses a source whose media type does not match the declared import type", 
     expect(await imports.get(owner, job.id)).toMatchObject({
       status: "AWAITING_SOURCE",
     });
+  } finally {
+    await server.close();
+    await postgres.close();
+  }
+});
+
+it("rate-limits source parsing and leaves the import job usable", async () => {
+  const { postgres, cloud, academic, imports, server } = await harness(
+    { parse: async () => parsedCourses },
+    new RateLimiter({ limit: 1, windowMs: 60_000 }),
+  );
+  try {
+    const semester = await academic.createSemester(owner, randomUUID(), {
+      name: "2026 秋季学期",
+      start_date: "2026-09-01",
+      end_date: "2026-12-31",
+    });
+    const job = await imports.start(owner, semester.id, "IMAGE");
+    const source = {
+      file_name: "课程表.png",
+      media_type: "image/png",
+      content_base64: Buffer.from("image fixture").toString("base64"),
+    };
+
+    const first = await request(
+      server,
+      "POST",
+      `/api/v1/course-imports/${job.id}/source`,
+      source,
+    );
+    expect(first.statusCode).toBe(200);
+    expect(await imports.get(owner, job.id)).toMatchObject({ status: "READY" });
+
+    const limited = await request(
+      server,
+      "POST",
+      `/api/v1/course-imports/${job.id}/source`,
+      source,
+    );
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json().error).toMatchObject({
+      code: "RATE_LIMITED",
+      message: "请求过于频繁，请稍后再试。",
+    });
+    expect(Number(limited.headers["retry-after"])).toBeGreaterThan(0);
+
+    // The rejected attempt is side-effect free: no FAILED state, no commit,
+    // and the preview stays exactly as the successful parse left it.
+    expect(await imports.get(owner, job.id)).toMatchObject({
+      status: "READY",
+      error_message: null,
+    });
+    expect(
+      (await cloud.listCourses(owner, semester.id, null, 50)).data,
+    ).toHaveLength(0);
   } finally {
     await server.close();
     await postgres.close();

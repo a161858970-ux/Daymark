@@ -114,6 +114,9 @@ export function buildServer(dependencies?: ServerDependencies) {
   const server = Fastify({ logger: false, bodyLimit: apiBodyLimitBytes });
   server.setErrorHandler((error, _request, reply) => {
     if (error instanceof CloudError) {
+      const retryAfter = error.details.retry_after_seconds;
+      if (error.code === "RATE_LIMITED" && typeof retryAfter === "number")
+        reply.header("Retry-After", String(retryAfter));
       return reply.status(error.statusCode).send({
         error: {
           code: error.code,

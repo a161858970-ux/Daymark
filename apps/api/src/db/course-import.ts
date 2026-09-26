@@ -14,6 +14,7 @@ import { ProviderError } from "../ai/chat-provider.js";
 import { CourseImportParseError } from "../ai/pdf-source.js";
 import { recordExternalCollectionReplacement } from "./collections.js";
 import { CloudError, type CloudDatabase, type QueryPort } from "./cloud.js";
+import type { RateLimiter } from "../rateLimit.js";
 
 const MAX_IMPORT_BYTES = 15 * 1024 * 1024;
 
@@ -156,6 +157,8 @@ export class CloudCourseImportManager {
   constructor(
     private readonly db: CloudDatabase,
     private readonly parser: CourseImportParser | null,
+    /** AI quota for source parsing; charged only when a parser is configured. */
+    private readonly limiter: RateLimiter | null = null,
   ) {}
 
   async start(
@@ -239,6 +242,11 @@ export class CloudCourseImportManager {
       );
 
     let parsed: ReturnType<typeof courseImportParseResultSchema.parse>;
+    const gate = this.limiter?.check(`owner:${ownerId}`);
+    if (gate && !gate.allowed)
+      throw new CloudError("RATE_LIMITED", 429, "请求过于频繁，请稍后再试。", {
+        retry_after_seconds: gate.retryAfterSeconds,
+      });
     try {
       parsed = courseImportParseResultSchema.parse(
         await this.parser.parse({

@@ -31,6 +31,7 @@ const known: [RegExp, string][] = [
   [/IMPORT_FAILED/i, "课程表导入未能完成，文件已保留，请重试。"],
   [/Import source|15 MB/i, "课程表文件需要在 15 MB 以内。"],
   [/AUTH_REQUIRED|Authentication required|401/i, "请先登录后再试。"],
+  [/RATE_LIMITED|rate limit/i, "请求过于频繁，请稍后重试。"],
   [
     /VERSION_CONFLICT|row version|If-Match/i,
     "这条内容已在其他设备更新，请刷新后重试。",

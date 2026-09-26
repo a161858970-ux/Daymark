@@ -7,6 +7,7 @@ import {
 import type { Course, RawCapture } from "@course-manager/domain";
 import { CloudCourseManager, CloudError } from "../db/cloud.js";
 import { CloudAcademicManager } from "../db/academic.js";
+import type { RateLimiter } from "../rateLimit.js";
 
 export interface InterpretationProvider {
   interpret(input: {
@@ -24,7 +25,18 @@ export class CaptureInterpretationService {
     private readonly cloud: CloudCourseManager,
     private readonly academic: CloudAcademicManager | null,
     private readonly provider: InterpretationProvider | null,
+    /** AI quota is charged only when the provider is actually invoked. */
+    private readonly limiter: RateLimiter | null = null,
   ) {}
+
+  private gateAi(ownerId: string): void {
+    if (!this.limiter) return;
+    const result = this.limiter.check(`owner:${ownerId}`);
+    if (result.allowed) return;
+    throw new CloudError("RATE_LIMITED", 429, "请求过于频繁，请稍后再试。", {
+      retry_after_seconds: result.retryAfterSeconds,
+    });
+  }
 
   async interpret(ownerId: string, request: InterpretationRequest) {
     const capture = await this.cloud.getRawCapture(
@@ -132,6 +144,7 @@ export class CaptureInterpretationService {
         "Interpretation provider is unavailable",
       );
     let value: unknown;
+    this.gateAi(ownerId);
     try {
       value = await this.provider.interpret({
         rawText: capture.raw_text,
