@@ -1,8 +1,10 @@
 # Current Implementation State
 
-**复核日期**：2026-09-24
+**复核日期**：2026-09-26（换机后在新机器复验）
 
 **功能/验收基线**：`1dcdf18 Record Phase 8 acceptance audit`
+
+**换机复验（2026-09-26，Windows 11 / Node v24.19.0 / pnpm 11.25.0）**：`pnpm install --frozen-lockfile`、`pnpm test`（97 passed + 1 skipped）、`pnpm build`、`pnpm lint`、`pnpm format:check`、`git diff --check` 全部通过，与本文记录一致。真实 PostgreSQL 测试仍按预期 skipped（缺 `REAL_DATABASE_URL`），未计为 PASS。
 
 **当前阶段**：Phase 6 工程实现与 Phase 7A–7H 已封存；Phase 8 本地 acceptance/hardening 已逐项执行。真实基础设施、真实 AI provider、平台通知和物理设备验证仍是独立发布 gate。
 
