@@ -37,7 +37,7 @@
 
 ### 4. 重试边界
 
-`withProviderRetry()` 只对 `TIMEOUT / UNAVAILABLE / RATE_LIMITED` 重试一次（500ms/1000ms 退避）；`AUTH / INVALID_REQUEST / MALFORMED` 不重试。导入与解释共用同一套分类，超时时间分别为 300s / 90s（推理模型需要远超旧的 15s 预算）。
+`withProviderRetry()` 只对瞬时类重试一次（500ms/1000ms 退避）：`TIMEOUT / UNAVAILABLE / RATE_LIMITED / EMPTY`；`AUTH / INVALID_REQUEST / MALFORMED / TRUNCATED` 不重试。响应读取统一走 `readStructuredResponse()`：200 但正文不是 JSON → `UNAVAILABLE`（网关串扰，重试）；`finish_reason=length` → `TRUNCATED`（提示拆分文件，不重试）；有信封但 content 为空 → `EMPTY`（重试）；content 不是合法 JSON → `MALFORMED`（不重试）。导入与解释共用同一套分类，超时时间分别为 300s / 90s（推理模型需要远超旧的 15s 预算）。
 
 ### 5. 原始字节仍不入库
 

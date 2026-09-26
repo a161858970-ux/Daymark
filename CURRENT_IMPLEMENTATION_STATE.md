@@ -37,7 +37,7 @@
 
 ## 2. 已有自动测试证据
 
-当前完整套件在 Release Candidate Hardening gate 重新执行：**144 项通过，1 项真实 PostgreSQL 测试因缺少 URL 跳过**。
+当前完整套件在 Final Release Gate Preparation 最终 gate 重新执行：**144 项通过，1 项真实 PostgreSQL 测试因缺少 URL 跳过**。
 
 - domain：11 passed；
 - application：17 passed；
@@ -177,7 +177,7 @@ Phase 6 的自动证据包括：
 
 ### VERIFIED LOCALLY
 
-- `pnpm test`：**134 passed + 1 skipped**（domain 11、application 17、storage 32、web 34、API 40 + 1 真实 PostgreSQL skip）。
+- `pnpm test`：**136 passed + 1 skipped**（historical snapshot：Release Candidate Hardening 阶段数字，domain 11、application 17、storage 32、web 35、API 41 + 1 真实 PostgreSQL skip；当前最终 gate 144 + 1 见 §2 与 §10）。
 - `pnpm build`：PASS；主 chunk 由 555.89 kB 降为 **348.28 kB**，react-vendor 218.83 kB 独立分包，Vite >500kB warning 消失（仅配置级 `codeSplitting`，行为不变）。
 - `pnpm lint` / `pnpm format:check` / `git diff --check`：PASS。
 - 新增覆盖：扫描 PDF fallback、栅格化/页数/payload 限制、不可读文件、超大导入（15MB）、provider 不可用/超时/401/非 JSON、瞬时失败重试、batch 合并去重、R-01 全部 10 项行为、产品错误文案、`reminderLevelForCapture`。
@@ -212,6 +212,7 @@ Phase 6 的自动证据包括：
 
 - **AI endpoint rate limit（规格级安全缺口，已关闭）**：`apps/api/src/rateLimit.ts` 固定窗口限流，只在真正调用 provider 前判定；桶键为 authenticated owner；`main.ts` 注入解释服务与导入服务共用同一预算。默认 `AI_RATE_LIMIT_PER_OWNER=20` / `AI_RATE_LIMIT_WINDOW_MS=60000`（**security default，可配置，不是产品行为**；规格 16 §22/14 §2.5/18 要求限流但未给数字）。触发返回 **429 + `RATE_LIMITED` + `Retry-After`**，文案“请求过于频繁，请稍后再试。”，无副作用：解释限流不改 RawCapture、不建 Item；导入限流不写 FAILED、不 commit。确定性解析路径不扣配额，普通 capture/sync 接口完全不受影响。详见 `docs/ADR-007-ai-rate-limit.md`。
 - **Notification settings 判定（不新增 UI）**：复核 `06_REMINDER_POLICY` §12、`17_SYNC_NOTIFICATION_ENGINEERING` §17、`产品真相基线` §62、`11/13/19` —— 规格只要求“尊重设备安静时段”“用户无需管理这些延后细节”，**没有**要求用户可设置 quiet hours 或通知偏好 → 结论 B：quiet hours 用 R-01 v1 产品默认（23:00–08:00），通知权限走平台原生流程（浏览器手势申请 + 无权限回退应用内提示），用户级自定义记为未来 enhancement。
+- **Provider 响应分类加固**：真实 smoke 曾出现一次 `MALFORMED`（间歇）。响应读取统一为 `readStructuredResponse()`：非 JSON 正文→`UNAVAILABLE`（瞬时，重试）、`finish_reason=length`→`TRUNCATED`（提示拆分，不重试）、空 content→`EMPTY`（瞬时，重试）、content 非 JSON→`MALFORMED`（不重试）；`importFailureMessage()` 为每类给出中文产品文案。
 - **`docs/FINAL_RELEASE_VALIDATION.md`**：真实 PostgreSQL / Supabase / 双独立 browser profile（14 步）/ 物理 Windows / 物理移动端 / 屏幕阅读器的可执行跑道，每项含 Initial state·Operation·Expected·Actual·Result·Evidence。
 
 ### VERIFIED LOCAL

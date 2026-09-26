@@ -1,7 +1,7 @@
 # Responsive Acceptance Matrix
 
 **验证日期**：2026-09-24  
-**代码基线**：`ba9fad8 Complete Phase 7H responsive refinement`  
+**代码基线**：`ba9fad8 Complete Phase 7H responsive refinement`（historical snapshot：Phase 7 关闭时的提交；当前代码基线见 `ACCEPTANCE_TRACEABILITY.md`）
 **规格基线**：`11_UX_VISUAL_SPEC.md`、`12_MOTION_SPEC.md`、`13_RESPONSIVE_SPEC.md`
 
 ## 1. Result

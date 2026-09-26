@@ -148,6 +148,10 @@ export function importFailureMessage(cause: unknown): string {
   if (cause instanceof ProviderError) {
     if (cause.kind === "AUTH" || cause.kind === "INVALID_REQUEST")
       return "智能整理暂时无法使用，请检查服务配置后重试。";
+    if (cause.kind === "MALFORMED")
+      return "无法可靠识别该课程表，请重新上传清晰文件。";
+    if (cause.kind === "TRUNCATED")
+      return "课程表内容过长，无法一次识别，请拆分后重试。";
     return "智能整理暂时不可用，文件已保留，请稍后重试。";
   }
   return "无法可靠识别该课程表，请重新上传清晰文件。";

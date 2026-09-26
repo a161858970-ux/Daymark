@@ -109,6 +109,19 @@ start msedge --user-data-dir=%LOCALAPPDATA%\cm-profile-b --app=http://127.0.0.1:
 
 ---
 
+### E 前置：让手机能访问本机服务
+
+当前 API 固定监听 `127.0.0.1:3100`、Web dev server 固定 `127.0.0.1:5173`（安全默认，不对外暴露）。物理手机验收时二选一，并把改动记录进证据：
+
+```bash
+# 方案 1（推荐，不改代码）：USB 端口反向转发
+adb reverse tcp:3100 tcp:3100
+adb reverse tcp:5173 tcp:5173
+# 方案 2：同网段临时放开监听（验收后必须改回并记录）
+pnpm --filter @course-manager/web dev -- --host 0.0.0.0
+# API 侧需临时把 main.ts 的 host 改为 0.0.0.0 并使用 HTTPS/受信网络
+```
+
 ## E. Physical Mobile
 
 | #   | Initial state      | Operation            | Expected                                  | Actual | Result               | Evidence |

@@ -1,9 +1,8 @@
 import type { CourseImportParser } from "../db/course-import.js";
 import {
-  ProviderError,
   providerFailure,
   providerResponse,
-  structuredContent,
+  readStructuredResponse,
   withProviderRetry,
 } from "./chat-provider.js";
 import {
@@ -193,17 +192,7 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
       }
       const failure = await providerResponse(attempt);
       if (failure) throw failure;
-      let body: unknown;
-      try {
-        body = await attempt.json();
-      } catch {
-        throw new ProviderError("MALFORMED");
-      }
-      try {
-        return structuredContent(body);
-      } catch {
-        throw new ProviderError("MALFORMED");
-      }
+      return await readStructuredResponse(attempt);
     }, 2);
   }
 }

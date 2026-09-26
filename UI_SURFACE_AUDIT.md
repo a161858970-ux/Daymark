@@ -1,8 +1,8 @@
 # UI Surface Audit
 
-**审计日期**：2026-09-24  
+**审计日期**：2026-09-24；Final Release Gate Preparation 2026-09-26
 **规格基线**：`11_UX_VISUAL_SPEC.md`、`12_MOTION_SPEC.md`、`13_RESPONSIVE_SPEC.md`  
-**代码基线**：`eca4c14 Format unresolved acceptance coverage`
+**代码基线**：`ffdd991 Final Release Gate Preparation：AI 端点限流与外部验收跑道`
 
 ## 总体判断
 

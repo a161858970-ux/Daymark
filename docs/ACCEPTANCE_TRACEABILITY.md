@@ -1,9 +1,9 @@
 # Acceptance Traceability
 
-**执行日期**：2026-09-24；换机复验 2026-09-26
+**执行日期**：2026-09-24；换机复验 2026-09-26；Final Release Gate Preparation 2026-09-26
 
 **规格基线**：`19_TEST_ACCEPTANCE_SPEC.md`  
-**代码基线**：`PENDING_BASELINE`（Final Release Gate Preparation 的代码提交）
+**代码基线**：`ffdd991 Final Release Gate Preparation：AI 端点限流与外部验收跑道`
 
 ## 1. Result
 
@@ -18,7 +18,7 @@
 - **BLOCKED — external configuration**：需要当前环境没有提供的真实服务凭据。
 - **NOT RUN — physical environment**：需要物理设备、系统通知或辅助技术实机。
 
-最终本机 gate 为 **144 passed，1 skipped**（2026-09-26 Release Candidate Hardening）：domain 11、application 17、storage 32、API 40 passed + 1 real PostgreSQL skipped、Web 34。`pnpm build`、`pnpm lint`、`pnpm format:check` 与 `git diff --check` 均通过；Web 与 API health 运行态均为 HTTP 200。Vite 主 bundle 已降为 348.28 kB（react-vendor 218.83 kB 独立分包），size warning 消失。
+最终本机 gate 为 **144 passed，1 skipped**（2026-09-26 Final Release Gate Preparation）：domain 11、application 17、storage 32、API 49 passed + 1 real PostgreSQL skipped、Web 35。`pnpm build`、`pnpm lint`、`pnpm format:check` 与 `git diff --check` 均通过；Web 与 API health 运行态均为 HTTP 200。Vite 主 bundle 已降为 348.28 kB（react-vendor 218.83 kB 独立分包），size warning 消失。
 
 ## 2. Core Item
 

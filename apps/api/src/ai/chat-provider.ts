@@ -7,7 +7,11 @@ export type ProviderErrorKind =
   | "TIMEOUT"
   | "UNAVAILABLE"
   | "INVALID_REQUEST"
-  | "MALFORMED";
+  | "MALFORMED"
+  /** Generation hit the provider's output cap; a retry alone will not help. */
+  | "TRUNCATED"
+  /** 200 response carried no usable content; typically transient. */
+  | "EMPTY";
 
 export class ProviderError extends Error {
   constructor(
@@ -24,6 +28,7 @@ const transient = new Set<ProviderErrorKind>([
   "TIMEOUT",
   "UNAVAILABLE",
   "RATE_LIMITED",
+  "EMPTY",
 ]);
 
 export function isTransientProviderError(error: unknown): boolean {
@@ -66,6 +71,35 @@ export async function providerResponse(
   )
     return new ProviderError("INVALID_REQUEST", response.status);
   return new ProviderError("UNAVAILABLE", response.status);
+}
+
+/**
+ * Reads and classifies a chat-completions response.
+ *
+ * - non-JSON body on 200 → `UNAVAILABLE` (garbled gateway, transient)
+ * - output cap reached → `TRUNCATED` (retry alone will not help)
+ * - 200 without usable content → `EMPTY` (transient, retried once)
+ * - unparseable content → `MALFORMED` (never retried)
+ */
+export async function readStructuredResponse(
+  response: Response,
+): Promise<unknown> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new ProviderError("UNAVAILABLE", response.status);
+  }
+  try {
+    return structuredContent(body);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/truncated/i.test(message))
+      throw new ProviderError("TRUNCATED", response.status);
+    if (/no choices|no structured text/i.test(message))
+      throw new ProviderError("EMPTY", response.status);
+    throw new ProviderError("MALFORMED", response.status);
+  }
 }
 
 export function providerFailure(error: unknown): ProviderError {
@@ -187,17 +221,7 @@ export class ChatCompletionsInterpretationProvider implements InterpretationProv
       }
       const failure = await providerResponse(attempt);
       if (failure) throw failure;
-      let body: unknown;
-      try {
-        body = await attempt.json();
-      } catch {
-        throw new ProviderError("MALFORMED");
-      }
-      try {
-        return structuredContent(body);
-      } catch {
-        throw new ProviderError("MALFORMED");
-      }
+      return await readStructuredResponse(attempt);
     }, 2);
   }
 }

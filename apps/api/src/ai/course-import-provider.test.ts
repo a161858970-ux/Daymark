@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { ChatCompletionsCourseImportParser } from "./course-import-chat-parser.js";
-import { ProviderError } from "./chat-provider.js";
 
 async function fixture(name: string): Promise<string> {
   const path = fileURLToPath(
@@ -134,7 +133,15 @@ it("does not retry an authentication failure", async () => {
   expect(calls).toHaveLength(1);
 });
 
-it("classifies timeouts and malformed responses", async () => {
+it("classifies timeouts, truncation, empty and malformed responses", async () => {
+  const image = {
+    sourceType: "IMAGE" as const,
+    fileName: "课表.png",
+    mediaType: "image/png",
+    contentBase64: Buffer.from("fixture").toString("base64"),
+  };
+
+  // Timeout: transient, retried once, then surfaced as TIMEOUT.
   const timeout = recorder([
     Object.assign(new Error("The operation timed out"), {
       name: "TimeoutError",
@@ -143,32 +150,71 @@ it("classifies timeouts and malformed responses", async () => {
       name: "TimeoutError",
     }),
   ]);
-  const parser = new ChatCompletionsCourseImportParser(
-    config,
-    timeout.transport,
-  );
   await expect(
-    parser.parse({
-      sourceType: "IMAGE",
-      fileName: "课表.png",
-      mediaType: "image/png",
-      contentBase64: Buffer.from("fixture").toString("base64"),
-    }),
-  ).rejects.toBeInstanceOf(ProviderError);
+    new ChatCompletionsCourseImportParser(config, timeout.transport).parse(
+      image,
+    ),
+  ).rejects.toMatchObject({ name: "ProviderError", kind: "TIMEOUT" });
   expect(timeout.calls).toHaveLength(2);
 
-  const malformed = recorder([new Response("not json", { status: 200 })]);
-  const strict = new ChatCompletionsCourseImportParser(
-    config,
-    malformed.transport,
-  );
+  // Non-JSON 200 body: garbled gateway response, retried once as UNAVAILABLE.
+  const garbled = recorder([
+    new Response("not json", { status: 200 }),
+    new Response("still not json", { status: 200 }),
+  ]);
   await expect(
-    strict.parse({
-      sourceType: "IMAGE",
-      fileName: "课表.png",
-      mediaType: "image/png",
-      contentBase64: Buffer.from("fixture").toString("base64"),
+    new ChatCompletionsCourseImportParser(config, garbled.transport).parse(
+      image,
+    ),
+  ).rejects.toMatchObject({ kind: "UNAVAILABLE" });
+  expect(garbled.calls).toHaveLength(2);
+
+  // Output cap reached: not retried, distinct kind for a split-file message.
+  const truncated = recorder([
+    json({
+      choices: [
+        {
+          finish_reason: "length",
+          message: { role: "assistant", content: '{"' },
+        },
+      ],
     }),
+  ]);
+  await expect(
+    new ChatCompletionsCourseImportParser(config, truncated.transport).parse(
+      image,
+    ),
+  ).rejects.toMatchObject({ kind: "TRUNCATED" });
+  expect(truncated.calls).toHaveLength(1);
+
+  // Content that is not JSON despite a well-formed envelope: never retried.
+  const malformed = recorder([
+    json({
+      choices: [
+        {
+          finish_reason: "stop",
+          message: { role: "assistant", content: "not json" },
+        },
+      ],
+    }),
+  ]);
+  await expect(
+    new ChatCompletionsCourseImportParser(config, malformed.transport).parse(
+      image,
+    ),
   ).rejects.toMatchObject({ kind: "MALFORMED" });
   expect(malformed.calls).toHaveLength(1);
+
+  // Empty content is transient: retried once, then classified EMPTY.
+  const empty = recorder([
+    json({
+      choices: [
+        { finish_reason: "stop", message: { role: "assistant", content: "" } },
+      ],
+    }),
+  ]);
+  await expect(
+    new ChatCompletionsCourseImportParser(config, empty.transport).parse(image),
+  ).rejects.toMatchObject({ kind: "EMPTY" });
+  expect(empty.calls).toHaveLength(2);
 });

@@ -250,7 +250,7 @@
 
 ### 9.2 Final local gate
 
-- `pnpm test`：**144 passed，1 skipped**（2026-09-26 Release Candidate Hardening gate）。
+- `pnpm test`：**144 passed，1 skipped**（2026-09-26 Final Release Gate Preparation 最终 gate；历史快照见 §14）。
   - domain：11 passed；application：17 passed；storage：32 passed；API：49 passed + 1 real PostgreSQL skipped；Web：35 passed。
 - `pnpm build`：PASS；entry chunk 由 555.89 kB 降为 348.28 kB（react-vendor 独立分包 218.83 kB），>500 kB warning 消失。
 - `pnpm lint`、`pnpm format:check`、`git diff --check`：PASS。
@@ -341,6 +341,7 @@ R-01 与真实 AI provider smoke 已完成。剩余 release lanes：拿到外部
 
 - **AI endpoint rate limit**：`16_API_CONTRACT.md` §22.4 / `14_TECHNICAL_ARCHITECTURE.md` §2.5 / `18_AI_PIPELINE_SPEC.md` 要求限流但未给数字 → 采用可配置 security default（20 次/owner/分钟，`AI_RATE_LIMIT_PER_OWNER`、`AI_RATE_LIMIT_WINDOW_MS`），只在 provider 实际调用前判定，authenticated owner 为桶键，返回 429 + `RATE_LIMITED` + `Retry-After`，判定在服务端、客户端无法绕过，失败无副作用。决定与验证见 `docs/ADR-007-ai-rate-limit.md`。
 - **Notification settings 规格判定**：规格（06 §12、17 §17、产品真相基线 §62、11/13/19）只要求尊重设备安静时段并明示“用户无需管理这些延后细节”，没有用户可设置项 → **不新增 UI**；quiet hours = R-01 v1 默认 23:00–08:00，权限走平台原生流程，用户自定义列为未来 enhancement。
+- **Provider 响应分类**：`readStructuredResponse()` 区分 `UNAVAILABLE`（非 JSON 正文，重试）/ `TRUNCATED`（输出被截断，提示拆分）/ `EMPTY`（空内容，重试）/ `MALFORMED`（content 非 JSON，不重试），并各有中文产品文案；对应测试覆盖重试次数与分类。
 - **`docs/FINAL_RELEASE_VALIDATION.md`**：外部验收跑道（PostgreSQL / Supabase / 双 profile / Windows / Mobile / 屏幕阅读器），只定义步骤与记录格式，不产生任何 VERIFIED 标记。
 
 ### VERIFIED LOCAL
