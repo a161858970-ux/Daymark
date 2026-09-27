@@ -9,21 +9,25 @@ import type { ActionRequiredSyncIssue } from "@course-manager/application";
 import { OwnerBindingError } from "@course-manager/storage";
 import { createSyncWorker, localRepository } from "./services.js";
 import { HttpSyncTransport, type ConflictDetail } from "./syncTransport.js";
+import {
+  createAuthAdapter,
+  type AuthAdapter,
+  type AuthClientLike,
+} from "./auth/adapter.js";
 
 const authUrl = import.meta.env.VITE_SUPABASE_URL;
 const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 export const authClient =
   authUrl && publishableKey ? createClient(authUrl, publishableKey) : null;
 
-/** The account UI can use this without changing the capture or domain paths. */
-export async function sendSignInLink(email: string): Promise<void> {
-  if (!authClient) throw new Error("Account sync is not configured");
-  const { error } = await authClient.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: window.location.origin },
-  });
-  if (error) throw error;
-}
+/**
+ * Account / Authentication adapter (Auth V1): one account = one
+ * auth.users.id with multiple linked identities. Email OTP is the email
+ * sign-in path; magic-link remains only for recovery/verification emails.
+ */
+export const authAdapter: AuthAdapter | null = authClient
+  ? createAuthAdapter(authClient.auth as unknown as AuthClientLike)
+  : null;
 
 /** Access token for background coordination (reminder claim/ack); null when signed out. */
 export async function currentAccessToken(): Promise<string | null> {

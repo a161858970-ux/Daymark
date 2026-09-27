@@ -11,7 +11,7 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-前端运行在 `http://127.0.0.1:5173`，API 健康检查运行在 `http://127.0.0.1:3100/api/v1/health`。同时配置 `DATABASE_URL` 与 `SUPABASE_URL` 后，API 才注册认证业务路由，包括 RawCapture、Course、Item 的部分 CRUD、sync push/pull 与冲突解决。前端日常界面先使用 IndexedDB；同步 worker 与 HTTP 适配器已有整链路集成测试。配置浏览器公开的 Supabase URL/key 时，界面提供邮箱登录链接入口，有会话后在启动、回到前台和网络恢复后运行同步；目前未提供真实项目配置，因此默认运行仍是本地模式。清除该站点数据会删除当前本地记录。开发时请使用独立的浏览器配置文件或保留数据备份。
+前端运行在 `http://127.0.0.1:5173`，API 健康检查运行在 `http://127.0.0.1:3100/api/v1/health`。同时配置 `DATABASE_URL` 与 `SUPABASE_URL` 后，API 才注册认证业务路由，包括 RawCapture、Course、Item 的部分 CRUD、sync push/pull 与冲突解决。前端日常界面先使用 IndexedDB；同步 worker 与 HTTP 适配器已有整链路集成测试。配置浏览器公开的 Supabase URL/key 时，界面提供账户登录（Auth v1）：默认入口为手机号验证码，次要入口为 Google OAuth，邮箱登录（验证码 / 密码）为第三级折叠入口；登录方式在「账户与同步」内绑定与管理。账户模型为「一个 `auth.users.id` = 一个账户 = 多个登录身份（手机号 / 邮箱 / Google + OTP 或密码）」，业务数据 owner 始终是 `auth.users.id`，切换登录方式不会迁移或重绑本机数据。有会话后在启动、回到前台和网络恢复后运行同步；当前默认运行仍是本地模式，真实邮件 / 短信 / Google 验收按 [`docs/AUTH_REAL_VALIDATION.md`](docs/AUTH_REAL_VALIDATION.md) 执行。清除该站点数据会删除当前本地记录。开发时请使用独立的浏览器配置文件或保留数据备份。
 
 ```powershell
 pnpm build

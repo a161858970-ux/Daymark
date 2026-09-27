@@ -3121,3 +3121,102 @@ h2 {
     scroll-behavior: auto !important;
   }
 }
+
+/* --- Auth V1: sign-in surface and identity management ---------------- */
+.account-popover {
+  max-height: min(72vh, 640px);
+  overflow-y: auto;
+}
+.auth-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+.auth-panel form {
+  margin-top: 0;
+}
+.auth-actions,
+.identity-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.auth-actions > button,
+.identity-form-actions > button {
+  margin-top: 0;
+}
+.auth-secondary {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  padding-top: 10px;
+}
+.auth-secondary > button {
+  margin-top: 0;
+}
+.google-sign-in {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+}
+.auth-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+.identity-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.identity-list > .eyebrow {
+  margin: 0;
+}
+.identity-row {
+  display: grid;
+  gap: 7px;
+}
+.identity-row > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.identity-row strong {
+  font-size: 13px;
+}
+.identity-row small {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.identity-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.identity-actions button {
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+}
+.identity-actions button:not(.quiet-button) {
+  border-color: var(--accent);
+}
+.identity-row form {
+  margin-top: 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+.auth-panel select,
+.identity-row select {
+  width: 100%;
+}

@@ -64,7 +64,7 @@ Phase 6 的自动证据包括：
 ## 3. 代码存在，但尚无真实环境验收
 
 - 正式 `pg` 连接、迁移器、`001`–`003` 三份 migration、开发 seed 和隔离 schema 集成测试已准备；没有 `REAL_DATABASE_URL`，所以真实 PostgreSQL 测试未执行。
-- Supabase JWT/JWKS 验证、浏览器 Auth 登录/会话监听、受保护 API 和只读 live smoke script 已准备；没有项目 URL、publishable key、测试账号/access token，所以真实登录链路未执行。
+- Supabase JWT/JWKS 验证、浏览器 Auth 登录/会话监听、受保护 API 和只读 live smoke script 已准备；`.env` 已有项目 URL 与 publishable key（JWKS 可达、认证业务路由已注册），但 SMTP / SMS Provider / Google OAuth 未配置、无测试账号与 access token，真实登录链路仍未执行。
 - 双设备测试使用两个独立 Dexie 数据库与正式 worker/HTTP route，但数据库仍是同进程 PGlite，认证仍是固定测试 owner；不是两个物理设备或真实网络生命周期验收。
 - MiMo interpretation 与 PDF/image Course Import provider、strict structured output 校验存在；真实 MiMo（`mimo-v2.6-flash`，OpenAI 兼容 Chat Completions）interpretation 与 scanned-PDF import smoke 已 PASS，生产长期稳定性仍待持续观察。
 - Reminder claim/deliver/cancel port、本地计划与数据库表存在；没有真实 Windows/Mobile 通知、后台执行、云端 lease API 或时区切换验收。
@@ -229,3 +229,38 @@ Phase 6 的自动证据包括：
 > **FINAL RELEASE GATE PREPARATION: COMPLETE**
 
 剩余 release gates 全部属于外部环境（见 `docs/FINAL_RELEASE_VALIDATION.md`）：真实 PostgreSQL、Supabase、双独立 browser profile、物理设备与屏幕阅读器；R-01 与真实 AI provider 均已完成，不再是 gate。
+
+## 11. Account / Authentication v1（2026-09-27）
+
+### 冻结的账户模型
+
+`ONE HUMAN → ONE COURSE MANAGER ACCOUNT → ONE auth.users.id`。`auth.users.id` 是 Course / Item / RawCapture / Reminder / Sync / Conflict 的唯一 owner；一个 user 可挂多个 authentication identities（手机号 / 邮箱 / Google）与凭证（OTP 或密码）。禁止用 email、phone、Google provider id 当 owner；同账户切换登录方式不迁移业务数据、不重绑 `local_owner_id` / `sync_bound_owner_id`。
+
+### IMPLEMENTED
+
+- **Auth adapter** `apps/web/src/auth/adapter.ts`：Email OTP（`signInWithOtp` + `verifyOtp type=email`，**不再是 magic link 主入口**）、Phone OTP（`type=sms`）、Email/Phone + 密码登录与注册、Google OAuth 登录与 `linkIdentity` 绑定、`updateUser` 绑定邮箱/手机号 + 对应 verification OTP、设置/修改密码、`resetPasswordForEmail` + recovery OTP 完成重置、`getUserIdentities` / `unlinkIdentity`（≥2 identity 才允许）、登录态监听。所有出口只暴露 `AuthAccount.userId = auth.users.id`。
+- **错误映射** `apps/web/src/auth/errors.ts`：Supabase 错误码 → 产品文案（重复 identity、验证码错误/过期、限流、未登录、密码强度…），不泄漏内部实现；`SMS_PROVIDER_NOT_CONFIGURED` 作为明确的外部环境状态。
+- **手机号** `apps/web/src/auth/phone.ts`：E.164 归一化 + 国家/地区选择（默认 +86，模型不锁死中国大陆）。
+- **登录 UI** `apps/web/src/auth/SignInPanel.tsx`：PRIMARY 手机号验证码 → SECONDARY Google → TERTIARY 邮箱（验证码 / 密码 / 忘记密码），第一屏不平铺五个按钮。
+- **身份管理 UI** `apps/web/src/auth/AccountIdentities.tsx`：登录方式列表（已验证 / 未验证 / 未绑定）、绑定与验证、设置/修改密码、忘记密码、解除绑定（遵循 Supabase ≥2 identity 约束，保住最后一条登录路径）。
+- **接线**：`authSync.ts` 导出 `authAdapter` 并移除旧魔法链接入口 `sendSignInLink`；`AccountControl.tsx` 登录态改为 `AuthAccount`，并把 OAuth / recovery 回跳错误（如 `identity_already_exists`）一次性提示后清理 URL。
+- **数据库变更**：无；密码、哈希、凭据从不进入 Course Manager 数据库。
+- **文档**：`docs/AUTH_REAL_VALIDATION.md`（架构、改动文件、Supabase Dashboard 配置清单、12 项真实验收表、OTP 安全矩阵、已知限制）；`README.md` 登录描述已更新。
+
+### VERIFIED LOCAL
+
+- `pnpm test`：**181 passed + 1 skipped**（domain 11、application 17、storage 35、web 69、API 49 + 1 真实 PostgreSQL skip）；`pnpm build`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck` 全部 PASS。
+- 新增测试：`apps/web/src/auth/phone.test.ts`(4)、`adapter.test.ts`(30，覆盖规格 §15 的 1-19、22-30)、`SignInPanel.test.tsx`(4)、`packages/storage/src/owner-continuity.test.ts`(3，覆盖 owner 连续性与跨 owner 隔离)。全部使用 fake provider，不发送真实短信/邮件。
+- 浏览器实测（真实 Supabase client 注入 `.env` 配置）：打开「账户与同步」即手机号验证码主入口（国家默认 +86），Google 次之、邮箱第三级；切换邮箱分支渲染正常，无控制台报错。
+
+### BLOCKED BY EXTERNAL CONFIGURATION
+
+- Email OTP：SMTP 未配置（`otp_disabled`），邮件模板需改为 `{{ .Token }}` OTP 模板。
+- Phone OTP：SMS Provider 未配置 → 运行时 `SMS_PROVIDER_NOT_CONFIGURED`。
+- Google OAuth：Client ID / Secret 与 redirect URI 未配置。
+- Manual Identity Linking：需在 Supabase Dashboard 开启，否则 `linkIdentity()` 返回 422。
+
+> **AUTH V1 IMPLEMENTED**
+> **SMS REAL PROVIDER: EXTERNAL CONFIGURATION REQUIRED**
+
+配置清单与真实验收表见 `docs/AUTH_REAL_VALIDATION.md`。

@@ -1,11 +1,15 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  authAdapter,
   authClient,
   retryAuthenticatedSync,
-  sendSignInLink,
   type AuthenticatedSyncState,
   type AuthenticatedSyncStatus,
 } from "./authSync.js";
+import type { AuthAccount } from "./auth/adapter.js";
+import { clearAuthRedirect, readAuthRedirectError } from "./auth/adapter.js";
+import { AccountIdentities } from "./auth/AccountIdentities.js";
+import { SignInPanel } from "./auth/SignInPanel.js";
 import { motionDuration, useExitTransition } from "./motion.js";
 
 const labels: Record<AuthenticatedSyncState, string> = {
@@ -38,8 +42,7 @@ export function AccountControl({
   attentionCount: number;
 }) {
   const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState("");
-  const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
+  const [account, setAccount] = useState<AuthAccount | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -61,18 +64,28 @@ export function AccountControl({
   }
 
   useEffect(() => {
-    if (!authClient) return;
+    if (!authAdapter) return;
     let alive = true;
-    void authClient.auth.getSession().then(({ data }) => {
-      if (alive) setSignedInEmail(data.session?.user.email ?? null);
+    void authAdapter.getAccount().then((value) => {
+      if (alive) setAccount(value);
     });
-    const listener = authClient.auth.onAuthStateChange((_event, session) => {
-      if (alive) setSignedInEmail(session?.user.email ?? null);
+    const listener = authAdapter.onAuthStateChange((value) => {
+      if (alive) setAccount(value);
     });
     return () => {
       alive = false;
-      listener.data.subscription.unsubscribe();
+      listener.unsubscribe();
     };
+  }, []);
+
+  // OAuth / recovery returns may carry an error (e.g. linking an identity
+  // that already belongs to another account): surface it once, then clean
+  // the URL so a refresh cannot replay it.
+  useEffect(() => {
+    const redirectError = readAuthRedirectError(window.location.search);
+    if (!redirectError) return;
+    setMessage(redirectError);
+    clearAuthRedirect();
   }, []);
 
   useEffect(() => {
@@ -101,26 +114,11 @@ export function AccountControl({
       : status.state;
   const lastChecked = checkedTime(status.checked_at);
 
-  async function sendLink(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setMessage(null);
-    try {
-      await sendSignInLink(email.trim());
-      setMessage("登录链接已发送。当前记录仍保存在本机。");
-    } catch {
-      setMessage("暂时无法发送登录链接，请稍后再试。");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function signOut() {
     setBusy(true);
     setMessage(null);
     try {
-      const { error } = await authClient!.auth.signOut();
-      if (error) throw error;
+      await authAdapter!.signOut();
       setMessage("已退出账户。当前设备上的记录仍可查看。");
     } catch {
       setMessage("暂时无法退出账户，请稍后再试。");
@@ -194,13 +192,20 @@ export function AccountControl({
               </small>
             </div>
           </div>
-          {!authClient ? (
+          {!authClient || !authAdapter ? (
             <p className="account-note">
               账户同步尚未启用；快速记录、课程与日程仍可离线使用。
             </p>
-          ) : signedInEmail ? (
+          ) : account ? (
             <>
-              <p className="account-email">{signedInEmail}</p>
+              <p className="account-email">
+                {account.email ?? account.phone ?? "已登录账户"}
+              </p>
+              <AccountIdentities
+                online={online}
+                adapter={authAdapter}
+                account={account}
+              />
               <div className="account-actions">
                 <button
                   type="button"
@@ -220,20 +225,11 @@ export function AccountControl({
               </div>
             </>
           ) : (
-            <form onSubmit={(event) => void sendLink(event)}>
-              <label htmlFor="sync-email">邮箱</label>
-              <input
-                id="sync-email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-              <button type="submit" disabled={busy || !online}>
-                {busy ? "正在发送…" : "发送登录链接"}
-              </button>
-            </form>
+            <SignInPanel
+              online={online}
+              adapter={authAdapter}
+              onSignedIn={(value) => setAccount(value)}
+            />
           )}
           {message && <p role="status">{message}</p>}
         </section>

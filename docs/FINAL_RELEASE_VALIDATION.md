@@ -50,13 +50,13 @@ VITE_SUPABASE_PUBLISHABLE_KEY=<anon/publishable key>
 SUPABASE_ACCESS_TOKEN=<访问令牌，用于只读 live smoke>
 ```
 
-| #   | Initial state | Operation                                         | Expected                                                  | Actual | Result                             | Evidence                        |
-| --- | ------------- | ------------------------------------------------- | --------------------------------------------------------- | ------ | ---------------------------------- | ------------------------------- |
-| B1  | 无配置        | 写入上述变量并 `pnpm dev`                         | API 注册认证业务路由（不再只有 health）；前端出现登录入口 | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | `/api/v1/health` 与登录入口截图 |
-| B2  | 未登录        | 浏览器邮箱登录链接（`signInWithOtp`）             | 收到链接并建立会话                                        | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | 会话截图                        |
-| B3  | 已登录        | 本地快速记录 → 观察同步                           | outbox 推送 → 服务端入库 → pull 收敛                      | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | push/pull 请求与响应            |
-| B4  | 已登录        | `SUPABASE_ACCESS_TOKEN` 下 `pnpm verify:live-api` | 通过                                                      | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | 脚本输出                        |
-| B5  | 已登录        | 401/403 路径（过期 token 调用受保护接口）         | 稳定错误码 `AUTH_REQUIRED`，产品文案，无内部细节          | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | 响应体                          |
+| #   | Initial state | Operation                                                 | Expected                                                  | Actual | Result                             | Evidence                                 |
+| --- | ------------- | --------------------------------------------------------- | --------------------------------------------------------- | ------ | ---------------------------------- | ---------------------------------------- |
+| B1  | 无配置        | 写入上述变量并 `pnpm dev`                                 | API 注册认证业务路由（不再只有 health）；前端出现登录入口 | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | `/api/v1/health` 与登录入口截图          |
+| B2  | 未登录        | 浏览器登录（Auth v1：手机号验证码 / 邮箱验证码 / Google） | 得到 session，owner 为 `auth.users.id`                    | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | 会话截图（见 `AUTH_REAL_VALIDATION.md`） |
+| B3  | 已登录        | 本地快速记录 → 观察同步                                   | outbox 推送 → 服务端入库 → pull 收敛                      | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | push/pull 请求与响应                     |
+| B4  | 已登录        | `SUPABASE_ACCESS_TOKEN` 下 `pnpm verify:live-api`         | 通过                                                      | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | 脚本输出                                 |
+| B5  | 已登录        | 401/403 路径（过期 token 调用受保护接口）                 | 稳定错误码 `AUTH_REQUIRED`，产品文案，无内部细节          | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | 响应体                                   |
 
 ---
 
