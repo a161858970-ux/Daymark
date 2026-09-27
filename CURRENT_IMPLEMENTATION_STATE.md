@@ -63,7 +63,7 @@ Phase 6 的自动证据包括：
 
 ## 3. 代码存在，但尚无真实环境验收
 
-- 正式 `pg` 连接、迁移器、`001`–`003` 三份 migration、开发 seed 和隔离 schema 集成测试已准备；没有 `REAL_DATABASE_URL`，所以真实 PostgreSQL 测试未执行。
+- 正式 `pg` 连接、迁移器、开发 seed 和隔离 schema 集成测试已准备；2026-09-27 起 `.env` 已提供真实连接：`001`–`004` 四份 migration 已应用到真实 Supabase Postgres，`real-postgres.integration.test.ts` **1 passed（不再是 skipped）**。
 - Supabase JWT/JWKS 验证、浏览器 Auth 登录/会话监听、受保护 API 和只读 live smoke script 已准备；`.env` 已有项目 URL 与 publishable key（JWKS 可达、认证业务路由已注册），但 SMTP / SMS Provider / Google OAuth 未配置、无测试账号与 access token，真实登录链路仍未执行。
 - 双设备测试使用两个独立 Dexie 数据库与正式 worker/HTTP route，但数据库仍是同进程 PGlite，认证仍是固定测试 owner；不是两个物理设备或真实网络生命周期验收。
 - MiMo interpretation 与 PDF/image Course Import provider、strict structured output 校验存在；真实 MiMo（`mimo-v2.6-flash`，OpenAI 兼容 Chat Completions）interpretation 与 scanned-PDF import smoke 已 PASS，生产长期稳定性仍待持续观察。
@@ -253,9 +253,15 @@ Phase 6 的自动证据包括：
 - 新增测试：`apps/web/src/auth/phone.test.ts`(4)、`adapter.test.ts`(30，覆盖规格 §15 的 1-19、22-30)、`SignInPanel.test.tsx`(4)、`packages/storage/src/owner-continuity.test.ts`(3，覆盖 owner 连续性与跨 owner 隔离)。全部使用 fake provider，不发送真实短信/邮件。
 - 浏览器实测（真实 Supabase client 注入 `.env` 配置）：打开「账户与同步」即手机号验证码主入口（国家默认 +86），Google 次之、邮箱第三级；切换邮箱分支渲染正常，无控制台报错。
 
+### VERIFIED REAL（2026-09-27）
+
+- 四份 migration 已应用到真实 Supabase Postgres；`real-postgres.integration.test.ts` **1 passed**（原 skipped 项）。
+- `verify:live-api` → `Live API verified for owner d54867cf-…`（真实 JWT → 认证 API → 真实 change page）。
+- 浏览器真实邮箱+密码注册/登录 → 记录「明天买东西」→ push 落库：`items` 1 行（owner `645027f0-…`）、`change_log` 6 行（capture → decision → resolved）。证据见 `docs/AUTH_REAL_VALIDATION.md §6`。
+
 ### BLOCKED BY EXTERNAL CONFIGURATION
 
-- Email OTP：SMTP 未配置（`otp_disabled`），邮件模板需改为 `{{ .Token }}` OTP 模板。
+- Email OTP：模板需先配置 SMTP 才能编辑（当前默认模板发登录链接，非 6 位验证码）。
 - Phone OTP：SMS Provider 未配置 → 运行时 `SMS_PROVIDER_NOT_CONFIGURED`。
 - Google OAuth：Client ID / Secret 与 redirect URI 未配置。
 - Manual Identity Linking：需在 Supabase Dashboard 开启，否则 `linkIdentity()` 返回 422。
