@@ -1535,30 +1535,25 @@ export class CourseManager {
       if (!course || course.deleted_at || course.owner_id !== item.owner_id)
         throw new Error("Course not found");
     }
+    // Out-of-sync field sets decide whether the server can merge two edits.
+    // The edit form submits every field it renders, so sending that whole
+    // snapshot would report untouched values as changes and turn disjoint
+    // edits into a false conflict (spec 14 §22.3 and 17: non-overlapping
+    // edits must merge automatically). Queue only what actually changed.
+    const changes = Object.fromEntries(
+      Object.entries(validated).filter(([key, value]) => {
+        if (value === undefined) return false;
+        return item[key as keyof Item] !== value;
+      }),
+    ) as typeof validated;
+    if (Object.keys(changes).length === 0) return item;
     const now = this.runtime.now();
-    const next: Item = {
+    const next = {
       ...item,
-      title: validated.title ?? item.title,
-      detail: validated.detail === undefined ? item.detail : validated.detail,
-      course_id:
-        validated.course_id === undefined
-          ? item.course_id
-          : validated.course_id,
-      start_at:
-        validated.start_at === undefined ? item.start_at : validated.start_at,
-      occurrence_start_at:
-        validated.occurrence_start_at === undefined
-          ? item.occurrence_start_at
-          : validated.occurrence_start_at,
-      occurrence_end_at:
-        validated.occurrence_end_at === undefined
-          ? item.occurrence_end_at
-          : validated.occurrence_end_at,
-      due_at: validated.due_at === undefined ? item.due_at : validated.due_at,
-      reminder_level: validated.reminder_level ?? item.reminder_level,
+      ...changes,
       updated_at: now,
       row_version: item.row_version + 1,
-    };
+    } as Item;
     if (
       next.occurrence_start_at &&
       next.occurrence_end_at &&
@@ -1574,7 +1569,7 @@ export class CourseManager {
           item.id,
           "UPDATE",
           item.row_version,
-          validated,
+          changes,
         ),
       );
     });
