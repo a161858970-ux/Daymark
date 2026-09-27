@@ -474,3 +474,62 @@ it("T-SYNC-005..008 covers concurrent complete, due conflict, safe merge, and to
     await postgres.close();
   }
 });
+
+it("resolution keeps the rejected push's non-conflicting fields", async () => {
+  const { postgres, server, conflicts, local } = await harness();
+  const a = local();
+  const b = local();
+  try {
+    const raw = await a.manager.capture("提交周报");
+    const item = await a.manager.processClearCapture(raw.id);
+    if (!item) throw new Error("expected a parsed item");
+    expect((await a.worker.runOnce()).stopped).toBeNull();
+    expect((await b.worker.runOnce()).stopped).toBeNull();
+
+    // A changes the title first; B then changes the same title plus an
+    // unrelated field in one edit, so only the title overlaps.
+    await a.manager.updateItem(item.id, { title: "A 的标题" });
+    expect((await a.worker.runOnce()).stopped).toBeNull();
+    await b.manager.updateItem(item.id, {
+      title: "B 的标题",
+      detail: "B 的补充",
+    });
+    expect((await b.worker.runOnce()).stopped).toBe("VERSION_CONFLICT");
+
+    const rejected = (await b.repo.pendingMutations())[0]!;
+    const conflictId = rejected.last_error!.split(":")[1]!;
+    const detail = await conflicts.get(owner, conflictId);
+    expect(detail.conflict.conflicting_fields).toEqual(["title"]);
+
+    const resolved = await conflicts.resolve(
+      owner,
+      conflictId,
+      randomUUID(),
+      Number(detail.current_entity.row_version),
+      {
+        strategy: "USE_LOCAL",
+        field_resolutions: { title: "LOCAL" },
+      },
+    );
+    // The non-overlapping half of the rejected edit must not be discarded.
+    expect(resolved.entity).toMatchObject({
+      title: "B 的标题",
+      detail: "B 的补充",
+    });
+
+    await b.repo.acceptResolvedConflict(resolved.conflict, resolved.entity);
+    expect((await a.worker.runOnce()).stopped).toBeNull();
+    expect((await b.worker.runOnce()).stopped).toBeNull();
+    expect(await a.manager.getItem(item.id)).toMatchObject({
+      title: "B 的标题",
+      detail: "B 的补充",
+    });
+    expect(await b.manager.getItem(item.id)).toMatchObject({
+      title: "B 的标题",
+      detail: "B 的补充",
+    });
+  } finally {
+    await server.close();
+    await postgres.close();
+  }
+});

@@ -59,6 +59,29 @@ function validDateOnly(value: string): boolean {
   );
 }
 
+/** ISO date-times arrive in different formats for the same instant. */
+const TIME_FIELDS = new Set([
+  "start_at",
+  "due_at",
+  "occurrence_start_at",
+  "occurrence_end_at",
+  "completed_at",
+  "deleted_at",
+]);
+
+function fieldChanged(key: string, current: unknown, next: unknown): boolean {
+  if (
+    TIME_FIELDS.has(key) &&
+    typeof current === "string" &&
+    typeof next === "string"
+  ) {
+    const left = Date.parse(current);
+    const right = Date.parse(next);
+    if (!Number.isNaN(left) && !Number.isNaN(right)) return left !== right;
+  }
+  return current !== next;
+}
+
 export class CourseManager {
   constructor(
     private readonly repo: LocalRepository,
@@ -1543,7 +1566,7 @@ export class CourseManager {
     const changes = Object.fromEntries(
       Object.entries(validated).filter(([key, value]) => {
         if (value === undefined) return false;
-        return item[key as keyof Item] !== value;
+        return fieldChanged(key, item[key as keyof Item], value);
       }),
     ) as typeof validated;
     if (Object.keys(changes).length === 0) return item;

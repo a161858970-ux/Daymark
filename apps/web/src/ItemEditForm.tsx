@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Course, Item } from "@course-manager/domain";
+import { changedItemFields } from "./itemEditDiff.js";
 import { fromLocalInput, toLocalInput } from "./timeInputs.js";
 
 export type EditableItemFields = Partial<
@@ -34,6 +35,9 @@ export function ItemEditForm({
   onCancel,
 }: Props) {
   const titleInputRef = useRef<HTMLInputElement>(null);
+  // The row can change underneath (another device synced) while this form is
+  // open; dirty state is therefore measured against the item as opened.
+  const initialRef = useRef(item);
   const [title, setTitle] = useState(item.title);
   const [detail, setDetail] = useState(item.detail ?? "");
   const [courseId, setCourseId] = useState(item.course_id ?? "");
@@ -59,17 +63,22 @@ export function ItemEditForm({
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!title.trim()) return;
+    const fields = changedItemFields(initialRef.current, {
+      title: title.trim(),
+      detail: detail.trim() || null,
+      course_id: courseId || null,
+      start_at: fromLocalInput(startAt),
+      occurrence_start_at: fromLocalInput(occurrenceStartAt),
+      occurrence_end_at: fromLocalInput(occurrenceEndAt),
+      due_at: fromLocalInput(dueAt),
+      reminder_level: reminderLevel,
+    });
+    if (Object.keys(fields).length === 0) {
+      onSaved();
+      return;
+    }
     try {
-      await onSave(item, {
-        title: title.trim(),
-        detail: detail.trim() || null,
-        course_id: courseId || null,
-        start_at: fromLocalInput(startAt),
-        occurrence_start_at: fromLocalInput(occurrenceStartAt),
-        occurrence_end_at: fromLocalInput(occurrenceEndAt),
-        due_at: fromLocalInput(dueAt),
-        reminder_level: reminderLevel,
-      });
+      await onSave(item, fields);
       onSaved();
     } catch {
       /* parent presents the error; keep form open */

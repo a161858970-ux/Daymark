@@ -255,6 +255,16 @@ export class CloudConflictManager {
           "A deleted object cannot be changed by conflict resolution",
         );
       const selected: Record<string, unknown> = {};
+      // The rejected push also carried fields the server had not changed
+      // since the base version. Those never conflicted, so resolution must
+      // keep them: dropping them would silently discard the local edit's
+      // non-overlapping half (spec 14 §22.3 — field-level differences, not
+      // a whole-object either/or).
+      for (const key of Object.keys(conflict.local_version)) {
+        if (key === "base_version" || fields.includes(key)) continue;
+        if (!allowedFields[type].has(key)) continue;
+        selected[key] = conflict.local_version[key];
+      }
       for (const field of fields) {
         const choice = request.field_resolutions[field]!;
         if (choice === "LOCAL") {
