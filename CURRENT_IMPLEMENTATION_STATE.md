@@ -258,7 +258,8 @@ Phase 6 的自动证据包括：
 - 四份 migration 已应用到真实 Supabase Postgres；`real-postgres.integration.test.ts` **1 passed**（原 skipped 项）。
 - `verify:live-api` → `Live API verified for owner d54867cf-…`（真实 JWT → 认证 API → 真实 change page）。
 - 浏览器真实邮箱+密码注册/登录 → 记录「明天买东西」→ push 落库：`items` 1 行（owner `645027f0-…`）、`change_log` 6 行（capture → decision → resolved）。证据见 `docs/AUTH_REAL_VALIDATION.md §6`。
-- **两个独立 browser profile 双向同步 VERIFIED REAL**：原窗口与 InPrivate 窗口互登同一账号、互见两条待办；服务端 `devices` 2 个 device、`items` 2 行、`sync_conflicts` 0。断网/后台恢复/长时间重试仍未执行。
+- **两个独立 browser profile 双向同步 VERIFIED REAL**：原窗口与 InPrivate 窗口互登同一账号、互见两条待办；服务端 `devices` 2 个 device、`items` 2 行、`sync_conflicts` 0。
+- **离线记录 → 刷新不丢 → 恢复网络自动补传 VERIFIED REAL（C1–C3）**：本地 09:51:35 创建「离线测试不要丢」，服务端 09:52:34 收到 ITEM CREATE，全程未手动触发；`raw_captures` 3/3 RESOLVED、`items` 3 行无重复标题、`sync_conflicts` 0。仍缺：C5–C12 冲突场景、C13 关闭重开、C14 长时间重试。
 
 ### BLOCKED BY EXTERNAL CONFIGURATION
 
