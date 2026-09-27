@@ -75,7 +75,7 @@ Phase 6 的自动证据包括：
 
 - 在真实 PostgreSQL 运行 migration 与 `real-postgres.integration.test.ts`。
 - 在真实 Supabase 完成 login → authenticated API → capture/outbox/push/pull/conflict/resolve/restart/convergence。
-- 两个独立浏览器 profile/物理设备上的断网、后台恢复与长时间重试验收。
+- 双独立浏览器 profile 的**基本双向同步已真实通过**（见 §11 VERIFIED REAL）；仍缺：断网、后台恢复与长时间重试验收，以及物理设备矩阵。
 
 ### 发布
 
@@ -258,6 +258,7 @@ Phase 6 的自动证据包括：
 - 四份 migration 已应用到真实 Supabase Postgres；`real-postgres.integration.test.ts` **1 passed**（原 skipped 项）。
 - `verify:live-api` → `Live API verified for owner d54867cf-…`（真实 JWT → 认证 API → 真实 change page）。
 - 浏览器真实邮箱+密码注册/登录 → 记录「明天买东西」→ push 落库：`items` 1 行（owner `645027f0-…`）、`change_log` 6 行（capture → decision → resolved）。证据见 `docs/AUTH_REAL_VALIDATION.md §6`。
+- **两个独立 browser profile 双向同步 VERIFIED REAL**：原窗口与 InPrivate 窗口互登同一账号、互见两条待办；服务端 `devices` 2 个 device、`items` 2 行、`sync_conflicts` 0。断网/后台恢复/长时间重试仍未执行。
 
 ### BLOCKED BY EXTERNAL CONFIGURATION
 

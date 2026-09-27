@@ -50,13 +50,13 @@ VITE_SUPABASE_PUBLISHABLE_KEY=<anon/publishable key>
 SUPABASE_ACCESS_TOKEN=<访问令牌，用于只读 live smoke>
 ```
 
-| #   | Initial state | Operation                                                 | Expected                                                  | Actual | Result                             | Evidence                                 |
-| --- | ------------- | --------------------------------------------------------- | --------------------------------------------------------- | ------ | ---------------------------------- | ---------------------------------------- |
-| B1  | 无配置        | 写入上述变量并 `pnpm dev`                                 | API 注册认证业务路由（不再只有 health）；前端出现登录入口 | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | `/api/v1/health` 与登录入口截图          |
-| B2  | 未登录        | 浏览器登录（Auth v1：手机号验证码 / 邮箱验证码 / Google） | 得到 session，owner 为 `auth.users.id`                    | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | 会话截图（见 `AUTH_REAL_VALIDATION.md`） |
-| B3  | 已登录        | 本地快速记录 → 观察同步                                   | outbox 推送 → 服务端入库 → pull 收敛                      | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | push/pull 请求与响应                     |
-| B4  | 已登录        | `SUPABASE_ACCESS_TOKEN` 下 `pnpm verify:live-api`         | 通过                                                      | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | 脚本输出                                 |
-| B5  | 已登录        | 401/403 路径（过期 token 调用受保护接口）                 | 稳定错误码 `AUTH_REQUIRED`，产品文案，无内部细节          | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | 响应体                                   |
+| #   | Initial state | Operation                                         | Expected                                                  | Actual                                                                                                  | Result                                                               | Evidence                                     |
+| --- | ------------- | ------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------- |
+| B1  | 无配置        | 写入上述变量并 `pnpm dev`                         | API 注册认证业务路由（不再只有 health）；前端出现登录入口 | `/health` 200；5 个受保护路由返回 `401 AUTH_REQUIRED`（非 404）；登录面板出现                           | `VERIFIED REAL` 2026-09-27                                           | curl 探测 + 登录面板截图                     |
+| B2  | 未登录        | 浏览器登录（Auth v1）                             | 得到 session，owner 为 `auth.users.id`                    | **邮箱+密码**已真实登录（owner `645027f0-…`）；手机号验证码 / 邮箱验证码 / Google 未配置                | `VERIFIED REAL`（邮箱密码）；其余 `BLOCKED — EXTERNAL CONFIGURATION` | 登录截图 + `docs/AUTH_REAL_VALIDATION.md §6` |
+| B3  | 已登录        | 本地快速记录 → 观察同步                           | outbox 推送 → 服务端入库 → pull 收敛                      | 2 条记录入库：`items` 2 行、`change_log`（RAW_CAPTURE 6 / ITEM 2 / DECISION 2 / OUTPUT 2）、`devices` 2 | `VERIFIED REAL` 2026-09-27                                           | 服务端查询结果 + 两端截图                    |
+| B4  | 已登录        | `SUPABASE_ACCESS_TOKEN` 下 `pnpm verify:live-api` | 通过                                                      | `Live API verified for owner d54867cf-…; change page size 0`                                            | `VERIFIED REAL` 2026-09-27                                           | 脚本输出                                     |
+| B5  | 已登录        | 401/403 路径（无效 token 调用受保护接口）         | 稳定错误码 `AUTH_REQUIRED`，产品文案，无内部细节          | 伪造 Bearer → `401 AUTH_REQUIRED`，无内部细节泄漏                                                       | `VERIFIED REAL` 2026-09-27                                           | 响应体                                       |
 
 ---
 
@@ -73,22 +73,22 @@ start msedge --user-data-dir=%LOCALAPPDATA%\cm-profile-b --app=http://127.0.0.1:
 
 **独立性检查**：在 A 打开 DevTools → Application → IndexedDB → `course-manager`；在 B 中该库必须为空/不存在，然后各登录不同或相同的 owner（按验收设计）。
 
-| #   | Initial state            | Operation                          | Expected                                         | Actual | Result               | Evidence     |
-| --- | ------------------------ | ---------------------------------- | ------------------------------------------------ | ------ | -------------------- | ------------ |
-| C1  | A、B 各自空库            | A 离线（DevTools offline）快速记录 | `✓ 已记录`，A 本地可见                           | 待执行 | `NOT RUN — PHYSICAL` | 截图         |
-| C2  | A 离线已记录             | 刷新 A                             | 记录仍在（重启/刷新不丢）                        | 待执行 | `NOT RUN — PHYSICAL` | 截图         |
-| C3  | A 恢复网络               | 观察 A 自动同步                    | outbox 自动推送，无需手动                        | 待执行 | `NOT RUN — PHYSICAL` | 网络面板     |
-| C4  | A 已同步                 | B 拉取                             | B 看到同一条记录                                 | 待执行 | `NOT RUN — PHYSICAL` | 两端截图     |
-| C5  | A、B 同条目              | 非重叠字段分别编辑                 | 自动合并，无冲突提示                             | 待执行 | `NOT RUN — PHYSICAL` | 两端字段截图 |
-| C6  | A、B 同条目              | 同字段（截止时间）分别编辑         | 显式冲突，只列该字段                             | 待执行 | `NOT RUN — PHYSICAL` | 冲突 UI 截图 |
-| C7  | 冲突可见                 | 选择本机/已同步/显式值并解决       | 收敛到所选值，写入 revision                      | 待执行 | `NOT RUN — PHYSICAL` | 解决前后截图 |
-| C8  | 解决后                   | 立即再编辑一次                     | 后续编辑不被旧 resolution 覆盖                   | 待执行 | `NOT RUN — PHYSICAL` | 两端截图     |
-| C9  | A 删除、B 编辑同条目     | 观察结果                           | 不静默复活；保留删除或进入显式处理               | 待执行 | `NOT RUN — PHYSICAL` | 截图         |
-| C10 | 已删除条目               | 限时 Undo 过期后再尝试 undo-delete | 拒绝 undelete，只能采用已同步 tombstone          | 待执行 | `NOT RUN — PHYSICAL` | 响应/截图    |
-| C11 | A、B 各改 CourseSchedule | 并发整组替换                       | 整组冲突：只能选完整本机组或完整已同步组         | 待执行 | `NOT RUN — PHYSICAL` | 冲突 UI 截图 |
-| C12 | A、B 各改 SemesterWeek   | 并发整组替换                       | 同 C11                                           | 待执行 | `NOT RUN — PHYSICAL` | 冲突 UI 截图 |
-| C13 | 双端有未决状态           | 关闭并重开两个 profile             | outbox 继续推送，unresolved 记录复现，无重复对象 | 待执行 | `NOT RUN — PHYSICAL` | 重启前后截图 |
-| C14 | 网络抖动环境             | 长时间重试（断续网络 ≥30 分钟）    | 无重复条目、无卡死、ACTION_REQUIRED 有用户出口   | 待执行 | `NOT RUN — PHYSICAL` | 日志/截图    |
+| #   | Initial state            | Operation                          | Expected                                         | Actual                                                                          | Result                     | Evidence               |
+| --- | ------------------------ | ---------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------- | -------------------------- | ---------------------- |
+| C1  | A、B 各自空库            | A 离线（DevTools offline）快速记录 | `✓ 已记录`，A 本地可见                           | 待执行                                                                          | `NOT RUN — PHYSICAL`       | 截图                   |
+| C2  | A 离线已记录             | 刷新 A                             | 记录仍在（重启/刷新不丢）                        | 待执行                                                                          | `NOT RUN — PHYSICAL`       | 截图                   |
+| C3  | A 恢复网络               | 观察 A 自动同步                    | outbox 自动推送，无需手动                        | 待执行                                                                          | `NOT RUN — PHYSICAL`       | 网络面板               |
+| C4  | A 已同步                 | B 拉取                             | B 看到同一条记录                                 | InPrivate 窗口见「明天买东西」；B 新建「9.30测试第二台设备」后 A 也可见（双向） | `VERIFIED REAL` 2026-09-27 | 两端截图 + `devices`=2 |
+| C5  | A、B 同条目              | 非重叠字段分别编辑                 | 自动合并，无冲突提示                             | 待执行                                                                          | `NOT RUN — PHYSICAL`       | 两端字段截图           |
+| C6  | A、B 同条目              | 同字段（截止时间）分别编辑         | 显式冲突，只列该字段                             | 待执行                                                                          | `NOT RUN — PHYSICAL`       | 冲突 UI 截图           |
+| C7  | 冲突可见                 | 选择本机/已同步/显式值并解决       | 收敛到所选值，写入 revision                      | 待执行                                                                          | `NOT RUN — PHYSICAL`       | 解决前后截图           |
+| C8  | 解决后                   | 立即再编辑一次                     | 后续编辑不被旧 resolution 覆盖                   | 待执行                                                                          | `NOT RUN — PHYSICAL`       | 两端截图               |
+| C9  | A 删除、B 编辑同条目     | 观察结果                           | 不静默复活；保留删除或进入显式处理               | 待执行                                                                          | `NOT RUN — PHYSICAL`       | 截图                   |
+| C10 | 已删除条目               | 限时 Undo 过期后再尝试 undo-delete | 拒绝 undelete，只能采用已同步 tombstone          | 待执行                                                                          | `NOT RUN — PHYSICAL`       | 响应/截图              |
+| C11 | A、B 各改 CourseSchedule | 并发整组替换                       | 整组冲突：只能选完整本机组或完整已同步组         | 待执行                                                                          | `NOT RUN — PHYSICAL`       | 冲突 UI 截图           |
+| C12 | A、B 各改 SemesterWeek   | 并发整组替换                       | 同 C11                                           | 待执行                                                                          | `NOT RUN — PHYSICAL`       | 冲突 UI 截图           |
+| C13 | 双端有未决状态           | 关闭并重开两个 profile             | outbox 继续推送，unresolved 记录复现，无重复对象 | 待执行                                                                          | `NOT RUN — PHYSICAL`       | 重启前后截图           |
+| C14 | 网络抖动环境             | 长时间重试（断续网络 ≥30 分钟）    | 无重复条目、无卡死、ACTION_REQUIRED 有用户出口   | 待执行                                                                          | `NOT RUN — PHYSICAL`       | 日志/截图              |
 
 > 覆盖 `19_TEST_ACCEPTANCE_SPEC.md` 的 T-SYNC-001..008、T-REC-001..005 与 `docs/MULTI_DEVICE_VERIFICATION.md` 的 A–K 真实版。
 
