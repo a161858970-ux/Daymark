@@ -261,9 +261,11 @@ Phase 6 的自动证据包括：
 - **两个独立 browser profile 双向同步 VERIFIED REAL**：原窗口与 InPrivate 窗口互登同一账号、互见两条待办；服务端 `devices` 2 个 device、`items` 2 行、`sync_conflicts` 0。
 - **离线记录 → 刷新不丢 → 恢复网络自动补传 VERIFIED REAL（C1–C3）**：本地 09:51:35 创建「离线测试不要丢」，服务端 09:52:34 收到 ITEM CREATE，全程未手动触发；`raw_captures` 3/3 RESOLVED、`items` 3 行无重复标题、`sync_conflicts` 0。仍缺：C5–C12 冲突场景、C13 关闭重开、C14 长时间重试。
 
+- **Email OTP VERIFIED REAL（2026-09-27）**：用户在 Dashboard 配置 163 SMTP（`smtp.163.com:465`，Username 必须是完整邮箱地址，否则 `500 unexpected_failure`）并把 `Magic link or OTP` 模板改为 `{{ .Token }}` 后，发送验证码 → 输码 → 登录 → 同步全链路通过；退出后改用验证码重新登录，owner 仍为 `645027f0-…`，本机 3 条数据继续同步、未重绑。
+
 ### BLOCKED BY EXTERNAL CONFIGURATION
 
-- Email OTP：模板需先配置 SMTP 才能编辑（当前默认模板发登录链接，非 6 位验证码）。
+- Phone OTP：SMS Provider 未配置 → `SMS_PROVIDER_NOT_CONFIGURED`。
 - Phone OTP：SMS Provider 未配置 → 运行时 `SMS_PROVIDER_NOT_CONFIGURED`。
 - Google OAuth：Client ID / Secret 与 redirect URI 未配置。
 - Manual Identity Linking：需在 Supabase Dashboard 开启，否则 `linkIdentity()` 返回 422。
