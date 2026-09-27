@@ -343,6 +343,11 @@ export function startAuthenticatedSync(
   retryRun = run;
   const sessionListener = client.auth.onAuthStateChange((_event, session) => {
     if (session) {
+      // A (re)authenticated session must re-diagnose why sync stopped: the
+      // ACTION_REQUIRED flag raised while ANOTHER account was signed in would
+      // otherwise keep this account blocked until the user presses retry by
+      // hand. Genuinely rejected mutations re-assert the flag on the next run.
+      actionRequired = false;
       publishStatus("SYNCING");
       window.setTimeout(run, 0);
     } else {
