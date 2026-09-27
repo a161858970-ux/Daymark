@@ -498,7 +498,28 @@ export function createAuthAdapter(client: AuthClientLike): AuthAdapter {
  * supabase-js itself.
  */
 export function readAuthRedirectError(search: string): string | null {
-  const params = new URLSearchParams(search);
+  return redirectErrorMessage(search, "");
+}
+
+/**
+ * Some providers return the failure in the query string, others in the hash
+ * fragment. Read both, preferring the explicit `error_code`.
+ */
+export function redirectErrorMessage(
+  search: string,
+  hash: string,
+): string | null {
+  const params = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search,
+  );
+  const fragment = hash.startsWith("#") ? hash.slice(1) : hash;
+  if (fragment) {
+    const fromHash = new URLSearchParams(fragment);
+    for (const key of ["error_code", "error", "error_description"]) {
+      const value = fromHash.get(key);
+      if (value) params.set(key, value);
+    }
+  }
   const code = (
     params.get("error_code") ??
     params.get("error") ??
@@ -514,19 +535,39 @@ export function readAuthRedirectError(search: string): string | null {
   return "登录未完成，请稍后再试。";
 }
 
+/**
+ * Snapshot at module load: supabase-js may rewrite the URL while it finishes
+ * the OAuth/PKCE exchange during startup, so the app must capture any failure
+ * before the client is constructed (this module is imported first).
+ */
+const STARTUP_REDIRECT_ERROR =
+  typeof window === "undefined"
+    ? null
+    : redirectErrorMessage(window.location.search, window.location.hash);
+
+export function getStartupRedirectError(): string | null {
+  return STARTUP_REDIRECT_ERROR;
+}
+
 /** Remove auth error parameters after they have been surfaced once. */
 export function clearAuthRedirect(): void {
   if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
-  const params = url.searchParams;
-  for (const key of [...params.keys()])
-    if (
-      key === "error" ||
-      key === "error_code" ||
-      key === "error_description" ||
-      key === "code" ||
-      key === "state"
-    )
-      params.delete(key);
+  const errorKeys = ["error", "error_code", "error_description"];
+  for (const key of errorKeys) url.searchParams.delete(key);
+  const fragment = url.hash.startsWith("#") ? url.hash.slice(1) : "";
+  if (fragment) {
+    const fromHash = new URLSearchParams(fragment);
+    let touched = false;
+    for (const key of errorKeys)
+      if (fromHash.has(key)) {
+        fromHash.delete(key);
+        touched = true;
+      }
+    if (touched) {
+      const value = fromHash.toString();
+      url.hash = value ? `#${value}` : "";
+    }
+  }
   window.history.replaceState({}, "", url.toString());
 }

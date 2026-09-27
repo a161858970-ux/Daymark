@@ -249,7 +249,7 @@ Phase 6 的自动证据包括：
 
 ### VERIFIED LOCAL
 
-- `pnpm test`：**181 passed + 1 skipped**（domain 11、application 17、storage 35、web 69、API 49 + 1 真实 PostgreSQL skip）；`pnpm build`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck` 全部 PASS。
+- `pnpm test`：**184 passed + 1 skipped**（domain 11、application 17、storage 35、web 72、API 49 + 1 真实 PostgreSQL skip）；shell 中导出 `REAL_DATABASE_URL` 后为 **185 passed + 0 skipped**；`pnpm build`、`pnpm lint`、`pnpm format:check`、`pnpm typecheck` 全部 PASS。
 - 新增测试：`apps/web/src/auth/phone.test.ts`(4)、`adapter.test.ts`(30，覆盖规格 §15 的 1-19、22-30)、`SignInPanel.test.tsx`(4)、`packages/storage/src/owner-continuity.test.ts`(3，覆盖 owner 连续性与跨 owner 隔离)。全部使用 fake provider，不发送真实短信/邮件。
 - 浏览器实测（真实 Supabase client 注入 `.env` 配置）：打开「账户与同步」即手机号验证码主入口（国家默认 +86），Google 次之、邮箱第三级；切换邮箱分支渲染正常，无控制台报错。
 

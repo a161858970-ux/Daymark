@@ -7,7 +7,11 @@ import {
   type AuthenticatedSyncStatus,
 } from "./authSync.js";
 import type { AuthAccount } from "./auth/adapter.js";
-import { clearAuthRedirect, readAuthRedirectError } from "./auth/adapter.js";
+import {
+  clearAuthRedirect,
+  getStartupRedirectError,
+  readAuthRedirectError,
+} from "./auth/adapter.js";
 import { AccountIdentities } from "./auth/AccountIdentities.js";
 import { SignInPanel } from "./auth/SignInPanel.js";
 import { motionDuration, useExitTransition } from "./motion.js";
@@ -82,10 +86,16 @@ export function AccountControl({
   // that already belongs to another account): surface it once, then clean
   // the URL so a refresh cannot replay it.
   useEffect(() => {
-    const redirectError = readAuthRedirectError(window.location.search);
+    const redirectError =
+      getStartupRedirectError() ??
+      readAuthRedirectError(window.location.search);
     if (!redirectError) return;
     setMessage(redirectError);
     clearAuthRedirect();
+    // The failure lands on a freshly loaded page (the panel is closed), so
+    // open it — otherwise the user sees a silent reload.
+    cancelExit();
+    setOpen(true);
   }, []);
 
   useEffect(() => {

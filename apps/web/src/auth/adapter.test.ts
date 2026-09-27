@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createAuthAdapter,
   readAuthRedirectError,
+  redirectErrorMessage,
   type AuthAdapter,
   type AuthClientLike,
 } from "./adapter.js";
@@ -1002,5 +1003,37 @@ describe("OTP", () => {
     expect((error as AuthUiError).code).toBe(SMS_PROVIDER_NOT_CONFIGURED);
     expect((error as Error).message).toContain("SMS_PROVIDER_NOT_CONFIGURED");
     expect(fake.sentPhone).toBe(0);
+  });
+});
+
+describe("OAuth redirect failures", () => {
+  it("reads identity_already_exists from the query string", () => {
+    expect(readAuthRedirectError("?error=identity_already_exists")).toBe(
+      "该登录方式已经关联其他账号。",
+    );
+    expect(readAuthRedirectError("?error_code=identity_already_exists")).toBe(
+      "该登录方式已经关联其他账号。",
+    );
+  });
+
+  it("reads failures from the hash fragment too", () => {
+    expect(redirectErrorMessage("", "#error=identity_already_exists")).toBe(
+      "该登录方式已经关联其他账号。",
+    );
+    expect(
+      redirectErrorMessage(
+        "?code=pkce-value",
+        "#error_code=identity_already_exists",
+      ),
+    ).toBe("该登录方式已经关联其他账号。");
+    expect(redirectErrorMessage("", "#error=access_denied")).toBe(
+      "登录未完成，请重试。",
+    );
+  });
+
+  it("stays silent when the redirect carries no failure", () => {
+    expect(redirectErrorMessage("", "")).toBeNull();
+    expect(redirectErrorMessage("?code=pkce-value", "")).toBeNull();
+    expect(redirectErrorMessage("", "#access_token=abc")).toBeNull();
   });
 });
