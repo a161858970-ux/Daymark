@@ -259,6 +259,8 @@ Phase 6 的自动证据包括：
 - `verify:live-api` → `Live API verified for owner d54867cf-…`（真实 JWT → 认证 API → 真实 change page）。
 - 浏览器真实邮箱+密码注册/登录 → 记录「明天买东西」→ push 落库：`items` 1 行（owner `645027f0-…`）、`change_log` 6 行（capture → decision → resolved）。证据见 `docs/AUTH_REAL_VALIDATION.md §6`。
 - **两个独立 browser profile 双向同步 VERIFIED REAL**：原窗口与 InPrivate 窗口互登同一账号、互见两条待办；服务端 `devices` 2 个 device、`items` 2 行、`sync_conflicts` 0。
+- **Google OAuth VERIFIED REAL（2026-09-27）**：Dashboard 凭据 + `external.google=true`；同邮箱**自动合并**进原用户（Case A，登录后 3 条数据仍在）、**重复身份拒绝**（Case C，163 账号绑已占用的 Google → 提示「该登录方式已经关联其他账号。」，服务端 identities 未变、用户数不变）。
+- **跨 owner 数据保护 VERIFIED REAL**：用另一账号登录时提示「本机记录已关联另一账户，请使用原账户」，本机数据不删不迁、云端该账号 `items`=0、界面进入「需要检查」。期间修复回跳错误不可见缺陷（`61595c8`：query+hash 解析 + 模块加载快照 + 自动弹开账户面板）。
 - **离线记录 → 刷新不丢 → 恢复网络自动补传 VERIFIED REAL（C1–C3）**：本地 09:51:35 创建「离线测试不要丢」，服务端 09:52:34 收到 ITEM CREATE，全程未手动触发；`raw_captures` 3/3 RESOLVED、`items` 3 行无重复标题、`sync_conflicts` 0。仍缺：C5–C12 冲突场景、C13 关闭重开、C14 长时间重试。
 
 - **Email OTP VERIFIED REAL（2026-09-27）**：用户在 Dashboard 配置 163 SMTP（`smtp.163.com:465`，Username 必须是完整邮箱地址，否则 `500 unexpected_failure`）并把 `Magic link or OTP` 模板改为 `{{ .Token }}` 后，发送验证码 → 输码 → 登录 → 同步全链路通过；退出后改用验证码重新登录，owner 仍为 `645027f0-…`，本机 3 条数据继续同步、未重绑。
