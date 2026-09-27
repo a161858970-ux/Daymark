@@ -34,6 +34,7 @@ import {
   currentAccessToken,
   openActionRequiredIssues,
   requestCaptureInterpretation,
+  requestSyncNow,
   resolveSyncConflict,
   retryActionRequiredIssue,
   retryAuthenticatedSync,
@@ -230,6 +231,9 @@ export function App() {
     // Completion, deletion and time edits land here, so stale reminder keys
     // are canceled promptly instead of waiting for the interval.
     void reminderTickRef.current?.();
+    // A local write should reach the other device without waiting for the
+    // next poll tick; no-ops unless the outbox actually holds something.
+    requestSyncNow();
   }, [currentCourseId, selectedItem?.id, selectedSemesterId]);
 
   useEffect(() => {

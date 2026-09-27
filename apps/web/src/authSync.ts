@@ -101,7 +101,13 @@ export async function requestCaptureInterpretation(
 let activeRun: Promise<void> | null = null;
 let actionRequired = false;
 let retryRun: (() => void) | null = null;
-const SYNC_RECHECK_INTERVAL_MS = 30_000;
+/**
+ * Sync cadence (engineering parameter, not product behaviour): the spec asks
+ * only for "best effort while offline" and fixes no number. 5 s keeps a
+ * second device visually live without meaningful request volume.
+ * See docs/ADR-008-sync-cadence.md.
+ */
+export const SYNC_RECHECK_INTERVAL_MS = 5_000;
 
 export type AuthenticatedSyncState =
   | "LOCAL_ONLY"
@@ -115,6 +121,21 @@ export type AuthenticatedSyncState =
 export interface AuthenticatedSyncStatus {
   state: AuthenticatedSyncState;
   checked_at: string | null;
+}
+
+/**
+ * Run the loop right after a local write instead of waiting for the next
+ * tick, but only when there is actually something queued to push — a plain
+ * UI refresh must not add a request.
+ */
+export function requestSyncNow(): void {
+  if (!retryRun) return;
+  void localRepository
+    .pendingMutations()
+    .then((pending) => {
+      if (pending.length) retryRun?.();
+    })
+    .catch(() => undefined);
 }
 
 export function retryAuthenticatedSync(): void {
@@ -358,9 +379,13 @@ export function startAuthenticatedSync(
     }
   });
   const markOffline = () => publishStatus("OFFLINE");
+  const markVisible = () => {
+    if (!document.hidden) run();
+  };
   window.addEventListener("online", run);
   window.addEventListener("offline", markOffline);
   window.addEventListener("focus", run);
+  document.addEventListener("visibilitychange", markVisible);
   const timer = window.setInterval(run, SYNC_RECHECK_INTERVAL_MS);
   run();
   return () => {
@@ -370,6 +395,7 @@ export function startAuthenticatedSync(
     window.removeEventListener("online", run);
     window.removeEventListener("offline", markOffline);
     window.removeEventListener("focus", run);
+    document.removeEventListener("visibilitychange", markVisible);
     window.clearInterval(timer);
   };
 }
