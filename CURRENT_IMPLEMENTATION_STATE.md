@@ -276,3 +276,13 @@ Phase 6 的自动证据包括：
 > **SMS REAL PROVIDER: EXTERNAL CONFIGURATION REQUIRED**
 
 配置清单与真实验收表见 `docs/AUTH_REAL_VALIDATION.md`。
+
+## 12. 同步验收与节奏调优（2026-09-27）
+
+真实双浏览器验收暴露并修复了 3 个缺陷，随后 C5/C6/C7 全部真实通过：
+
+- **`b41b16e`**：`updateItem` 原本把整条 item 快照作为 `changed_fields` 推送，未改动字段的旧值被服务端当成并发修改 → 非重叠编辑产生假冲突（违反规格 14 §22.3 / 17「互不重叠可自动 merge」）。改为只排队真正变化的字段，无变化则不产生 mutation。
+- **`5dce809`**：编辑表单提交的是「打开时的旧值」（行在编辑期间被同步刷新过），且冲突解决只写入冲突字段，把同一次被拒绝推送里**未冲突的字段丢掉**（真实发生过标题丢失）。改为按打开快照算差异 + 按时间点比较（`+00:00` 与 `.Z` 等价），解决时保留被拒绝推送中未冲突的白名单字段。
+- **`1b5fb8d`（`docs/ADR-008-sync-cadence.md`）**：本地写后立即推送（仅当 outbox 有待推项）、轮询 30 s → 5 s、补 `visibilitychange`。规格未规定秒数，属工程参数。
+- 验收：C5（非重叠自动合并、无提示）、C6（同字段显式冲突、只列该字段）、C7（三种解决策略均真实走过并收敛）→ `docs/FINAL_RELEASE_VALIDATION.md` C 段。
+- 测试 **194 passed + 0 skipped**（新增 `itemEditDiff` 4、`multi-device` 冲突保字段 1、cadence 2）。
