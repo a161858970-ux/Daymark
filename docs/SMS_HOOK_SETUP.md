@@ -74,6 +74,18 @@ pnpm dlx supabase secrets set \
 3. 故意输错码 → 被 Supabase 拒绝（说明核验仍在 Supabase 侧）
 4. 服务端核对：`auth.users` 新增 phone 用户、`identities` 含 `provider=phone`
 
+## 排障实录（2026-09-28 联调时真实踩过）
+
+| 现象                                                                                      | 真因                                                                                                                                     | 处理                                                                                                                                      |
+| ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dlx supabase ...` 报 `unexpected character "P" in variable name near "Project URL"` | `.env` 里有两行**没有 `=`** 的残留标签                                                                                                   | 注释掉即可（CLI 会自行解析 `.env`）                                                                                                       |
+| 请求函数返回 `401 {"error":"bad signature"}`                                              | ① 校验代码只认 `whsec_` 开头、不认 `v1,whsec_`；② **Supabase 没采用我方密钥，而是在 `hook_send_sms_secrets` 里自建了 64 位十六进制密钥** | 用 Management API `GET /v1/projects/{ref}/config/auth` 读回**服务端存的那个值**，写入 `SEND_SMS_WEBHOOK_SECRET` 并 `supabase secrets set` |
+| 阿里云返回 `isv.OUT_OF_SERVICE`                                                           | **账户余额不足、账号被暂停**（与 RegionId 无关，三种区域返回一致）                                                                       | 充值中心充值后自动恢复                                                                                                                    |
+| 阿里云返回 `SignatureDoesNotMatch`                                                        | RPC V1 签名串拼接/编码错误                                                                                                               | 核对 `POST&%2F&` + RFC3986 编码（空格→%20、`*`→%2A、`~` 不编码）                                                                          |
+
+> 预检技巧：用**非法号码**（如 `12345678901`）打一次真实请求 —— 阿里云会先校验签名再校验号码，因此
+> `SignatureDoesNotMatch` = 签名错；`MOBILE_NUMBER_ILLEGAL` 等号码类错误 = **链路已通**；整个过程**不会真的发出短信**。
+
 ## 已知风险
 
 - GoTrue 在无内置 SMS provider 时是否放行 hook 发送 —— 部署后第一步验证；若被拦，需在 Dashboard 的 Phone provider 里补一个占位配置（届时按报错处理）。

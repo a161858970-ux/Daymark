@@ -82,9 +82,10 @@ async function verifyWebhook(
   const timestamp = headers.get("webhook-timestamp");
   const signatures = (headers.get("webhook-signature") ?? "").split(" ");
   if (!timestamp || signatures.length === 0) return false;
-  const key = secret.startsWith("whsec_")
-    ? atob(secret.slice("whsec_".length))
-    : secret;
+  const material = secret.startsWith("v1,") ? secret.slice(3) : secret;
+  const key = material.startsWith("whsec_")
+    ? atob(material.slice("whsec_".length))
+    : material;
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(key),
