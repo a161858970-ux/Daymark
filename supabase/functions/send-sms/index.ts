@@ -175,7 +175,9 @@ Deno.serve(async (request) => {
     SignatureVersion: "1.0",
     SignatureNonce: crypto.randomUUID(),
     Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
-    RegionId: Deno.env.get("ALIYUN_REGION_ID") || "cn-hangzhou",
+    // PNVS only answers in cn-beijing; a wrong region returns isv.OUT_OF_SERVICE
+    // or a bare UNKNOWN, so default to it instead of the generic hangzhou one.
+    RegionId: Deno.env.get("ALIYUN_REGION_ID") || "cn-beijing",
     CountryCode: "86",
     PhoneNumber: e164[1],
     SignName: signName,
@@ -186,13 +188,22 @@ Deno.serve(async (request) => {
 
   const response = await fetch(ENDPOINT, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "application/json",
+      // Aliyun's gateway answers a bare UNKNOWN for runtimes whose default
+      // User-Agent it does not recognise (Deno/undici), while accepting the
+      // same signed request from an SDK-looking client.
+      "user-agent": "Alibaba Cloud SDK - Deno/1.0 (send-sms hook)",
+    },
     body: new URLSearchParams(params).toString(),
   });
-  const result = (await response.json().catch(() => ({}))) as {
+  const raw = await response.text();
+  const result = JSON.parse(raw || "{}") as {
     Code?: string;
     Message?: string;
     BizId?: string;
+    RequestId?: string;
   };
   if (result.Code !== "OK") {
     // Aliyun error codes are safe to surface; the OTP is not.
@@ -201,8 +212,14 @@ Deno.serve(async (request) => {
         result.Message ?? "unknown"
       }`,
     );
+    // Keep the provider's own code/message for triage; never echo request
+    // internals (the canonical string carries the AccessKeyId).
     return new Response(
-      JSON.stringify({ error: result.Code ?? "provider_error" }),
+      JSON.stringify({
+        error: result.Code ?? "provider_error",
+        message: (result.Message ?? "").slice(0, 160),
+        http: response.status,
+      }),
       {
         status: 502,
         headers: { "content-type": "application/json" },
