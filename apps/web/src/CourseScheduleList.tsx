@@ -32,7 +32,54 @@ function fields(value: CourseSchedule): ScheduleFields {
   };
 }
 
+/**
+ * The whole schedule set is replaced in one command (spec 16 §9 — suitable
+ * for manual correction), so an edit is expressed as "same list, one entry
+ * swapped". Adding appends; a stale editing id falls back to appending so a
+ * click can never silently drop an entry.
+ */
+export function buildScheduleReplace(
+  schedules: CourseSchedule[],
+  editingId: string | null,
+  entry: ScheduleFields,
+): ScheduleFields[] {
+  const editing =
+    editingId !== null && schedules.some((value) => value.id === editingId);
+  if (!editing) return [...schedules.map(fields), entry];
+  return schedules.map((value) =>
+    fields(value.id === editingId ? { ...value, ...entry } : value),
+  );
+}
+
+function summaryParts(value: ScheduleFields): {
+  weekday: string;
+  rest: string;
+} {
+  // Keeps the original row wording: weekday, then time, then the rest
+  // introduced by a middle dot.
+  let rest = `${value.start_time.slice(0, 5)}–${value.end_time.slice(0, 5)}`;
+  if (value.week_start !== null) {
+    rest += ` · 第${value.week_start}${
+      value.week_end !== null && value.week_end !== value.week_start
+        ? `–${value.week_end}`
+        : ""
+    }周`;
+  }
+  if (value.classroom) rest += ` · ${value.classroom}`;
+  if (value.stage_label) rest += ` · ${value.stage_label}`;
+  return {
+    weekday: weekdays[value.weekday - 1] ?? String(value.weekday),
+    rest,
+  };
+}
+
+function summary(value: ScheduleFields): string {
+  const parts = summaryParts(value);
+  return `${parts.weekday} ${parts.rest}`;
+}
+
 export function CourseScheduleList({ schedules, onReplace }: Props) {
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [weekday, setWeekday] = useState(1);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
@@ -42,12 +89,39 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
   const [stageLabel, setStageLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  async function add(event: FormEvent) {
+  const editing = editingId
+    ? (schedules.find((value) => value.id === editingId) ?? null)
+    : null;
+
+  function resetForm() {
+    setEditingId(null);
+    setWeekday(1);
+    setStartTime("");
+    setEndTime("");
+    setWeekStart("");
+    setWeekEnd("");
+    setClassroom("");
+    setStageLabel("");
+    setError(null);
+  }
+
+  function startEdit(value: CourseSchedule) {
+    setEditingId(value.id);
+    setWeekday(value.weekday);
+    setStartTime(value.start_time);
+    setEndTime(value.end_time);
+    setWeekStart(value.week_start === null ? "" : String(value.week_start));
+    setWeekEnd(value.week_end === null ? "" : String(value.week_end));
+    setClassroom(value.classroom ?? "");
+    setStageLabel(value.stage_label ?? "");
+    setError(null);
+  }
+
+  async function submit(event: FormEvent) {
     event.preventDefault();
     try {
-      await onReplace([
-        ...schedules.map(fields),
-        {
+      await onReplace(
+        buildScheduleReplace(schedules, editingId, {
           weekday,
           start_time: startTime,
           end_time: endTime,
@@ -55,15 +129,9 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
           week_end: weekEnd ? Number(weekEnd) : null,
           classroom: classroom.trim() || null,
           stage_label: stageLabel.trim() || null,
-        },
-      ]);
-      setStartTime("");
-      setEndTime("");
-      setWeekStart("");
-      setWeekEnd("");
-      setClassroom("");
-      setStageLabel("");
-      setError(null);
+        }),
+      );
+      resetForm();
     } catch (cause) {
       setError(toUserMessage(cause));
     }
@@ -72,7 +140,8 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
   async function remove(id: string) {
     try {
       await onReplace(schedules.filter((value) => value.id !== id).map(fields));
-      setError(null);
+      if (editingId === id) resetForm();
+      else setError(null);
     } catch (cause) {
       setError(toUserMessage(cause));
     }
@@ -85,35 +154,40 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
       </p>
       <ul className="schedule-list">
         {schedules.map((value) => (
-          <li key={value.id}>
+          <li
+            key={value.id}
+            className={value.id === editingId ? "is-editing" : undefined}
+          >
             <span>
-              <strong>{weekdays[value.weekday - 1]}</strong>{" "}
-              {value.start_time.slice(0, 5)}–{value.end_time.slice(0, 5)}
-              {value.week_start !== null && (
-                <>
-                  {" "}
-                  · 第{value.week_start}
-                  {value.week_end !== null &&
-                  value.week_end !== value.week_start
-                    ? `–${value.week_end}`
-                    : ""}
-                  周
-                </>
-              )}
-              {value.classroom && <> · {value.classroom}</>}
-              {value.stage_label && <> · {value.stage_label}</>}
+              <strong>{summaryParts(fields(value)).weekday}</strong>{" "}
+              {summaryParts(fields(value)).rest}
             </span>
-            <button
-              type="button"
-              className="quiet-button"
-              onClick={() => void remove(value.id)}
-            >
-              移除
-            </button>
+            <span className="row-actions">
+              <button
+                type="button"
+                className="quiet-button"
+                aria-label={`编辑 ${summary(fields(value))}`}
+                onClick={() => startEdit(value)}
+              >
+                编辑
+              </button>
+              <button
+                type="button"
+                className="quiet-button"
+                onClick={() => void remove(value.id)}
+              >
+                移除
+              </button>
+            </span>
           </li>
         ))}
       </ul>
-      <form className="schedule-form" onSubmit={(event) => void add(event)}>
+      <form className="schedule-form" onSubmit={(event) => void submit(event)}>
+        {editing && (
+          <p className="schedule-editing-note">
+            正在修改：{summary(fields(editing))}
+          </p>
+        )}
         <label>
           星期
           <select
@@ -184,7 +258,12 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
             onChange={(event) => setStageLabel(event.target.value)}
           />
         </label>
-        <button type="submit">添加安排</button>
+        <button type="submit">{editing ? "保存修改" : "添加安排"}</button>
+        {editing && (
+          <button type="button" className="quiet-button" onClick={resetForm}>
+            取消
+          </button>
+        )}
       </form>
       {error && (
         <p className="field-error" role="alert">

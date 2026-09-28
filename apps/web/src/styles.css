@@ -3220,3 +3220,20 @@ h2 {
 .identity-row select {
   width: 100%;
 }
+
+/* --- Schedule editing: correct an existing entry (spec 16 §9) --------- */
+.schedule-list .row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.schedule-list li.is-editing {
+  box-shadow: inset 3px 0 0 var(--accent);
+  padding-left: 12px;
+}
+.schedule-editing-note {
+  width: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
