@@ -1,9 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import {
-  DEFAULT_PHONE_COUNTRY,
-  PHONE_COUNTRIES,
-  normalizePhone,
-} from "./phone.js";
+import { DEFAULT_PHONE_COUNTRY, normalizePhone } from "./phone.js";
 import type { AuthAccount, AuthAdapter } from "./adapter.js";
 import { AuthUiError } from "./errors.js";
 
@@ -37,7 +33,9 @@ export function SignInPanel({
     useState<PasswordAction>("sign_in");
   const [resetSent, setResetSent] = useState(false);
 
-  const [countryCode, setCountryCode] = useState(DEFAULT_PHONE_COUNTRY);
+  // Product decision (2026-09-28): China-only phone login - no country
+  // picker and no visible +86 prefix; normalization still emits E.164.
+  const countryCode = DEFAULT_PHONE_COUNTRY;
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -341,24 +339,13 @@ export function SignInPanel({
         credentialMode === "otp" ? (
           phoneStep === "number" ? (
             <form onSubmit={submitPhoneNumber}>
-              <label htmlFor="auth-phone-country">国家 / 地区</label>
-              <select
-                id="auth-phone-country"
-                value={countryCode}
-                onChange={(event) => setCountryCode(event.target.value)}
-              >
-                {PHONE_COUNTRIES.map((country) => (
-                  <option key={country.code} value={country.code}>
-                    {country.label} {country.code}
-                  </option>
-                ))}
-              </select>
               <label htmlFor="auth-phone">手机号</label>
               <input
                 id="auth-phone"
                 type="tel"
                 inputMode="tel"
                 autoComplete="tel-national"
+                placeholder="11 位手机号"
                 required
                 value={phone}
                 onChange={(event) => setPhone(event.target.value)}

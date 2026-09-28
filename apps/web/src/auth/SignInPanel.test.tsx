@@ -48,6 +48,15 @@ it("lists every login method with its binding status for a signed-in account", (
   expect(markup).toContain("绑定 Google");
 });
 
+it("shows one China phone field with no country picker or +86 prefix", () => {
+  const markup = renderToStaticMarkup(<SignInPanel online adapter={adapter} />);
+  expect(markup).toContain('id="auth-phone"');
+  expect(markup).toContain('placeholder="11 位手机号"');
+  expect(markup).not.toContain("国家 / 地区");
+  expect(markup).not.toContain("+86");
+  expect(markup).not.toContain("中国香港");
+});
+
 it("renders nothing for the identity section while signed out", () => {
   const markup = renderToStaticMarkup(
     <AccountIdentities online adapter={adapter} account={null} />,

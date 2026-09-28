@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   DEFAULT_PHONE_COUNTRY,
-  PHONE_COUNTRIES,
   formatPhoneDisplay,
   normalizePhone,
 } from "./phone.js";
@@ -30,7 +29,8 @@ export function AccountIdentities({
 }) {
   const [identities, setIdentities] = useState<AuthIdentityView[]>([]);
   const [form, setForm] = useState<RowForm | null>(null);
-  const [countryCode, setCountryCode] = useState(DEFAULT_PHONE_COUNTRY);
+  // Same China-only decision as the sign-in panel: fixed +86, no picker.
+  const countryCode = DEFAULT_PHONE_COUNTRY;
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -234,24 +234,13 @@ export function AccountIdentities({
         </div>
         {form === "phone" && (
           <form onSubmit={submitBindPhone}>
-            <label htmlFor="identity-country">国家 / 地区</label>
-            <select
-              id="identity-country"
-              value={countryCode}
-              onChange={(event) => setCountryCode(event.target.value)}
-            >
-              {PHONE_COUNTRIES.map((country) => (
-                <option key={country.code} value={country.code}>
-                  {country.label} {country.code}
-                </option>
-              ))}
-            </select>
             <label htmlFor="identity-phone">手机号</label>
             <input
               id="identity-phone"
               type="tel"
               inputMode="tel"
               autoComplete="tel-national"
+              placeholder="11 位手机号"
               required
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
