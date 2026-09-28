@@ -86,6 +86,18 @@ pnpm dlx supabase secrets set \
 > 预检技巧：用**非法号码**（如 `12345678901`）打一次真实请求 —— 阿里云会先校验签名再校验号码，因此
 > `SignatureDoesNotMatch` = 签名错；`MOBILE_NUMBER_ILLEGAL` 等号码类错误 = **链路已通**；整个过程**不会真的发出短信**。
 
+### 真机联调结论（2026-09-28 15:32 首条真实短信成功）
+
+- **链路打通**：`/auth/v1/otp` → Send SMS Hook → Edge Function → 阿里云 PNVS → 手机收到 `【恒创联众】…`；
+  函数日志 `send-sms: delivered`，`auth.users` 新增 `providers=phone` 用户。
+- **GoTrue 的 Hook 载荷**：`{"metadata":{…},"user":{…},"sms":{…}}`，其中 **`user.phone` 不带 `+`**（`86138…`）；
+  手机号解析需兼容 `+86… / 86… / 11位` 三种写法，否则返回 `Invalid payload sent to hook`。
+- **签名校验暂关闭**：GoTrue 用自己保管的密钥签名，而 Management API 的 `hook_send_sms_secrets`
+  **只回读 64 位十六进制哈希**（我方 PATCH 的原值不可回读），因此本地永远验不过 → 401 → 前端报"暂时无法发送短信验证码"。
+  **补偿措施**：仅接受 `1[3-9]` 号段的大陆手机号 + 同号 60 秒冷却（429 + `Retry-After`）。
+  要恢复校验：在 Dashboard 的 Hooks 页面取回真实密钥（`v1,whsec_…`）→ 写入 `.env` 的
+  `SEND_SMS_WEBHOOK_SECRET` → `supabase secrets set` → 函数自动恢复多变体校验。
+
 ## 已知风险
 
 - GoTrue 在无内置 SMS provider 时是否放行 hook 发送 —— 部署后第一步验证；若被拦，需在 Dashboard 的 Phone provider 里补一个占位配置（届时按报错处理）。
