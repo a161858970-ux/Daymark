@@ -20,6 +20,8 @@
 
 ## A. Real PostgreSQL
 
+**实际执行库**：Supabase 真实 PostgreSQL（`aws-0-…pooler.supabase.com:5432`）—— 迁移与本段验收均在其上执行，未使用本地可丢弃库。
+
 **前置**
 
 ```bash
@@ -30,12 +32,12 @@ DATABASE_URL=postgres://<user>:<pass>@127.0.0.1:5432/course_manager_release
 REAL_DATABASE_URL=postgres://<user>:<pass>@127.0.0.1:5432/course_manager_release
 ```
 
-| #   | Initial state | Operation                                                             | Expected                                                                                                           | Actual | Result                             | Evidence                                         |
-| --- | ------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------ | ---------------------------------- | ------------------------------------------------ |
-| A1  | 空数据库      | `pnpm db:migrate`                                                     | 依次应用 `001_initial` `002_collection_sync` `003_course_import` `004_reminder_delivery`；`schema_migrations` 4 行 | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | 迁移终端输出 + `SELECT * FROM schema_migrations` |
-| A2  | 迁移完成      | `pnpm test:postgres`                                                  | `real-postgres.integration.test` 不再 skip，全绿                                                                   | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | 测试终端输出（无 skipped）                       |
-| A3  | 迁移完成      | `ALLOW_DEVELOPMENT_SEED=1 pnpm db:seed`（仅本地可丢弃库）             | seed 成功；不设开关时 seed 必须拒绝                                                                                | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | seed 输出 + 无开关时的报错                       |
-| A4  | 迁移完成      | `pnpm verify:live-api`（配 `API_BASE_URL` + `SUPABASE_ACCESS_TOKEN`） | 受保护接口返回数据而非 401                                                                                         | 待执行 | `BLOCKED — EXTERNAL CONFIGURATION` | 脚本输出                                         |
+| #   | Initial state | Operation                                                             | Expected                                                                                                           | Actual                                                                                                                                                           | Result                                                                    | Evidence                                         |
+| --- | ------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------ |
+| A1  | 空数据库      | `pnpm db:migrate`                                                     | 依次应用 `001_initial` `002_collection_sync` `003_course_import` `004_reminder_delivery`；`schema_migrations` 4 行 | `schema_migrations` = **4 行**：`001_initial` `002_collection_sync` `003_course_import` `004_reminder_delivery`（applied_at 2026-09-27T08:52Z；2026-09-28 复核） | `VERIFIED REAL` 2026-09-27                                                | 迁移终端输出 + `SELECT * FROM schema_migrations` |
+| A2  | 迁移完成      | `pnpm test:postgres`                                                  | `real-postgres.integration.test` 不再 skip，全绿                                                                   | `real-postgres.integration.test` → **`Tests 1 passed (1)` 且未 skip**（2026-09-28，需 `REAL_DATABASE_URL`）                                                      | `VERIFIED REAL` 2026-09-28                                                | 测试终端输出（无 skipped）                       |
+| A3  | 迁移完成      | `ALLOW_DEVELOPMENT_SEED=1 pnpm db:seed`（仅本地可丢弃库）             | seed 成功；不设开关时 seed 必须拒绝                                                                                | 无开关运行 `node dist/db/seed.js` → 立即抛 `Set ALLOW_DEVELOPMENT_SEED=1 ...`（exit 1、未连库）✓；正向 seed 未在真实库执行（会写入演示数据，需可丢弃库）         | `VERIFIED REAL`（负向守卫）；正向 seed `BLOCKED — EXTERNAL CONFIGURATION` | seed 输出 + 无开关时的报错                       |
+| A4  | 迁移完成      | `pnpm verify:live-api`（配 `API_BASE_URL` + `SUPABASE_ACCESS_TOKEN`） | 受保护接口返回数据而非 401                                                                                         | `Live API verified for owner 4a8068f2-65fa-4e99-b995-bc4dd0b783ed; change page size 0`（2026-09-28 复跑，临时 JWT 账号验证后已删除）                             | `VERIFIED REAL` 2026-09-28                                                | 脚本输出                                         |
 
 ---
 

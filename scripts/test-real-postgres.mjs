@@ -9,11 +9,17 @@ if (!process.env.REAL_DATABASE_URL) {
   const pnpmEntry = process.env.npm_execpath;
   if (!pnpmEntry)
     throw new Error("Run this verification through pnpm test:postgres");
-  const result = spawnSync(
-    process.execPath,
-    [pnpmEntry, "--filter", "@course-manager/api", "run", "test:postgres"],
-    { stdio: "inherit", env: process.env },
-  );
+  const args = ["--filter", "@course-manager/api", "run", "test:postgres"];
+  // npm_execpath is a .js entry when pnpm runs as a script, but a native
+  // executable (pnpm.exe) in other installs - Node cannot execute that, so
+  // hand the native entry its own process instead.
+  const entryIsJs = /\.(c|m)?js$/.test(pnpmEntry);
+  const result = entryIsJs
+    ? spawnSync(process.execPath, [pnpmEntry, ...args], {
+        stdio: "inherit",
+        env: process.env,
+      })
+    : spawnSync(pnpmEntry, args, { stdio: "inherit", env: process.env });
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;
 }
