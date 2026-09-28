@@ -137,6 +137,16 @@ export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
         ))}
       </ul>
 
+      {!anchor && (
+        <div className="week-bootstrap" role="note">
+          <strong>先确定第一周</strong>
+          <p>
+            这个学期还没有周次。第一周从哪一天开始只有你知道 —— 请点击下方对应的
+            那一周（周一至周日）把它选为第 1
+            周；选定之后才会出现后续周次的自动推算。
+          </p>
+        </div>
+      )}
       {anchor && (
         <p className="week-anchor-note">
           已确定第{anchor.week_number}周为 {anchor.start_date}{" "}
@@ -145,17 +155,19 @@ export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
       )}
 
       <div className="week-picker">
-        <label className="week-picker-control">
-          周次
-          <input
-            type="number"
-            min="1"
-            aria-label="学期周次"
-            placeholder={nextNumber}
-            value={weekNumber}
-            onChange={(event) => setWeekNumber(event.target.value)}
-          />
-        </label>
+        {anchor && (
+          <label className="week-picker-control">
+            周次
+            <input
+              type="number"
+              min="1"
+              aria-label="学期周次"
+              placeholder={nextNumber}
+              value={weekNumber}
+              onChange={(event) => setWeekNumber(event.target.value)}
+            />
+          </label>
+        )}
 
         {grouped.map(([key, list]) => (
           <div key={key} className="week-month">
@@ -165,7 +177,9 @@ export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
                 const projected = anchor
                   ? projectedWeekNumber(anchor, range.start_date)
                   : null;
-                const number = projected ?? manualNumber();
+                // Nothing is known before the first week exists: every row
+                // offers itself as 第1周 and no number is inferred.
+                const number = anchor ? (projected ?? manualNumber()) : 1;
                 const fillSize =
                   anchor && projected !== null
                     ? projected - anchor.week_number + 1
@@ -181,7 +195,9 @@ export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
                         {shortRange(range)}
                       </span>
                       <strong className="week-row-number">第{number}周</strong>
-                      {projected !== null ? (
+                      {!anchor ? (
+                        <em className="week-row-anchor">选为第1周</em>
+                      ) : projected !== null ? (
                         <em className="week-row-projected">推算</em>
                       ) : (
                         <em className="week-row-manual">按左侧周次</em>

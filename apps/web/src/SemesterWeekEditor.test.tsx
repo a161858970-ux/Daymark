@@ -44,4 +44,22 @@ it("offers calendar week rows with projected numbers instead of date inputs", ()
   expect(markup).toContain("08.31 – 09.06");
   expect(markup).toContain("09.28 – 10.04");
   expect(markup).toContain("移除");
+  // With an anchor in place the manual week number is available again.
+  expect(markup).toContain('aria-label="学期周次"');
+});
+
+it("asks for the first week instead of inferring anything", () => {
+  const markup = renderToStaticMarkup(
+    <SemesterWeekEditor
+      semester={semester}
+      weeks={[]}
+      onReplace={async () => {}}
+    />,
+  );
+  expect(markup).toContain("先确定第一周");
+  expect(markup).toContain("选为第1周");
+  // Nothing is known yet: no projected badges, no manual numbering either.
+  expect(markup).not.toContain('class="week-row-projected"');
+  expect(markup).not.toContain('aria-label="学期周次"');
+  expect(markup).not.toContain('type="date"');
 });
