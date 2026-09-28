@@ -1,6 +1,6 @@
 # 手机验证码短信（阿里云 PNVS × Supabase Send SMS Hook）
 
-- 状态：实现完成，待凭据部署与真机验收（2026-09-28）
+- 状态：**已部署并真机验收 `VERIFIED REAL`（2026-09-28 15:32 首条真实短信送达、登录成功）**
 - 关联：`docs/FINAL_RELEASE_VALIDATION.md` B2、`supabase/functions/send-sms/index.ts`
 
 ## 为什么走这条路
