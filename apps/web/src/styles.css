@@ -2269,6 +2269,8 @@ h2 {
   .schedule-form input,
   .schedule-form select,
   .schedule-form button,
+  .week-start-row select,
+  .week-picker-control input,
   .secondary-action,
   .pending-actions button:not(.quiet-button):not(.text-button),
   .detail-actions button,
@@ -3392,9 +3394,14 @@ h2 {
   color: var(--muted);
   font-size: 11px;
 }
+/* Match the week-number control beside it instead of the UA default. */
 .week-start-row select {
   min-height: 36px;
   padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+  color: var(--ink);
 }
 .week-calendar-warning {
   margin: 0 0 12px;
