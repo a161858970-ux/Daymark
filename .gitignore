@@ -6,3 +6,6 @@ coverage/
 *.tsbuildinfo
 playwright-report/
 test-results/
+
+# Supabase CLI local artifacts
+supabase/.temp/
