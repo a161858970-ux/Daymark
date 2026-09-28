@@ -63,3 +63,32 @@ it("asks for the first week instead of inferring anything", () => {
   expect(markup).not.toContain('aria-label="学期周次"');
   expect(markup).not.toContain('type="date"');
 });
+
+it("reaches weeks before the semester start so 第1周 can begin earlier", () => {
+  const markup = renderToStaticMarkup(
+    <SemesterWeekEditor
+      semester={{ ...semester, start_date: "2026-09-07" }}
+      weeks={[]}
+      onReplace={async () => {}}
+    />,
+  );
+  // Four-week buffer: 2026-09-07 minus 28 days is Monday 2026-08-10.
+  expect(markup).toContain("08.10 – 08.16");
+  expect(markup).toContain("先确定第一周");
+});
+
+it("switches every row when the week start day changes", () => {
+  const markup = renderToStaticMarkup(
+    <SemesterWeekEditor
+      semester={semester}
+      weeks={[]}
+      initialWeekStart={0}
+      onReplace={async () => {}}
+    />,
+  );
+  expect(markup).toContain('aria-label="一周起始日"');
+  expect(markup).toContain("周日");
+  // Sunday calendar: the September rows now begin on Sundays.
+  expect(markup).toContain("08.30 – 09.05");
+  expect(markup).not.toContain("08.31 – 09.06");
+});

@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Semester, SemesterWeek } from "@course-manager/domain";
 import { toUserMessage } from "./errors.js";
 import {
+  addDays,
+  anchorMatchesCalendar,
   anchorOf,
   applyWeekSelection,
   monthKey,
@@ -13,13 +15,25 @@ import {
   type WeekFields,
   type WeekRange,
 } from "./semesterWeeks.js";
+import {
+  WEEK_START_OPTIONS,
+  loadWeekStart,
+  readLocalWeekStart,
+  saveWeekStart,
+  weekStartLabel,
+} from "./weekStart.js";
 
 export type { WeekFields };
+
+/** The first week may legitimately start before the semester's own date. */
+const FIRST_WEEK_SEARCH_BUFFER_WEEKS = 4;
 
 interface Props {
   semester: Semester;
   weeks: SemesterWeek[];
   onReplace(values: WeekFields[]): Promise<void>;
+  /** Test seam; production loads the account preference. */
+  initialWeekStart?: number;
 }
 
 /**
@@ -28,7 +42,26 @@ interface Props {
  * and dates, and once the first week exists every later row shows the week
  * number it projects to — clicking one fills all weeks in between.
  */
-export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
+export function SemesterWeekEditor({
+  semester,
+  weeks,
+  onReplace,
+  initialWeekStart,
+}: Props) {
+  const [weekStart, setWeekStart] = useState<number>(
+    initialWeekStart ?? readLocalWeekStart(),
+  );
+
+  useEffect(() => {
+    if (initialWeekStart !== undefined) return;
+    let alive = true;
+    void loadWeekStart().then((value) => {
+      if (alive) setWeekStart(value);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [initialWeekStart]);
   const existing: WeekFields[] = useMemo(
     () =>
       weeks.map(({ week_number, start_date, end_date }) => ({
@@ -46,9 +79,16 @@ export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
+  // Four weeks of buffer on each side: some schools start 第1周 before the
+  // semester's own start_date, and the picker must reach that week.
   const rows = useMemo(
-    () => naturalWeeksBetween(semester.start_date, semester.end_date),
-    [semester.start_date, semester.end_date],
+    () =>
+      naturalWeeksBetween(
+        addDays(semester.start_date, -FIRST_WEEK_SEARCH_BUFFER_WEEKS * 7),
+        addDays(semester.end_date, FIRST_WEEK_SEARCH_BUFFER_WEEKS * 7),
+        weekStart,
+      ),
+    [semester.start_date, semester.end_date, weekStart],
   );
   const grouped = useMemo(() => {
     const byMonth = new Map<string, WeekRange[]>();
@@ -66,11 +106,11 @@ export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
 
   async function choose(range: WeekRange) {
     const projected = anchor
-      ? projectedWeekNumber(anchor, range.start_date)
+      ? projectedWeekNumber(anchor, range.start_date, weekStart)
       : null;
     const fill =
       anchor && projected !== null
-        ? projectedWeeks(anchor, range.start_date)
+        ? projectedWeeks(anchor, range.start_date, weekStart)
         : null;
     const selection: WeekFields[] = fill ?? [
       { week_number: manualNumber(), ...range },
@@ -118,7 +158,8 @@ export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
     <section className="semester-weeks" aria-label={`${semester.name}周次设置`}>
       <h2>{semester.name} · 周次</h2>
       <p className="section-note">
-        一周按公历自然周计算（周一至周日）。选择日期行即可绑定周次，不需要手动填写起止日期。
+        一周按公历自然周计算，起始日可在下方切换（默认周一）。选择日期行即可绑定周次，
+        不需要手动填写起止日期。
       </p>
       <ul className="schedule-list">
         {weeks.map((week) => (
@@ -136,6 +177,38 @@ export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
           </li>
         ))}
       </ul>
+
+      <div className="week-start-row">
+        <label htmlFor="week-start">一周起始日</label>
+        <select
+          id="week-start"
+          aria-label="一周起始日"
+          value={weekStart}
+          onChange={(event) => {
+            const value = Number(event.target.value);
+            setWeekStart(value);
+            void saveWeekStart(value);
+            setStatus(
+              `已将一周起始日设为${weekStartLabel(value)}；已存在的周次日期不会自动改变。`,
+            );
+            setError(null);
+          }}
+        >
+          {WEEK_START_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {anchor && !anchorMatchesCalendar(anchor, weekStart) && (
+        <p className="week-calendar-warning" role="alert">
+          已选的第{anchor.week_number}周从 {anchor.start_date} 开始， 与当前「
+          {weekStartLabel(weekStart)}起始」的日历不一致，因此推算已暂停。
+          如需按新起始日推算，请移除现有周次后重新选择第一周。
+        </p>
+      )}
 
       {!anchor && (
         <div className="week-bootstrap" role="note">
@@ -175,7 +248,7 @@ export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
             <ul className="week-rows">
               {list.map((range) => {
                 const projected = anchor
-                  ? projectedWeekNumber(anchor, range.start_date)
+                  ? projectedWeekNumber(anchor, range.start_date, weekStart)
                   : null;
                 // Nothing is known before the first week exists: every row
                 // offers itself as 第1周 and no number is inferred.
