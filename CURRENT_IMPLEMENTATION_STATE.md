@@ -295,4 +295,6 @@ Phase 6 的自动证据包括：
 - **冲突面板明细（C11 前置）**：整组冲突两侧逐条展示本地/已同步取值，且不泄漏 id/版本/时间戳等内部字段（ADR-004）。
 - **真实环境验收**：C12/C13/C14 → `VERIFIED REAL`，**C 段 14/14**；A 段 A1/A2/A4 `VERIFIED REAL`、A3 负向守卫通过（正向 seed 需可丢弃库，仍 BLOCKED）；D 段 D1–D3 `VERIFIED REAL`（通知权限、系统通知、点击进详情）。
 - **手机验证码短信（2026-09-28 收官）**：个人主体无法通过腾讯云/阿里云**短信服务**的签名资质（要企业）→ 改用**阿里云号码认证服务 PNVS**（赠送签名 `恒创联众` + 模板 `100001`，免审核、仅支持大陆号码、按回执计费）。链路 = Supabase **Send SMS Hook** → Edge Function `send-sms`（RPC V1 签名调 `dypnsapi`）→ 手机；**Supabase 自己生成并核验 OTP**，`TemplateParam` 直接带出该码。真机验收：真实短信送达 + 应用内登录成功（`auth.users` `8138a7f3`、`phone_confirmed_at` 已置）。**踩坑**：① `.env` 里无 `=` 的残留行会让 Supabase CLI 解析失败；② GoTrue 载荷是 `{metadata,user,sms}` 且 `user.phone` **不带 `+`**；③ GoTrue 的 Hook 签名密钥**无法从 API 回读**（只给哈希）→ 暂关校验，改用大陆号段白名单 + 同号 60s 冷却兜底（恢复方法见 `docs/SMS_HOOK_SETUP.md`）。
-- **环境坑（复发会再踩）**：① API 进程挂在本会话下，会话中断被 SIGTERM → 前端红色「稍后重试」，**先查 3100**；② `scripts/test-real-postgres.mjs` 在 `npm_execpath=pnpm.exe` 时被 Node 当 JS 执行而崩溃，已修复；③ **持久化类验收必须用普通窗口**——无痕窗口关窗即清空（浏览器行为，非产品缺陷）。
+- **环境坑（复发会再踩）**：① API 进程曾挂在 Hermes 会话下，会话中断/关闭 Hermes 被 SIGTERM → 前端红色「稍后重试」（连踩 4 次），**先查 3100**；
+  **2026-09-29 已根治**：改用独立窗口启动（`%TEMP%\start-cm-api.cmd`，PowerShell `Start-Process -WindowStyle Minimized`），
+  关闭 Hermes 不再影响；**唯一禁忌是别关任务栏那个 `CourseManager API` 小窗口**（关了才停），且 D5 这类隔夜验收依赖它常驻；② `scripts/test-real-postgres.mjs` 在 `npm_execpath=pnpm.exe` 时被 Node 当 JS 执行而崩溃，已修复；③ **持久化类验收必须用普通窗口**——无痕窗口关窗即清空（浏览器行为，非产品缺陷）。
