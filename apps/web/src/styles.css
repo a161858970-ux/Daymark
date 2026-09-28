@@ -3254,3 +3254,102 @@ h2 {
   font-size: 12px;
   font-style: normal;
 }
+
+/* --- Semester week picker: natural calendar weeks (product 2026-09-28) - */
+.week-anchor-note {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.week-picker {
+  display: grid;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.week-picker-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.week-picker-control input {
+  width: 88px;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+}
+.week-month + .week-month {
+  margin-top: 10px;
+}
+.week-month-label {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.week-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+}
+.week-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.week-rows li:last-child .week-row {
+  border-bottom: 0;
+}
+.week-row:hover,
+.week-row:focus-visible {
+  background: var(--surface);
+}
+.week-row-range {
+  min-width: 108px;
+  font-variant-numeric: tabular-nums;
+}
+.week-row-number {
+  font-size: 12px;
+}
+.week-row-projected,
+.week-row-manual {
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-style: normal;
+}
+.week-row-projected {
+  background: var(--accent-soft, var(--surface));
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+.week-row-manual {
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.week-row-fill {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 11px;
+}
+.week-status {
+  margin: 10px 0 0;
+  color: var(--accent);
+  font-size: 12px;
+}

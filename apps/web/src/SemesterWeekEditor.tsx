@@ -1,11 +1,20 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState } from "react";
 import type { Semester, SemesterWeek } from "@course-manager/domain";
 import { toUserMessage } from "./errors.js";
+import {
+  anchorOf,
+  applyWeekSelection,
+  monthKey,
+  monthLabel,
+  naturalWeeksBetween,
+  projectedWeekNumber,
+  projectedWeeks,
+  shortRange,
+  type WeekFields,
+  type WeekRange,
+} from "./semesterWeeks.js";
 
-export type WeekFields = Pick<
-  SemesterWeek,
-  "week_number" | "start_date" | "end_date"
->;
+export type { WeekFields };
 
 interface Props {
   semester: Semester;
@@ -13,33 +22,77 @@ interface Props {
   onReplace(values: WeekFields[]): Promise<void>;
 }
 
+/**
+ * Week picking without date typing (product decision 2026-09-28):
+ * weeks are Monday-to-Sunday calendar weeks, a row click binds week number
+ * and dates, and once the first week exists every later row shows the week
+ * number it projects to — clicking one fills all weeks in between.
+ */
 export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
+  const existing: WeekFields[] = useMemo(
+    () =>
+      weeks.map(({ week_number, start_date, end_date }) => ({
+        week_number,
+        start_date,
+        end_date,
+      })),
+    [weeks],
+  );
+  const anchor = useMemo(() => anchorOf(existing), [existing]);
+  const nextNumber = String(
+    Math.max(0, ...existing.map((week) => week.week_number)) + 1 || 1,
+  );
   const [weekNumber, setWeekNumber] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
 
-  async function add(event: FormEvent) {
-    event.preventDefault();
+  const rows = useMemo(
+    () => naturalWeeksBetween(semester.start_date, semester.end_date),
+    [semester.start_date, semester.end_date],
+  );
+  const grouped = useMemo(() => {
+    const byMonth = new Map<string, WeekRange[]>();
+    for (const row of rows) {
+      const key = monthKey(row);
+      byMonth.set(key, [...(byMonth.get(key) ?? []), row]);
+    }
+    return [...byMonth.entries()];
+  }, [rows]);
+
+  function manualNumber(): number {
+    const value = Number(weekNumber);
+    return Number.isInteger(value) && value >= 1 ? value : Number(nextNumber);
+  }
+
+  async function choose(range: WeekRange) {
+    const projected = anchor
+      ? projectedWeekNumber(anchor, range.start_date)
+      : null;
+    const fill =
+      anchor && projected !== null
+        ? projectedWeeks(anchor, range.start_date)
+        : null;
+    const selection: WeekFields[] = fill ?? [
+      { week_number: manualNumber(), ...range },
+    ];
     try {
-      await onReplace([
-        ...weeks.map(({ week_number, start_date, end_date }) => ({
-          week_number,
-          start_date,
-          end_date,
-        })),
-        {
-          week_number: Number(weekNumber),
-          start_date: startDate,
-          end_date: endDate,
-        },
-      ]);
-      setWeekNumber("");
-      setStartDate("");
-      setEndDate("");
+      await onReplace(applyWeekSelection(existing, selection));
+      const first = selection[0]!.week_number;
+      const last = selection[selection.length - 1]!.week_number;
+      const updates = selection.every((week) =>
+        existing.some((value) => value.week_number === week.week_number),
+      );
+      setStatus(
+        selection.length > 1
+          ? `已补齐第${first}周 – 第${last}周`
+          : updates
+            ? `已更新第${first}周`
+            : `已添加第${first}周`,
+      );
       setError(null);
     } catch (cause) {
       setError(toUserMessage(cause));
+      setStatus(null);
     }
   }
 
@@ -55,6 +108,7 @@ export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
           })),
       );
       setError(null);
+      setStatus(null);
     } catch (cause) {
       setError(toUserMessage(cause));
     }
@@ -64,7 +118,7 @@ export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
     <section className="semester-weeks" aria-label={`${semester.name}周次设置`}>
       <h2>{semester.name} · 周次</h2>
       <p className="section-note">
-        周次仅用于日程的学期周标签；请按学校校历填写。
+        一周按公历自然周计算（周一至周日）。选择日期行即可绑定周次，不需要手动填写起止日期。
       </p>
       <ul className="schedule-list">
         {weeks.map((week) => (
@@ -82,40 +136,75 @@ export function SemesterWeekEditor({ semester, weeks, onReplace }: Props) {
           </li>
         ))}
       </ul>
-      <form className="schedule-form" onSubmit={(event) => void add(event)}>
-        <label>
+
+      {anchor && (
+        <p className="week-anchor-note">
+          已确定第{anchor.week_number}周为 {anchor.start_date}{" "}
+          起的一周；下方每行都标出推算周次， 点选可自动补齐中间缺少的周。
+        </p>
+      )}
+
+      <div className="week-picker">
+        <label className="week-picker-control">
           周次
           <input
             type="number"
             min="1"
             aria-label="学期周次"
+            placeholder={nextNumber}
             value={weekNumber}
             onChange={(event) => setWeekNumber(event.target.value)}
-            required
           />
         </label>
-        <label>
-          开始日期
-          <input
-            type="date"
-            aria-label="周次开始日期"
-            value={startDate}
-            onChange={(event) => setStartDate(event.target.value)}
-            required
-          />
-        </label>
-        <label>
-          结束日期
-          <input
-            type="date"
-            aria-label="周次结束日期"
-            value={endDate}
-            onChange={(event) => setEndDate(event.target.value)}
-            required
-          />
-        </label>
-        <button type="submit">添加周次</button>
-      </form>
+
+        {grouped.map(([key, list]) => (
+          <div key={key} className="week-month">
+            <p className="week-month-label">{monthLabel(key)}</p>
+            <ul className="week-rows">
+              {list.map((range) => {
+                const projected = anchor
+                  ? projectedWeekNumber(anchor, range.start_date)
+                  : null;
+                const number = projected ?? manualNumber();
+                const fillSize =
+                  anchor && projected !== null
+                    ? projected - anchor.week_number + 1
+                    : 1;
+                return (
+                  <li key={range.start_date}>
+                    <button
+                      type="button"
+                      className="week-row"
+                      onClick={() => void choose(range)}
+                    >
+                      <span className="week-row-range">
+                        {shortRange(range)}
+                      </span>
+                      <strong className="week-row-number">第{number}周</strong>
+                      {projected !== null ? (
+                        <em className="week-row-projected">推算</em>
+                      ) : (
+                        <em className="week-row-manual">按左侧周次</em>
+                      )}
+                      {fillSize > 1 && (
+                        <small className="week-row-fill">
+                          点选补齐第{anchor!.week_number}–第{projected}周
+                        </small>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
+
+      {status && (
+        <p className="week-status" role="status">
+          {status}
+        </p>
+      )}
       {error && (
         <p className="field-error" role="alert">
           {error}
