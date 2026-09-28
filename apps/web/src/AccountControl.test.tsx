@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
-import { AccountControl } from "./AccountControl.js";
+import { AccountControl, SyncStateSummary } from "./AccountControl.js";
 
 it("shows a calm local-only state even when account sync is not configured", () => {
   const markup = renderToStaticMarkup(
@@ -32,4 +32,28 @@ it("lets offline and attention states override a stale synced label", () => {
   expect(offline).toContain("当前离线");
   expect(attention).toContain("需要检查");
   expect(attention).toContain('aria-label="2 条需要检查"');
+});
+
+it("offers an explicit exit when sync needs attention", () => {
+  const markup = renderToStaticMarkup(
+    <SyncStateSummary
+      state="NEEDS_ATTENTION"
+      attentionCount={1}
+      lastChecked={null}
+      onOpenRepair={() => {}}
+    />,
+  );
+  expect(markup).toContain("需要检查");
+  expect(markup).toContain("1 条记录需要处理");
+  expect(markup).toContain("查看并处理");
+
+  const calm = renderToStaticMarkup(
+    <SyncStateSummary
+      state="UP_TO_DATE"
+      attentionCount={0}
+      lastChecked="2026-09-24 08:00"
+    />,
+  );
+  expect(calm).toContain("已同步");
+  expect(calm).not.toContain("查看并处理");
 });

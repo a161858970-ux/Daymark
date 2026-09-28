@@ -3413,3 +3413,19 @@ h2 {
   font-size: 12px;
   line-height: 1.6;
 }
+
+.sync-summary-action {
+  margin-top: 8px;
+  padding: 6px 10px;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+.sync-summary-action:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

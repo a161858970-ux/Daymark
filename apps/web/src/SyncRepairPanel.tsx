@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ActionRequiredSyncIssue } from "@course-manager/application";
 import type { Course } from "@course-manager/domain";
 import { AttentionSummary } from "./AttentionSummary.js";
@@ -139,6 +139,7 @@ export function SyncRepairPanel({
   onRetry,
   onAbandon,
   defaultExpanded = false,
+  openSignal = 0,
 }: {
   issues: ActionRequiredSyncIssue[];
   courses: Course[];
@@ -146,8 +147,13 @@ export function SyncRepairPanel({
   onRetry: (mutationId: string) => Promise<void>;
   onAbandon: (mutationId: string) => Promise<void>;
   defaultExpanded?: boolean;
+  /** Bumped by the account panel's "查看并处理" so the exit opens itself. */
+  openSignal?: number;
 }) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [expanded, setExpanded] = useState(defaultExpanded || openSignal > 0);
+  useEffect(() => {
+    if (openSignal > 0) setExpanded(true);
+  }, [openSignal]);
   if (!issues.length) return null;
   return (
     <section

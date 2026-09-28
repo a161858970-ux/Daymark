@@ -36,14 +36,64 @@ function checkedTime(value: string | null): string | null {
   }).format(date);
 }
 
+export function SyncStateSummary({
+  state,
+  attentionCount,
+  lastChecked,
+  onOpenRepair,
+}: {
+  state: AuthenticatedSyncState;
+  attentionCount: number;
+  lastChecked: string | null;
+  onOpenRepair?: () => void;
+}) {
+  return (
+    <div className={`sync-state-summary state-${state.toLowerCase()}`}>
+      <span className="sync-status-dot" aria-hidden="true" />
+      <div>
+        <strong>{labels[state]}</strong>
+        <small>
+          {state === "LOCAL_ONLY"
+            ? "记录保存在当前设备。"
+            : state === "OFFLINE"
+              ? "新记录会先保存在本机。"
+              : state === "NEEDS_ATTENTION"
+                ? `${attentionCount || 1} 条记录需要处理。`
+                : state === "SYNCING"
+                  ? "正在安静地核对更改。"
+                  : state === "UP_TO_DATE"
+                    ? `${lastChecked ? `${lastChecked} 核对` : "记录已核对"}。`
+                    : state === "ERROR"
+                      ? "本机记录安全保留，稍后可重试。"
+                      : "登录后可在其他设备读取记录。"}
+        </small>
+        {state === "NEEDS_ATTENTION" && onOpenRepair && (
+          <button
+            type="button"
+            className="sync-summary-action"
+            onClick={onOpenRepair}
+          >
+            查看并处理 →
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function AccountControl({
   online,
   status,
   attentionCount,
+  onOpenRepair,
 }: {
   online: boolean;
   status: AuthenticatedSyncStatus;
   attentionCount: number;
+  /** Reveals the repair panel; the summary block is a status, so it needs an
+   * explicit action to reach the retry/abandon exit (spec: ACTION_REQUIRED
+   * must always have a way out). */
+  onOpenRepair?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [account, setAccount] = useState<AuthAccount | null>(null);
@@ -179,29 +229,15 @@ export function AccountControl({
               ×
             </button>
           </header>
-          <div
-            className={`sync-state-summary state-${effectiveState.toLowerCase()}`}
-          >
-            <span className="sync-status-dot" aria-hidden="true" />
-            <div>
-              <strong>{labels[effectiveState]}</strong>
-              <small>
-                {effectiveState === "LOCAL_ONLY"
-                  ? "记录保存在当前设备。"
-                  : effectiveState === "OFFLINE"
-                    ? "新记录会先保存在本机。"
-                    : effectiveState === "NEEDS_ATTENTION"
-                      ? `${attentionCount || 1} 条记录需要处理。`
-                      : effectiveState === "SYNCING"
-                        ? "正在安静地核对更改。"
-                        : effectiveState === "UP_TO_DATE"
-                          ? `${lastChecked ? `${lastChecked} 核对` : "记录已核对"}。`
-                          : effectiveState === "ERROR"
-                            ? "本机记录安全保留，稍后可重试。"
-                            : "登录后可在其他设备读取记录。"}
-              </small>
-            </div>
-          </div>
+          <SyncStateSummary
+            state={effectiveState}
+            attentionCount={attentionCount}
+            lastChecked={lastChecked}
+            onOpenRepair={() => {
+              onOpenRepair?.();
+              closePopover(true);
+            }}
+          />
           {!authClient || !authAdapter ? (
             <p className="account-note">
               账户同步尚未启用；快速记录、课程与日程仍可离线使用。

@@ -136,6 +136,8 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [syncConflicts, setSyncConflicts] = useState<ConflictDetail[]>([]);
   const [syncIssues, setSyncIssues] = useState<ActionRequiredSyncIssue[]>([]);
+  // Bumped by the account panel's 查看并处理 so the repair panel opens itself.
+  const [repairOpenSignal, setRepairOpenSignal] = useState(0);
   const [syncStatus, setSyncStatus] = useState<AuthenticatedSyncStatus>(() => ({
     state: authClient ? "SIGNED_OUT" : "LOCAL_ONLY",
     checked_at: null,
@@ -793,6 +795,7 @@ export function App() {
         online={online}
         status={syncStatus}
         attentionCount={syncConflicts.length + syncIssues.length}
+        onOpenRepair={() => setRepairOpenSignal((value) => value + 1)}
       />
       <AppNavigation page={page} onNavigate={navigate} onSearch={openSearch} />
       <main className="main-content">
@@ -812,6 +815,7 @@ export function App() {
           onResolve={resolveConflict}
         />
         <SyncRepairPanel
+          openSignal={repairOpenSignal}
           issues={syncIssues}
           courses={courses}
           onInspect={(issue) => void inspectSyncIssue(issue)}
