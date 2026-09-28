@@ -1,24 +1,19 @@
 import { useState, type FormEvent } from "react";
 import type { CourseSchedule } from "@course-manager/domain";
 import { toUserMessage } from "./errors.js";
+import {
+  scheduleSummary,
+  summaryParts,
+  weekdays,
+  type ScheduleFields,
+} from "./scheduleSummary.js";
 
-export type ScheduleFields = Pick<
-  CourseSchedule,
-  | "weekday"
-  | "start_time"
-  | "end_time"
-  | "week_start"
-  | "week_end"
-  | "classroom"
-  | "stage_label"
->;
+export type { ScheduleFields };
 
 interface Props {
   schedules: CourseSchedule[];
   onReplace(values: ScheduleFields[]): Promise<void>;
 }
-
-const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
 function fields(value: CourseSchedule): ScheduleFields {
   return {
@@ -49,33 +44,6 @@ export function buildScheduleReplace(
   return schedules.map((value) =>
     fields(value.id === editingId ? { ...value, ...entry } : value),
   );
-}
-
-function summaryParts(value: ScheduleFields): {
-  weekday: string;
-  rest: string;
-} {
-  // Keeps the original row wording: weekday, then time, then the rest
-  // introduced by a middle dot.
-  let rest = `${value.start_time.slice(0, 5)}–${value.end_time.slice(0, 5)}`;
-  if (value.week_start !== null) {
-    rest += ` · 第${value.week_start}${
-      value.week_end !== null && value.week_end !== value.week_start
-        ? `–${value.week_end}`
-        : ""
-    }周`;
-  }
-  if (value.classroom) rest += ` · ${value.classroom}`;
-  if (value.stage_label) rest += ` · ${value.stage_label}`;
-  return {
-    weekday: weekdays[value.weekday - 1] ?? String(value.weekday),
-    rest,
-  };
-}
-
-function summary(value: ScheduleFields): string {
-  const parts = summaryParts(value);
-  return `${parts.weekday} ${parts.rest}`;
 }
 
 export function CourseScheduleList({ schedules, onReplace }: Props) {
@@ -166,7 +134,7 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
               <button
                 type="button"
                 className="quiet-button"
-                aria-label={`编辑 ${summary(fields(value))}`}
+                aria-label={`编辑 ${scheduleSummary(fields(value))}`}
                 onClick={() => startEdit(value)}
               >
                 编辑
@@ -185,7 +153,7 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
       <form className="schedule-form" onSubmit={(event) => void submit(event)}>
         {editing && (
           <p className="schedule-editing-note">
-            正在修改：{summary(fields(editing))}
+            正在修改：{scheduleSummary(fields(editing))}
           </p>
         )}
         <label>

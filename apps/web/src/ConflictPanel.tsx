@@ -3,6 +3,7 @@ import type { ConflictResolution } from "@course-manager/contracts";
 import type { Course, Semester } from "@course-manager/domain";
 import type { ConflictDetail } from "./syncTransport.js";
 import { AttentionSummary } from "./AttentionSummary.js";
+import { scheduleSummary, type ScheduleFields } from "./scheduleSummary.js";
 
 type FieldChoice = "LOCAL" | "REMOTE" | "EXPLICIT";
 
@@ -27,6 +28,46 @@ const fieldNames: Record<string, string> = {
   start_date: "开始日期",
   end_date: "结束日期",
 };
+
+/**
+ * A whole-group conflict (spec 17 §9) must let the user compare what each
+ * option actually contains — "N 条记录" is not a decision.
+ */
+function collectionLines(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((raw, index) => {
+    if (!raw || typeof raw !== "object") return String(raw);
+    const entry = raw as Record<string, unknown>;
+    if (
+      typeof entry.weekday === "number" &&
+      typeof entry.start_time === "string" &&
+      typeof entry.end_time === "string"
+    )
+      return scheduleSummary(entry as unknown as ScheduleFields);
+    if (typeof entry.week_number === "number")
+      return `第${entry.week_number}周 · ${String(entry.start_date ?? "")} – ${String(entry.end_date ?? "")}`;
+    // Only human-readable fields: ids, versions and timestamps stay out
+    // (ADR-004 — the panel never exposes sync internals).
+    for (const key of ["title", "name", "content", "classroom"]) {
+      const candidate = entry[key];
+      if (typeof candidate === "string" && candidate.trim()) return candidate;
+    }
+    return `记录 ${index + 1}`;
+  });
+}
+
+function CollectionValue({ value }: { value: unknown }) {
+  const lines = collectionLines(value);
+  if (lines.length === 0)
+    return <em className="conflict-collection-empty">（空）</em>;
+  return (
+    <ul className="conflict-collection">
+      {lines.map((line, index) => (
+        <li key={index}>{line}</li>
+      ))}
+    </ul>
+  );
+}
 
 function displayValue(
   field: string,
@@ -297,6 +338,9 @@ function ConflictChoice({
                 semesters,
               )}
             </strong>
+            {field === "collection" && (
+              <CollectionValue value={conflict.local_version[field]} />
+            )}
           </label>
           <label>
             <input
@@ -309,6 +353,9 @@ function ConflictChoice({
             <strong>
               {displayValue(field, current[field], courses, semesters)}
             </strong>
+            {field === "collection" && (
+              <CollectionValue value={current[field]} />
+            )}
           </label>
           {field !== "collection" &&
             field !== "deleted_at" &&

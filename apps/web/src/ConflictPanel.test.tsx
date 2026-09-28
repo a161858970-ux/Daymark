@@ -139,3 +139,78 @@ it("summarizes a collection conflict without exposing sync internals", () => {
   expect(html).not.toContain("row_version");
   expect(html).not.toContain("local-a");
 });
+
+it("shows what each whole-group option contains so the choice is comparable", () => {
+  const html = renderToStaticMarkup(
+    <ConflictPanel
+      defaultExpanded
+      conflicts={[
+        {
+          conflict: {
+            id: "11111111-1111-4111-8111-111111111111",
+            owner_id: "22222222-2222-4222-8222-222222222222",
+            entity_type: "COURSE_SCHEDULE_COLLECTION",
+            entity_id: "44444444-4444-4444-8444-444444444444",
+            local_version: {
+              base_version: 5,
+              collection: [
+                {
+                  weekday: 1,
+                  start_time: "12:00:00",
+                  end_time: "14:30:00",
+                  week_start: 1,
+                  week_end: null,
+                  classroom: "103",
+                  stage_label: null,
+                },
+              ],
+            },
+            remote_version: {
+              row_version: 6,
+              collection: [
+                {
+                  weekday: 1,
+                  start_time: "08:00:00",
+                  end_time: "09:30:00",
+                  week_start: 1,
+                  week_end: null,
+                  classroom: "303",
+                  stage_label: null,
+                },
+              ],
+            },
+            conflicting_fields: ["collection"],
+            status: "OPEN",
+            created_at: "2026-09-28T01:29:24Z",
+            resolved_at: null,
+          },
+          current_entity: {
+            id: "44444444-4444-4444-8444-444444444444",
+            row_version: 6,
+            deleted_at: null,
+            collection: [
+              {
+                weekday: 1,
+                start_time: "08:00:00",
+                end_time: "09:30:00",
+                week_start: 1,
+                week_end: null,
+                classroom: "303",
+                stage_label: null,
+              },
+            ],
+          },
+        },
+      ]}
+      courses={[]}
+      onResolve={async () => {}}
+    />,
+  );
+  // Both sides are spelled out line by line, not just "1 条记录".
+  expect(html).toContain("周一 12:00–14:30 · 第1周 · 103");
+  expect(html).toContain("周一 08:00–09:30 · 第1周 · 303");
+  expect(html).toContain("本机记录");
+  expect(html).toContain("已同步记录");
+  // Whole-group conflicts offer exactly the two groups, never a mixed value.
+  expect(html).not.toContain("自定义值");
+});

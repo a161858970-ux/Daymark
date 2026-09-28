@@ -3237,3 +3237,20 @@ h2 {
   color: var(--muted);
   font-size: 12px;
 }
+
+/* --- Conflict comparison: show what each option actually contains ----- */
+.conflict-collection {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.conflict-collection li::marker {
+  color: var(--accent);
+}
+.conflict-collection-empty {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
