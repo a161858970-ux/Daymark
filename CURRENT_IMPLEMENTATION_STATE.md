@@ -100,10 +100,10 @@ Phase 6 的自动证据包括：
 ## 6. Phase 8 状态与剩余 release gate
 
 1. **EXTERNAL CONFIGURATION REQUIRED**：真实 PostgreSQL 连接与 Supabase 项目/测试用户/token 缺失，无法产出真实基础设施证据。
-2. **ENVIRONMENT VERIFICATION REQUIRED**：尚未在两个独立浏览器 profile 或物理设备执行 A–K 的网络/生命周期验收。
+2. ~~**ENVIRONMENT VERIFICATION REQUIRED**~~ **已完成（2026-09-29）**：两个独立 profile 同步 C 段 14/14、物理 Windows D 段 8/8、物理手机 E 段 8/8 均 `VERIFIED REAL`（A–K 生命周期的手机侧长时重试仍未做长时间挂机验收，见 `docs/FINAL_RELEASE_VALIDATION.md`）。
 3. **R-01 已解决**：提醒数值固化为产品 v1 policy（`packages/application/src/reminderPolicy.ts`，version `r01-v1`），安静时段 23:00–08:00，`VITE_REMINDER_POLICY` 仅作覆盖。**剩余实机 gate**：真实设备上的平台通知、后台执行与长周期 lease。
 4. **真实 AI smoke 已完成**：`pnpm verify:ai` → `PASS interpretation 28240ms`；`pnpm verify:ai --with-import` → `PASS import 37633ms courses=3`（MiMo `mimo-v2.6-flash`，扫描 PDF 走栅格化路径）。剩余：完整自然语言时间理解继续走保守确认路径，生产稳定性需持续观察。
-5. **PHYSICAL ACCESSIBILITY VERIFICATION REQUIRED**：屏幕阅读器、系统缩放与移动软键盘尚未实机执行。
+5. ~~**PHYSICAL ACCESSIBILITY VERIFICATION REQUIRED**~~ **已完成（2026-09-29）**：F1/F2 NVDA（09-28）、F3/F4 手机 TalkBack、E8 系统字号放大、E4 软键盘遮挡全部 `VERIFIED REAL`。
 
 旧逐成员 collection outbox 的可重复 fake IndexedDB v5 → v6 演练已经完成；当前没有未闭合的 Phase 6 本地工程 blocker。
 
@@ -129,9 +129,9 @@ Phase 6 的自动证据包括：
 
 ### 下一步
 
-**外部 lane 已基本完成**（A 3.5/4、B 5/5、C 14/14、D 8/8，见 §13/§14 与 `docs/FINAL_RELEASE_VALIDATION.md`）。剩余按优先级：
+**外部 lane 已完成**（A 3.5/4、B 5/5、C 14/14、D 8/8、**E 8/8、F 4/4**，见 §13/§14/§16 与 `docs/FINAL_RELEASE_VALIDATION.md`）。剩余按优先级：
 
-1. **E 段 8 项 + F3/F4（同一块硬骨头，需手机）**：`adb reverse` 或临时放开 API 监听（前置两条路写在 `docs/FINAL_RELEASE_VALIDATION.md` E 段），TalkBack 一并做 F3/F4。
+1. ~~**E 段 8 项 + F3/F4（同一块硬骨头，需手机）**~~ **已于 2026-09-29 全部 `VERIFIED REAL`**：E 8/8、F 4/4，证据见 `docs/FINAL_RELEASE_VALIDATION.md`（E/F 表 + E 段备注；观察级 O-1 浏览器回收标签、O-2 返回手势、O-3 时间语义出口均在备注内）。
 2. **A3 正向 seed**：需可丢弃 PostgreSQL（本机实例或 docker）；负向守卫已 `VERIFIED REAL`。
 3. ~~（可选）**恢复 Send SMS Hook 签名校验**~~ **已于 2026-09-29 完成**：根因是函数密钥字节 bug（`atob` 二进制字符串被 `TextEncoder` UTF-8 重编码），已修复并轮换新密钥开回校验，端到端证据见 `docs/SMS_HOOK_SETUP.md`。
 4. ~~（小）**手机号面板「未验证」显示** 与 DB `phone_confirmed_at` 不一致，纯显示问题。~~ **已于 2026-09-29 修复（`a0b90fc`）**：改读 `auth.users` 确认列 + 联系方式匹配保护。
@@ -161,7 +161,7 @@ Phase 6 的自动证据包括：
 
 - ~~需要产品拍板：R-01 Numeric Reminder Policy~~ 已于 2026-09-26 固化为产品 v1 policy。
 - ~~需要外部配置~~ **已就位**：真实 Supabase（`xaqmzjhvewkrpnqaunwd`）、163 SMTP、MiMo key、阿里云 PNVS 与 `.env` 31 行配置全部在用；唯一仍缺的是**可丢弃 PostgreSQL**（仅 A3 seed 需要）。
-- **需要实机资源（唯一剩余大项）**：手机（E 段 + F3/F4 TalkBack）；Windows 侧 D 段与桌面屏幕阅读器 F1/F2 已完成。
+- ~~**需要实机资源（唯一剩余大项）**~~ **已满足**：手机于 2026-09-29 完成 E 段 8/8 与 F3/F4 TalkBack；Windows 侧 D 段 8/8、桌面屏幕阅读器 F1/F2 此前已完成。**剩余 release gate 只剩 A3 正向 seed**（需可丢弃 PostgreSQL）。
 - 2026-09-29 结项自检：工作树干净、无调试残留、`.env` 未被跟踪、本会话提交密钥扫描 0 命中、未发现 P0 规格冲突。
 
 ## 8. 换机后本轮新增（2026-09-26）
@@ -335,14 +335,14 @@ Phase 6 的自动证据包括：
 
 ### 交接状态（2026-09-29 11:20）
 
-| 段                | 结果                                                               |
-| ----------------- | ------------------------------------------------------------------ |
-| A 真实 PostgreSQL | 3.5/4（A1/A2/A4 `VERIFIED REAL`，A3 负向过、正向 seed 需可丢弃库） |
-| B 认证 + API      | 5/5 `VERIFIED REAL`（邮箱验证/密码、Google、手机号短信）           |
-| C 双 profile 同步 | 14/14 `VERIFIED REAL`                                              |
-| D Windows 物理    | **8/8 `VERIFIED REAL`**                                            |
-| E 手机真机        | 0/8 `NOT RUN — PHYSICAL`                                           |
-| F 屏幕阅读器      | 2/4（F1/F2 NVDA 过；F3/F4 需手机 TalkBack）                        |
+| 段                | 结果                                                                        |
+| ----------------- | --------------------------------------------------------------------------- |
+| A 真实 PostgreSQL | 3.5/4（A1/A2/A4 `VERIFIED REAL`，A3 负向过、正向 seed 需可丢弃库）          |
+| B 认证 + API      | 5/5 `VERIFIED REAL`（邮箱验证/密码、Google、手机号短信）                    |
+| C 双 profile 同步 | 14/14 `VERIFIED REAL`                                                       |
+| D Windows 物理    | **8/8 `VERIFIED REAL`**                                                     |
+| E 手机真机        | **8/8 `VERIFIED REAL`**（2026-09-29；含观察级 O-1）                         |
+| F 屏幕阅读器      | **4/4 `VERIFIED REAL`**（F1/F2 NVDA 2026-09-28；F3/F4 TalkBack 2026-09-29） |
 
 Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm typecheck` / `pnpm build` / `pnpm test` 全绿 —— 带 `REAL_DATABASE_URL` **217 passed（0 skip）**、不带 216 + 1 外部门控 skip；工作树干净；本会话提交密钥扫描 0 命中；`.env` 未被跟踪。
 
@@ -375,3 +375,30 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 - **改 Edge secret 用 CLI 而非 Management API**：`PATCH /v1/projects/{ref}/secrets` 不存在（404）；`pnpm dlx supabase secrets set "NAME=值" --project-ref …` 可用，值可经环境变量传入避免进聊天记录。
 - **Windows 下经 `shell=True` 调 CLI 必须用 cmd 语法 `%VAR%`**：写 `$VAR` 不会展开，会把字面量当密钥写进去（本轮真实踩过，日志 `key_lens=16` 暴露）。
 - **自写 Standard Webhooks 探针要保证"签名里的 timestamp"与 header 里的完全一致**：在函数内部重新生成时间戳会导致自己 401（本轮误判过一次）。
+
+## 16. E/F 段真机验收（2026-09-29）
+
+> 手机（安卓 Chrome + TalkBack）经同网段 `http://10.11.152.182:5173` 接入；证据形式为测试者口述记录（同 F1/F2 先例），逐行实录见 `docs/FINAL_RELEASE_VALIDATION.md` 的 E/F 表与「E 段执行记录与备注」。
+
+| 段           | 结果                                                                                                                                                               |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| E 手机真机   | **8/8 `VERIFIED REAL`**：E1 竖屏布局 / E2 Bottom Sheet / E3 同容器编辑 / E4 软键盘 + 连续记录 / E5 日历钻取 / E6 原生权限 + 拒绝回退 / E7 切后台提醒 / E8 字号放大 |
+| F 屏幕阅读器 | **4/4**：F1/F2 NVDA（09-28）、F3/F4 TalkBack（09-29）                                                                                                              |
+
+### 本段观察级发现（不阻断发布，证据与判定见 runbook E 段备注）
+
+- **O-1**：手机 Chrome 后台约 10–30 s 回收并**重载**标签页 → 回前台视图回首页（数据与提醒计划不受影响）。已排除应用行为（代码无 reload/popstate 路径）与热更新（关 `hmr` 对照实验仍复现）。
+- **O-2**：安卓**普通**返回手势 = 浏览器返回，页内无历史条目 → 直接关标签页；TalkBack 返回手势不受影响（F4 通过）。建议随打包阶段与「通知点击不回前台」同批解决。
+- **O-3**：带时间语义的记录缺「无时间」出口（`PendingCapture` 在 `需要确认时间语义` 时强制至少一项时间）；绕行＝填任意时间后进详情清空。是否加出口待产品拍板。
+
+### 前置改动与还原（均已还原并复核）
+
+- `apps/api/src/main.ts` `listen host`：`127.0.0.1` → `0.0.0.0`（仅 E 段期间）→ **已还原 `127.0.0.1`**；复核 `127.0.0.1:3100/5173` 200、`10.11.152.182:3100/5173` 不可达。
+- Web 启动参数 `vite --host 0.0.0.0` → **已恢复默认 `vite --host 127.0.0.1`**（全程无代码改动）。
+- `apps/web/vite.config.ts` 临时加 `hmr: false`（O-1 判别实验）→ **已还原**，`git diff` 无残留。
+- 手机侧：需把该来源加入 Chrome `unsafely-treat-insecure-origin-as-secure` 白名单才能测通知权限（`http://局域网IP` 非安全上下文）。
+
+### 剩余 release gate
+
+- **A3 正向 seed**：需可丢弃 PostgreSQL —— **唯一剩余**。
+- 已拍板推迟：通知点击不回前台（等 `.exe` 打包）；O-1/O-2 建议随打包阶段一并处理。
