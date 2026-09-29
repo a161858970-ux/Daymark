@@ -1,6 +1,6 @@
 # 课程与事项管理
 
-这是依据 `course_manager_spec_v0_1` 实现的课程记录应用。当前已完成规格吸收、工程骨架、本地优先记录链路、学期/课程/课表/日历主链路、可恢复的课程导入、AI 解释与用户确认拆分、可配置提醒引擎核心、离线同步协议，以及 Phase 7 的最终视觉/响应式/动效实现。Phase 8 本地 acceptance 已逐项执行；真实 PostgreSQL/Supabase、真实 AI provider 和物理设备验收仍受外部环境阻塞。范围与证据见 [`docs/IMPLEMENTATION_AUDIT.md`](docs/IMPLEMENTATION_AUDIT.md) 与 [`docs/ACCEPTANCE_TRACEABILITY.md`](docs/ACCEPTANCE_TRACEABILITY.md)。
+这是依据 `course_manager_spec_v0_1` 实现的课程记录应用。当前已完成规格吸收、工程骨架、本地优先记录链路、学期/课程/课表/日历主链路、可恢复的课程导入、AI 解释与用户确认拆分、可配置提醒引擎核心、离线同步协议，以及 Phase 7 的最终视觉/响应式/动效实现。Phase 8 本地 acceptance 已逐项执行；真实环境验收已推进到 A 真实 PostgreSQL 3.5/4、B Supabase 认证（含手机号短信）5/5、C 双 profile 同步 14/14、D Windows 物理 8/8，均以 `docs/FINAL_RELEASE_VALIDATION.md` 的真实证据收官，**剩余 E 段手机真机 8 项与 F3/F4 手机 TalkBack**。范围与证据见 [`docs/IMPLEMENTATION_AUDIT.md`](docs/IMPLEMENTATION_AUDIT.md) 与 [`docs/ACCEPTANCE_TRACEABILITY.md`](docs/ACCEPTANCE_TRACEABILITY.md)。
 
 ## 运行
 
@@ -45,7 +45,7 @@ AI 解释和 PDF/图片课程导入解析只在已配置认证、数据库与 `A
 
 快速记录先保存原文。明确单一行动可自动形成 Item，明确课程事实可形成 CourseInformation；有时间语义或分类不清的输入保留为待确认记录，由用户决定。明确多个行动时只提出拆分候选；用户选择拆分后，一条 RawCapture 可关联多个 Item；选择保持一条则只创建一个 Item。人工编辑时间不会改写原文。课程安排单独保存，不进入日历；日历只投影有时间的 Item。
 
-同步冲突支持本机值、已同步值和显式值；远端已删除对象不能经冲突接口任意恢复。CourseSchedule 与 SemesterWeek 使用单 command、collection version、替换前快照、单事务与单 envelope 的整组同步。永久拒绝的 mutation 进入可检查的 ACTION_REQUIRED 流程，用户可重交当前内容或明确采用已同步状态，决定会保留 provenance。当前 A–K 协议场景已在两个独立 Dexie 数据库 + Fastify + PGlite 中通过；旧 IndexedDB v5 → v6 升级演练已本地通过。真实 PostgreSQL/Supabase 与物理设备生命周期仍待外部环境验证。
+同步冲突支持本机值、已同步值和显式值；远端已删除对象不能经冲突接口任意恢复。CourseSchedule 与 SemesterWeek 使用单 command、collection version、替换前快照、单事务与单 envelope 的整组同步。永久拒绝的 mutation 进入可检查的 ACTION_REQUIRED 流程，用户可重交当前内容或明确采用已同步状态，决定会保留 provenance。当前 A–K 协议场景已在两个独立 Dexie 数据库 + Fastify + PGlite 中通过；旧 IndexedDB v5 → v6 升级演练已本地通过。真实 PostgreSQL/Supabase 与 Windows 物理生命周期已通过真实验收（A/B/C/D 段）；**物理手机矩阵与移动端屏幕阅读器（E 段 8 项、F3/F4）仍待实机执行**。
 
 当前本地解析器只覆盖安全的确定性子集；AI 解释需要在线账号、服务端密钥和用户确认，确定性规则优先、失败不建正式对象。已用真实 MiMo provider 完成 smoke 验收：`pnpm verify:ai`（可加 `--with-import`），未配置密钥时该命令输出 `REAL_AI_REQUIRED` 而不是伪造通过。课程导入的 job/preview/duplicate decision/atomic commit/recovery 已实现；扫描版 PDF 无文本层时按页栅格化为受控尺寸图片后走同一 structured preview 流程（见 `docs/ADR-006-scanned-pdf-import.md`）。提醒计划引擎按产品 v1 policy（R-01）运行，跨设备 lease 与 delivery acknowledgement 已接通。全局本地关键词搜索已实现，并直接定位同一 Item、Course 或 CourseInformation。
 

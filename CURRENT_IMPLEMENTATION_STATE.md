@@ -93,7 +93,7 @@ Phase 6 的自动证据包括：
 - “ACTION_REQUIRED 只能重跑整轮同步”已过时：现有逐 mutation 检查、重交/明确放弃和 provenance。
 - “ItemAssociation 只有类型和表”已过时：本地 use case、REST、sync create/delete/pull 和测试已闭合。
 - “Course/CourseInformation 正式写 API 缺失”已过时：当前接口已补齐。
-- 26/35/44/48/64/66/72/75/82/87/88/92/96/97/112 等数字是历史阶段快照，不能代表当前覆盖；当前 gate 使用 144 passed + 1 externally gated skip。
+- 26/35/44/48/64/66/72/75/82/87/88/92/96/97/112 等数字是历史阶段快照，不能代表当前覆盖；当前 gate（2026-09-29 实测）：`format:check` / `lint` / `typecheck` / `build` / `test` 全绿 —— 提供 `REAL_DATABASE_URL` 时 **217 passed（0 skip）**，不提供时 216 passed + 1 externally gated skip（即真实 PostgreSQL 集成测试）。
 
 `docs/IMPLEMENTATION_AUDIT.md` 已按 Implemented、Verified locally、Verified simulated、Verified real、Not implemented、Blocked、Release blocker 重新整理。
 
@@ -129,9 +129,13 @@ Phase 6 的自动证据包括：
 
 ### 下一步
 
-1. ~~Reminder delivery engineering~~ 已完成（见 §8）；R-01 已按产品指令固化为 v1（见 §9）。下一步是外部环境验收 lane：真实 PostgreSQL / Supabase / 双 browser profile / 物理设备矩阵。
-2. **External integration lane**：拿到配置后依次运行四份 migration、`pnpm test:postgres`、真实 Supabase 登录/同步、两个独立 browser profile 和物理设备矩阵（执行步骤见 `docs/FINAL_RELEASE_VALIDATION.md`；真实 MiMo interpretation/import smoke 已完成）。
-3. ~~Release optimization~~ 主 bundle warning 已在 RC Hardening 内用零行为变化的 vendor 分包解决（entry 555.89 → 348.28 kB，react-vendor 独立 218.83 kB）；更深度的按路由懒加载记入 §10 技术债。
+**外部 lane 已基本完成**（A 3.5/4、B 5/5、C 14/14、D 8/8，见 §13/§14 与 `docs/FINAL_RELEASE_VALIDATION.md`）。剩余按优先级：
+
+1. **E 段 8 项 + F3/F4（同一块硬骨头，需手机）**：`adb reverse` 或临时放开 API 监听（前置两条路写在 `docs/FINAL_RELEASE_VALIDATION.md` E 段），TalkBack 一并做 F3/F4。
+2. **A3 正向 seed**：需可丢弃 PostgreSQL（本机实例或 docker）；负向守卫已 `VERIFIED REAL`。
+3. （可选）**恢复 Send SMS Hook 签名校验**：从 Dashboard Hooks 页取 `v1,whsec_…`，按 `docs/SMS_HOOK_SETUP.md` 一键开回。
+4. （小）**手机号面板「未验证」显示** 与 DB `phone_confirmed_at` 不一致，纯显示问题。
+5. ~~Release optimization~~ 主 bundle warning 已在 RC Hardening 内用零行为变化的 vendor 分包解决（entry 555.89 → 348.28 kB，react-vendor 独立 218.83 kB）；更深度的按路由懒加载记入 §10 技术债。
 
 ### 本轮关键决定
 
@@ -146,14 +150,19 @@ Phase 6 的自动证据包括：
 - **现象**：当前环境直接执行 `pnpm exec prettier ...` 报找不到命令。**原因**：本机 pnpm command shim 没有通过该调用解析 root dev binary。**解决**：使用已验证的项目脚本 `pnpm format` 或 `pnpm format:check`。
 - **现象**：旧验证文档只列两份 migration。**原因**：Course Import 后新增 `003_course_import.sql`，历史说明未同步。**解决**：文档已修正；真实数据库必须依次应用 `001_initial.sql`、`002_collection_sync.sql`、`003_course_import.sql`、`004_reminder_delivery.sql`。
 - **现象**：无外部配置时 API 只有 health，Course Import 不能上传解析。**原因**：认证业务路由要求同时配置 `DATABASE_URL` 与 `SUPABASE_URL`，provider 另需 `AI_API_KEY`（MiMo）。**解决**：本地继续使用 IndexedDB、确定性解析和手工 Course/CourseSchedule；外部 lane 按 `docs/REAL_POSTGRES_VERIFICATION.md` 配置。
-- 仓库当前没有 Git remote，结项没有 push。新增 remote 或发布目标前先由总控确认。
+- **现象**：API 前端报「稍后重试」，端口 3100 无监听。**原因**：API 由 Hermes 会话托管，关闭 Hermes 被 SIGTERM 连坐杀掉（累计 4 次）。**解决**：改用独立最小化窗口启动——`%TEMP%\start-cm-api.cmd`（内含 5 秒自动重启循环 + 日志落 `%TEMP%\cm-api.log`），与会话生命周期解耦；排障先 `netstat -ano | grep :3100`，再看日志。
+- **现象**：双 profile 验收时"断网改标题 → 重连不上去 / 重开退回旧值"，一度判为数据丢失。**原因**：B 端用了**无痕窗口**，关窗即清空 IndexedDB。**解决**：持久化/同步类验收**必须用普通窗口**；无痕窗口结果无效。
+- **现象**：安静时段的提醒永远发不出（`notification_deliveries` 恒 0 行）。**原因**：`deriveReminderSchedule` 用**原始事件时间**判 6 小时窗口，顺延会把提醒推到窗口外，`tick` 随即 CANCELED。**解决**：见 §14，已按顺延后时间判窗并加回归测试（`64cc420`）。
+- **现象**：MSYS bash 里 `taskkill //PID 6160` 报「无效参数」。**原因**：Git Bash 路径转换吃掉了 `/PID`。**解决**：用 `powershell -NoProfile -Command "Stop-Process -Id <pid> -Force"`，或加 `MSYS2_ARG_CONV_EXCL='*'`。
+- **现象**：`supabase functions deploy` 报 `unexpected character "P" in variable name near "Project URL"`。**原因**：`.env` 里残留了标签行。**解决**：把无等号的标签行注释掉（L11/L13 已处理）。
+- **Git remote**：`origin = https://github.com/a161858970-ux/course-manager.git`，每轮改动 commit + push；提交前跑密钥正则自检（结果必须 0）。
 
 ### 当前风险与需要总控提供的输入
 
 - ~~需要产品拍板：R-01 Numeric Reminder Policy~~ 已于 2026-09-26 固化为产品 v1 policy。
-- **需要外部配置**：可丢弃的真实 PostgreSQL、Supabase project/test user/token（MiMo key 已就位并通过 smoke）。
-- **需要实机资源**：Mobile/Windows 设备、两个独立 browser profile、屏幕阅读器、系统缩放与移动软键盘环境。
-- 当前未发现 P0 规格冲突、未提交有效代码、调试残留、个人绝对路径或误跟踪密钥。
+- ~~需要外部配置~~ **已就位**：真实 Supabase（`xaqmzjhvewkrpnqaunwd`）、163 SMTP、MiMo key、阿里云 PNVS 与 `.env` 31 行配置全部在用；唯一仍缺的是**可丢弃 PostgreSQL**（仅 A3 seed 需要）。
+- **需要实机资源（唯一剩余大项）**：手机（E 段 + F3/F4 TalkBack）；Windows 侧 D 段与桌面屏幕阅读器 F1/F2 已完成。
+- 2026-09-29 结项自检：工作树干净、无调试残留、`.env` 未被跟踪、本会话提交密钥扫描 0 命中、未发现 P0 规格冲突。
 
 ## 8. 换机后本轮新增（2026-09-26）
 
@@ -299,3 +308,48 @@ Phase 6 的自动证据包括：
 - **环境坑（复发会再踩）**：① API 进程曾挂在 Hermes 会话下，会话中断/关闭 Hermes 被 SIGTERM → 前端红色「稍后重试」（连踩 4 次），**先查 3100**；
   **2026-09-29 已根治**：改用独立窗口启动（`%TEMP%\start-cm-api.cmd`，PowerShell `Start-Process -WindowStyle Minimized`），
   关闭 Hermes 不再影响；**唯一禁忌是别关任务栏那个 `CourseManager API` 小窗口**（关了才停），且 D5 这类隔夜验收依赖它常驻；② `scripts/test-real-postgres.mjs` 在 `npm_execpath=pnpm.exe` 时被 Node 当 JS 执行而崩溃，已修复；③ **持久化类验收必须用普通窗口**——无痕窗口关窗即清空（浏览器行为，非产品缺陷）。
+
+## 14. 本会话结项与 Handoff（2026-09-29）
+
+> 本节是**新窗口接手的第一落点**：先看下面的交接状态表与未决项，再按需下钻 §13/§12/§11。
+
+### 本窗口产出（按提交）
+
+| 提交                                              | 内容                                                         |
+| ------------------------------------------------- | ------------------------------------------------------------ |
+| `ed85bea`/`15e1dfa`/`9362792`                     | Send SMS edge function + Hook 部署 + 首条真实短信            |
+| `c347aff`                                         | 手机号登录国内化：去掉国家选择与 `+86` 显示                  |
+| `349cfe9`                                         | **B 段 5/5 收官**：真机手机号 OTP `VERIFIED REAL`            |
+| `984bd47`                                         | F1/F2 NVDA 朗读 `VERIFIED REAL` + 短信错误路径脱敏           |
+| `2872c36`/`e3f979c`/`b512097`/`731a3ee`/`c78775d` | D1–D4、D6、D7/D8 `VERIFIED REAL`；通知回前台缺口按拍板记档   |
+| `6f0a286`                                         | NEEDS_ATTENTION 新增「查看并处理 →」出口（状态块原本无入口） |
+| `e504fa2`                                         | API 独立窗口启动 + 自动重启 + 日志（根治关 Hermes 连坐杀）   |
+| **`64cc420`**                                     | **修复安静时段顺延缺陷**（详见下）                           |
+| `3fee495`                                         | **D5 `VERIFIED REAL` → D 段 8/8**                            |
+
+### 关键 bug：安静时段顺延必失效（已修复 `64cc420`）
+
+- **现象**：D5 首轮验收 `notification_deliveries` 恒 0 行，客户端也不弹。
+- **原因**：`deriveReminderSchedule` 的 `emit` 用**原始事件时间**过滤 `[now-6h, now+14d]`，而 `nextAllowedTime` 会把提醒**向后顺延**；凌晨 00:06 的提醒在 06:06 之后即离开窗口，`tick` 把 PENDING 记录 CANCELED ⇒ 08:00 时已无记录可发。**顺延语义在设计上必然失效**，不是环境问题。
+- **解决**：改用**顺延后**的时间判窗 + 48 小时下限（对齐 `nextAllowedTime` 的 hardStop，仍丢弃真正久远的事件）；2 条回归测试（保留可顺延事件 / 丢弃不可顺延事件）。
+
+### 交接状态（2026-09-29 11:20）
+
+| 段                | 结果                                                               |
+| ----------------- | ------------------------------------------------------------------ |
+| A 真实 PostgreSQL | 3.5/4（A1/A2/A4 `VERIFIED REAL`，A3 负向过、正向 seed 需可丢弃库） |
+| B 认证 + API      | 5/5 `VERIFIED REAL`（邮箱验证/密码、Google、手机号短信）           |
+| C 双 profile 同步 | 14/14 `VERIFIED REAL`                                              |
+| D Windows 物理    | **8/8 `VERIFIED REAL`**                                            |
+| E 手机真机        | 0/8 `NOT RUN — PHYSICAL`                                           |
+| F 屏幕阅读器      | 2/4（F1/F2 NVDA 过；F3/F4 需手机 TalkBack）                        |
+
+Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm typecheck` / `pnpm build` / `pnpm test` 全绿 —— 带 `REAL_DATABASE_URL` **217 passed（0 skip）**、不带 216 + 1 外部门控 skip；工作树干净；本会话提交密钥扫描 0 命中；`.env` 未被跟踪。
+
+### 未决事项 / 风险（下窗口开工清单）
+
+1. **E 段 8 项 + F3/F4**：需手机，`adb reverse` 或临时放开监听（前置见 `docs/FINAL_RELEASE_VALIDATION.md` E 段）。
+2. **A3 正向 seed**：需可丢弃 PostgreSQL，不得往真实库写演示数据。
+3. **Send SMS Hook 签名校验暂关**：GoTrue 密钥 API 只回读 64 位哈希、原值不可回读；现用大陆号段白名单 + 同号 60 秒冷却兜底，恢复步骤在 `docs/SMS_HOOK_SETUP.md`。
+4. **手机号面板显示「未验证」** 与 DB `phone_confirmed_at` 已置不一致：字段读取位置问题，纯显示。
+5. **通知点击不回前台**：2026-09-28 拍板推迟到 `.exe` 打包阶段（§4 已记）。
