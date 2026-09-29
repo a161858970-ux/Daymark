@@ -41,6 +41,16 @@ REAL_DATABASE_URL=postgres://<user>:<pass>@127.0.0.1:5432/course_manager_release
 
 ---
 
+### A3 一次性数据库：复现方法与坑（2026-09-29）
+
+- **取用**：`https://get.enterprisedb.com/postgresql/postgresql-16.6-1-windows-x64-binaries.zip`（304 MB）→ 解压到 Temp 即用；**不装服务、不改注册表/PATH**，`pg_ctl stop` + 删目录即卸载。
+- **路径坑**：`pg_ctl -D/-l` 必须传 **Windows 原生路径**（`C:/Users/...`）；传 MSYS 路径（`/c/...`）报「系统找不到指定的路径」。
+- **管道坑（会引发假故障）**：不要 `pg_ctl … | tail`——postgres 继承管道写端 → 永不 EOF → 命令超时 → 强杀进程链 → 后续后端进程 `0xC0000142`（DLL 初始化失败）。一律 `> 文件 2>&1` 再读文件。
+- **环境坑**：用 `Start-Process -UseNewEnvironment`（纯注册表环境）启动会 `could not create IPv4 socket … Invalid argument`；继承当前 shell 环境启动则正常（本机复现于 Windows 11 + Clash Verge TUN）。
+- **收尾核验**：`pg_ctl -m immediate stop` → 删目录 → `postgres` 进程数 0、端口空闲、Windows 服务 0、用户 PATH 无 `pgsql/postgres` 条目。
+
+---
+
 ## B. Supabase（认证 + 真实 API）
 
 **前置**：Supabase 项目；根 `.env`：
