@@ -36,6 +36,7 @@ it("lists every login method with its binding status for a signed-in account", (
         email: "student@cufe.edu.cn",
         emailVerified: true,
         phone: null,
+        phoneVerified: false,
       }}
     />,
   );

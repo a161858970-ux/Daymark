@@ -656,6 +656,56 @@ describe("Auth Identity", () => {
     expect(adapter.passwordStatus(user.id)).toBe("NOT_SET");
   });
 
+  it("6b. verified falls back to the auth.users confirmation columns", async () => {
+    const { fake, adapter } = setup();
+    // Real GoTrue shape: `identity_data` is frozen at creation with
+    // `*_verified: false` while the user-level `*_confirmed_at` column is set
+    // (user 8138a7f3, phone confirmed 2026-09-28).
+    const phoneUser = fake.createUser({
+      provider: "phone",
+      value: PHONE,
+      verified: false,
+    });
+    phoneUser.phone_confirmed_at = NOW;
+    fake.session = phoneUser;
+    const phoneViews = await adapter.listIdentities();
+    expect(
+      phoneViews.find((value) => value.provider === "phone")?.verified,
+    ).toBe(true);
+    expect((await adapter.getAccount())!.phoneVerified).toBe(true);
+
+    const emailUser = fake.createUser({
+      provider: "email",
+      value: EMAIL,
+      verified: false,
+    });
+    emailUser.email_confirmed_at = NOW;
+    // A *different* contact must not borrow the account's confirmation.
+    fake.addIdentity(emailUser, "email", "second@cufe.edu.cn", false);
+    fake.session = emailUser;
+    const emailViews = await adapter.listIdentities();
+    expect(emailViews.find((value) => value.label === EMAIL)?.verified).toBe(
+      true,
+    );
+    expect(
+      emailViews.find((value) => value.label === "second@cufe.edu.cn")
+        ?.verified,
+    ).toBe(false);
+
+    // Nothing confirmed anywhere -> still unverified.
+    const fresh = fake.createUser({
+      provider: "phone",
+      value: PHONE,
+      verified: false,
+    });
+    fake.session = fresh;
+    expect(
+      (await adapter.listIdentities()).find(
+        (value) => value.provider === "phone",
+      )?.verified,
+    ).toBe(false);
+  });
+
   it("7. google linking keeps the same user", async () => {
     const { fake, adapter } = setup();
     fake.createUser({

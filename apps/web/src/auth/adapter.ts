@@ -24,6 +24,7 @@ export interface AuthAccount {
   readonly email: string | null;
   readonly emailVerified: boolean;
   readonly phone: string | null;
+  readonly phoneVerified: boolean;
 }
 
 export interface AuthIdentityView {
@@ -137,6 +138,7 @@ function accountOf(
     email: user.email ?? null,
     emailVerified: Boolean(user.email_confirmed_at),
     phone: user.phone ?? null,
+    phoneVerified: Boolean(user.phone_confirmed_at),
   };
 }
 
@@ -148,9 +150,51 @@ function appOrigin(): string {
   return typeof window === "undefined" ? "" : window.location.origin;
 }
 
-function identityVerified(identity: IdentityLike): boolean {
+/**
+ * Verified flag for one identity.
+ *
+ * GoTrue freezes `identity_data` at creation time, so `phone_verified` /
+ * `email_verified` can stay `false` forever even after the user confirms the
+ * same contact (real case: user `8138a7f3` confirmed the phone on 2026-09-28
+ * while its identity still reads `phone_verified: false`, and every email
+ * identity in the project reads `email_verified: false` despite
+ * `email_confirmed_at` being set). The user-level confirmation columns are
+ * authoritative for the identity that carries the same contact, so they act
+ * as a fallback when the frozen flags say "not verified".
+ */
+function identityVerified(
+  identity: IdentityLike,
+  account: AuthAccount | null,
+): boolean {
   const data = identity.identity_data ?? {};
-  return data.email_verified === true || data.phone_verified === true;
+  if (data.email_verified === true || data.phone_verified === true) return true;
+  if (!account) return false;
+  const label = identityLabel(identity);
+  if (identity.provider === "phone" && account.phoneVerified)
+    return sameContact(label, account.phone);
+  if (identity.provider === "email" && account.emailVerified)
+    return sameEmail(label, account.email);
+  return false;
+}
+
+function sameEmail(label: string | null, accountEmail: string | null): boolean {
+  if (!label || !accountEmail) return true; // nothing to disagree about
+  return label.trim().toLowerCase() === accountEmail.trim().toLowerCase();
+}
+
+/**
+ * Contact match tolerant of `+86…` vs `86…` vs `11`-digit forms; two real
+ * numbers can only match when one is the country-code prefix of the other.
+ */
+function sameContact(
+  label: string | null,
+  accountPhone: string | null,
+): boolean {
+  if (!label || !accountPhone) return true;
+  const digits = (value: string) => value.replace(/\D/g, "");
+  const [left, right] = [digits(label), digits(accountPhone)];
+  if (!left || !right) return true;
+  return left === right || left.endsWith(right) || right.endsWith(left);
 }
 
 function identityLabel(identity: IdentityLike): string | null {
@@ -311,11 +355,15 @@ export function createAuthAdapter(client: AuthClientLike): AuthAdapter {
       try {
         const { data, error } = await client.getUserIdentities();
         if (error) throw error;
+        // Session user carries the authoritative `*_confirmed_at` columns that
+        // `identity_data` may not reflect; without a session the listing just
+        // falls back to the frozen identity flags.
+        const account = await sessionAccount();
         return (data?.identities ?? []).map((identity) => ({
           provider: identity.provider ?? "unknown",
           identityId: identity.identity_id ?? identity.id ?? "",
           label: identityLabel(identity),
-          verified: identityVerified(identity),
+          verified: identityVerified(identity, account),
         }));
       } catch (error) {
         throw toAuthUiError(error, "SESSION");
