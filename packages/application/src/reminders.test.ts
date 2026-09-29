@@ -240,3 +240,31 @@ describe("createReminderWindow", () => {
     ).toBeGreaterThan(Date.parse("2026-09-26T15:30:00.000Z"));
   });
 });
+
+it("keeps a quiet-hour deferral whose raw instant already left the window", () => {
+  // 00:06 in Shanghai = 16:06Z the previous day; the window opens at 12:50
+  // Shanghai, so the raw instant is stale while the deferred instant is not.
+  const late = item({ start_at: "2026-09-28T16:06:00.000Z" });
+  const deferred: ReminderWindow = {
+    // now - 6h with "now" at 12:50 Shanghai: the raw 00:06 sits before it.
+    from: "2026-09-28T20:45:00.000Z",
+    to: "2026-10-06T00:00:00.000Z",
+    nextAllowedTime: (at) =>
+      at.startsWith("2026-09-28T16:06") ? "2026-09-29T00:00:00.000Z" : at,
+    localDayKey: (at) => at.slice(0, 10),
+  };
+  const events = deriveReminderSchedule([late], policy, deferred);
+  const start = events.find((event) => event.rule_key === "start:once");
+  expect(start?.scheduled_for).toBe("2026-09-29T00:00:00.000Z");
+});
+
+it("still drops events that no deferral can recover", () => {
+  const stale = item({ start_at: "2026-09-20T16:06:00.000Z" });
+  const window7d: ReminderWindow = {
+    from: "2026-09-28T20:45:00.000Z",
+    to: "2026-10-06T00:00:00.000Z",
+    nextAllowedTime: (at) => at,
+    localDayKey: (at) => at.slice(0, 10),
+  };
+  expect(deriveReminderSchedule([stale], policy, window7d)).toHaveLength(0);
+});

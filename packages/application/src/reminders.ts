@@ -125,6 +125,13 @@ function validatePolicy(policy: ReminderPolicy): void {
   }
 }
 
+/**
+ * Upper bound on how far `nextAllowedTime` may push a reminder (its internal
+ * hardStop). Events older than this relative to the window can never be
+ * recovered, so they are dropped without consulting the clock.
+ */
+const MAX_QUIET_DEFERRAL_MS = 48 * 60 * 60 * 1000;
+
 /** One Item remains one object; these are derived logical delivery events. */
 export function deriveReminderSchedule(
   items: Item[],
@@ -147,12 +154,17 @@ export function deriveReminderSchedule(
     const itemLimit = cadence.max_per_local_day ?? policy.max_per_local_day;
     const snapshot = itemReminderSnapshotKey(item);
     const emit = (ruleKey: string, occurrenceKey: string, at: number) => {
-      if (at < from || at >= to) return;
+      // Quiet-hour deferral only ever moves a reminder forward, so the window
+      // must be judged on the adjusted instant. Judging the raw instant meant
+      // that a pre-dawn event left the window as `from` advanced past it, its
+      // PENDING record was cancelled on the next tick, and the deferred
+      // delivery at the end of the quiet window could never happen.
+      if (at >= to || at < from - MAX_QUIET_DEFERRAL_MS) return;
       const scheduled = window.nextAllowedTime(new Date(at).toISOString());
       const adjusted = timestamp(scheduled);
       if (adjusted < at)
         throw new Error("Quiet-hour handler moved a reminder earlier");
-      if (adjusted >= to) return;
+      if (adjusted < from || adjusted >= to) return;
       events.push({
         event: {
           logical_key: `${item.id}:${ruleKey}:${policy.version}:${occurrenceKey}`,
