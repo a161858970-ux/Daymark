@@ -1,6 +1,6 @@
 # 课程与事项管理
 
-这是依据 `course_manager_spec_v0_1` 实现的课程记录应用。当前已完成规格吸收、工程骨架、本地优先记录链路、学期/课程/课表/日历主链路、可恢复的课程导入、AI 解释与用户确认拆分、可配置提醒引擎核心、离线同步协议，以及 Phase 7 的最终视觉/响应式/动效实现。Phase 8 本地 acceptance 已逐项执行；真实环境验收已推进到 A 真实 PostgreSQL 3.5/4、B Supabase 认证（含手机号短信）5/5、C 双 profile 同步 14/14、D Windows 物理 8/8，均以 `docs/FINAL_RELEASE_VALIDATION.md` 的真实证据收官，**E 段 8/8 与 F3/F4 TalkBack 已于 2026-09-29 收官；剩余唯一 gate 为 A3 正向 seed（需可丢弃 PostgreSQL）**。范围与证据见 [`docs/IMPLEMENTATION_AUDIT.md`](docs/IMPLEMENTATION_AUDIT.md) 与 [`docs/ACCEPTANCE_TRACEABILITY.md`](docs/ACCEPTANCE_TRACEABILITY.md)。
+这是依据 `course_manager_spec_v0_1` 实现的课程记录应用。当前已完成规格吸收、工程骨架、本地优先记录链路、学期/课程/课表/日历主链路、可恢复的课程导入、AI 解释与用户确认拆分、可配置提醒引擎核心、离线同步协议，以及 Phase 7 的最终视觉/响应式/动效实现。Phase 8 本地 acceptance 已逐项执行；真实环境验收已推进到 A 真实 PostgreSQL 3.5/4、B Supabase 认证（含手机号短信）5/5、C 双 profile 同步 14/14、D Windows 物理 8/8，均以 `docs/FINAL_RELEASE_VALIDATION.md` 的真实证据收官，**2026-09-29 全部 release gate 清零**：A 4/4、B 5/5、C 14/14、D 8/8、E 8/8、F 4/4（含 A3 正向 seed，用一次性便携 PostgreSQL 验证后已删除）。范围与证据见 [`docs/IMPLEMENTATION_AUDIT.md`](docs/IMPLEMENTATION_AUDIT.md) 与 [`docs/ACCEPTANCE_TRACEABILITY.md`](docs/ACCEPTANCE_TRACEABILITY.md)。
 
 ## 运行
 
