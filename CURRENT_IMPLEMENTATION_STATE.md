@@ -133,8 +133,8 @@ Phase 6 的自动证据包括：
 
 1. **E 段 8 项 + F3/F4（同一块硬骨头，需手机）**：`adb reverse` 或临时放开 API 监听（前置两条路写在 `docs/FINAL_RELEASE_VALIDATION.md` E 段），TalkBack 一并做 F3/F4。
 2. **A3 正向 seed**：需可丢弃 PostgreSQL（本机实例或 docker）；负向守卫已 `VERIFIED REAL`。
-3. （可选）**恢复 Send SMS Hook 签名校验**：从 Dashboard Hooks 页取 `v1,whsec_…`，按 `docs/SMS_HOOK_SETUP.md` 一键开回。
-4. （小）**手机号面板「未验证」显示** 与 DB `phone_confirmed_at` 不一致，纯显示问题。
+3. ~~（可选）**恢复 Send SMS Hook 签名校验**~~ **已于 2026-09-29 完成**：根因是函数密钥字节 bug（`atob` 二进制字符串被 `TextEncoder` UTF-8 重编码），已修复并轮换新密钥开回校验，端到端证据见 `docs/SMS_HOOK_SETUP.md`。
+4. ~~（小）**手机号面板「未验证」显示** 与 DB `phone_confirmed_at` 不一致，纯显示问题。~~ **已于 2026-09-29 修复（`a0b90fc`）**：改读 `auth.users` 确认列 + 联系方式匹配保护。
 5. ~~Release optimization~~ 主 bundle warning 已在 RC Hardening 内用零行为变化的 vendor 分包解决（entry 555.89 → 348.28 kB，react-vendor 独立 218.83 kB）；更深度的按路由懒加载记入 §10 技术债。
 
 ### 本轮关键决定
@@ -350,6 +350,28 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 
 1. **E 段 8 项 + F3/F4**：需手机，`adb reverse` 或临时放开监听（前置见 `docs/FINAL_RELEASE_VALIDATION.md` E 段）。
 2. **A3 正向 seed**：需可丢弃 PostgreSQL，不得往真实库写演示数据。
-3. **Send SMS Hook 签名校验暂关**：GoTrue 密钥 API 只回读 64 位哈希、原值不可回读；现用大陆号段白名单 + 同号 60 秒冷却兜底，恢复步骤在 `docs/SMS_HOOK_SETUP.md`。
-4. **手机号面板显示「未验证」** 与 DB `phone_confirmed_at` 已置不一致：字段读取位置问题，纯显示。
+3. ~~**Send SMS Hook 签名校验暂关**~~ **已恢复（2026-09-29）**：真因是函数密钥字节 bug 而非"拿不到明文密钥"；已修复 `keyBytes()`、轮换新密钥、开回校验并通过真实 `/auth/v1/otp` 端到端验收，大陆号段白名单 + 同号 60 秒冷却兜底保留。细节与轮换步骤见 `docs/SMS_HOOK_SETUP.md`。
+4. ~~**手机号面板显示「未验证」** 与 DB `phone_confirmed_at` 已置不一致~~ **已修复（2026-09-29，`a0b90fc`）**：面板改读 `auth.users` 的 `*_confirmed_at`（`identity_data` 里 GoTrue 建号时就冻结、永不回写），并加联系方式匹配保护，避免别的邮箱/号码借用账户级确认。
 5. **通知点击不回前台**：2026-09-28 拍板推迟到 `.exe` 打包阶段（§4 已记）。
+
+## 15. 第二窗口收尾（2026-09-29 下午）：§14 未决第 3、4 项清零
+
+> 接续 §14 的未决清单，只处理两个小项；**E 段手机大项未动**。
+
+| 小项                          | 结果                           | 证据                                                                                                                                                                                                                                                                                                                                |
+| ----------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ④ 手机号面板「未验证」        | **已修复并 push（`a0b90fc`）** | 真实库实锤：`8138a7f3` 的 `phone_confirmed_at` 已置但 `identities.identity_data.phone_verified=false`（三个邮箱 identity 同样冻结为 false）；`AuthAccount` 新增 `phoneVerified`，`identityVerified()` 回落到 `auth.users` 确认列并加联系方式匹配保护；gate `217 passed + 1` 门控 skip（原 216+1）、lint/typecheck/format/build 全绿 |
+| ③ 恢复 Send SMS Hook 签名校验 | **已恢复开启并端到端验收**     | 真因＝函数密钥字节 bug（`atob` 二进制字符串被 `TextEncoder` UTF-8 重编码 ⇒ 正确密钥也 401），已改 `keyBytes()`；轮换新密钥，Dashboard `hook_send_sms_secrets` / Edge secret / `.env` 三处同值；错误密钥 401、正确密钥 400、真实 `/auth/v1/otp` → `verified key=1 msg=1` + `delivered` + HTTP 200（2.6 s）                           |
+
+### 本窗口新发现（不阻断）
+
+- **阿里云下发偶发超过 GoTrue 5 秒 Hook 上限** → 客户端 `422 hook_timeout`，函数侧无 `delivered`/`aliyun rejected` 日志。**验签关闭的基线同样复现**（已做对照实验），与验签无关，重试即通过；反复出现需查阿里云（余额/频控）。记为观察级。
+- ~~"GoTrue 密钥只回读哈希所以永远验不过"~~ 是**误判**：回读的 64 位十六进制只是展示哈希，跟能否验签无关。
+
+### 本窗口踩到的环境坑（复发会再踩）
+
+- **读 Edge Function 日志**：CLI 没有 `functions logs` 子命令，改用
+  `GET /v1/projects/{ref}/analytics/endpoints/logs?sql=…&iso_timestamp_start=…&iso_timestamp_end=…`（`source='function_logs'` 是函数 `console.*`，`function_edge_logs` 是调用记录；窗口 ≤24 h）。列名是 `source` 不是 `source_name`。
+- **改 Edge secret 用 CLI 而非 Management API**：`PATCH /v1/projects/{ref}/secrets` 不存在（404）；`pnpm dlx supabase secrets set "NAME=值" --project-ref …` 可用，值可经环境变量传入避免进聊天记录。
+- **Windows 下经 `shell=True` 调 CLI 必须用 cmd 语法 `%VAR%`**：写 `$VAR` 不会展开，会把字面量当密钥写进去（本轮真实踩过，日志 `key_lens=16` 暴露）。
+- **自写 Standard Webhooks 探针要保证"签名里的 timestamp"与 header 里的完全一致**：在函数内部重新生成时间戳会导致自己 401（本轮误判过一次）。

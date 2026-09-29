@@ -78,11 +78,28 @@ export async function signRpc(
  * Standard Webhooks verification (webhook-timestamp.webhook-signature over
  * the raw body). Skipped when no secret is configured so the hook still
  * works while the endpoint is being brought up.
+ *
+ * Key material reaches `importKey` as raw bytes. `atob()` returns a *binary
+ * string* (one char per byte), and re-encoding that with `TextEncoder`
+ * (UTF-8) silently inflates every byte >= 0x80 into two bytes — which changes
+ * the HMAC key and makes every real GoTrue signature fail. Regression proven
+ * against live Supabase Auth on 2026-09-29: before this fix verification
+ * returned 401 for correct secrets whose decoded key contains high bytes.
  */
-async function hmacSha256Base64(key: string, message: string): Promise<string> {
+function keyBytes(material: string): Uint8Array<ArrayBuffer> {
+  const bytes = new Uint8Array(material.length);
+  for (let index = 0; index < material.length; index += 1)
+    bytes[index] = material.charCodeAt(index) & 0xff;
+  return bytes;
+}
+
+async function hmacSha256Base64(
+  key: Uint8Array<ArrayBuffer>,
+  message: string,
+): Promise<string> {
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(key),
+    key,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
@@ -108,13 +125,21 @@ async function verifyWebhook(
   const signatures = (headers.get("webhook-signature") ?? "").split(" ");
   if (!timestamp || signatures.length === 0) return false;
   const material = secret.startsWith("v1,") ? secret.slice(3) : secret;
-  const keys = [material];
-  if (material.startsWith("whsec_")) keys.push(atob(material.slice(6)));
+  // Every candidate is raw key BYTES (see keyBytes): passing the binary
+  // string straight through TextEncoder would UTF-8 re-encode high bytes.
+  const keys: Uint8Array<ArrayBuffer>[] = [keyBytes(material)];
+  if (material.startsWith("whsec_")) {
+    try {
+      keys.push(keyBytes(atob(material.slice(6))));
+    } catch {
+      /* material after whsec_ is not base64 */
+    }
+  }
   if (/^[0-9a-f]{16,}$/i.test(material)) {
     const hex = (material.match(/.{2}/g) ?? [])
       .map((pair) => String.fromCharCode(parseInt(pair, 16)))
       .join("");
-    if (hex) keys.push(hex);
+    if (hex) keys.push(keyBytes(hex));
   }
   // standardwebhooks' libraries base64-decode the secret (after stripping an
   // optional whsec_ prefix); GoTrue hands them the raw stored material.
@@ -124,7 +149,8 @@ async function verifyWebhook(
       .replace(/-/g, "+")
       .replace(/_/g, "/");
     const decoded = atob(b64);
-    if (decoded && decoded.length !== material.length) keys.push(decoded);
+    if (decoded && decoded.length !== material.length)
+      keys.push(keyBytes(decoded));
   } catch {
     /* not base64 material */
   }

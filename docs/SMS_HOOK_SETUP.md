@@ -1,6 +1,6 @@
 # 手机验证码短信（阿里云 PNVS × Supabase Send SMS Hook）
 
-- 状态：**已部署并真机验收 `VERIFIED REAL`（2026-09-28 15:32 首条真实短信送达、登录成功）**
+- 状态：**已部署并真机验收 `VERIFIED REAL`（2026-09-28 15:32 首条真实短信送达、登录成功）**；**签名校验已于 2026-09-29 恢复开启并端到端验收**（验签 + 真实短信同一次请求内通过）
 - 关联：`docs/FINAL_RELEASE_VALIDATION.md` B2、`supabase/functions/send-sms/index.ts`
 
 ## 为什么走这条路
@@ -76,12 +76,12 @@ pnpm dlx supabase secrets set \
 
 ## 排障实录（2026-09-28 联调时真实踩过）
 
-| 现象                                                                                      | 真因                                                                                                                                     | 处理                                                                                                                                      |
-| ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dlx supabase ...` 报 `unexpected character "P" in variable name near "Project URL"` | `.env` 里有两行**没有 `=`** 的残留标签                                                                                                   | 注释掉即可（CLI 会自行解析 `.env`）                                                                                                       |
-| 请求函数返回 `401 {"error":"bad signature"}`                                              | ① 校验代码只认 `whsec_` 开头、不认 `v1,whsec_`；② **Supabase 没采用我方密钥，而是在 `hook_send_sms_secrets` 里自建了 64 位十六进制密钥** | 用 Management API `GET /v1/projects/{ref}/config/auth` 读回**服务端存的那个值**，写入 `SEND_SMS_WEBHOOK_SECRET` 并 `supabase secrets set` |
-| 阿里云返回 `isv.OUT_OF_SERVICE`                                                           | **账户余额不足、账号被暂停**（与 RegionId 无关，三种区域返回一致）                                                                       | 充值中心充值后自动恢复                                                                                                                    |
-| 阿里云返回 `SignatureDoesNotMatch`                                                        | RPC V1 签名串拼接/编码错误                                                                                                               | 核对 `POST&%2F&` + RFC3986 编码（空格→%20、`*`→%2A、`~` 不编码）                                                                          |
+| 现象                                                                                      | 真因                                                                                                                                                                                                                                                                                                | 处理                                                                                       |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `pnpm dlx supabase ...` 报 `unexpected character "P" in variable name near "Project URL"` | `.env` 里有两行**没有 `=`** 的残留标签                                                                                                                                                                                                                                                              | 注释掉即可（CLI 会自行解析 `.env`）                                                        |
+| 请求函数返回 `401 {"error":"bad signature"}`                                              | **函数自身的密钥字节 bug**：`atob()` 返回二进制字符串，旧代码用 `TextEncoder`（UTF-8）再编码当 HMAC 密钥，密钥里任何 ≥0x80 的字节都被扩成两字节 ⇒ **正确密钥也永远验不过**（当年"只认 `whsec_` 前缀""存的是哈希拿不到明文"都是误判，配置 API 回读的 64 位十六进制只是展示用的哈希，与能否验签无关） | 改用 `keyBytes()` 把字节原样交给 `importKey`（2026-09-29）；随后轮换新密钥并开回校验，见下 |
+| 阿里云返回 `isv.OUT_OF_SERVICE`                                                           | **账户余额不足、账号被暂停**（与 RegionId 无关，三种区域返回一致）                                                                                                                                                                                                                                  | 充值中心充值后自动恢复                                                                     |
+| 阿里云返回 `SignatureDoesNotMatch`                                                        | RPC V1 签名串拼接/编码错误                                                                                                                                                                                                                                                                          | 核对 `POST&%2F&` + RFC3986 编码（空格→%20、`*`→%2A、`~` 不编码）                           |
 
 > 预检技巧：用**非法号码**（如 `12345678901`）打一次真实请求 —— 阿里云会先校验签名再校验号码，因此
 > `SignatureDoesNotMatch` = 签名错；`MOBILE_NUMBER_ILLEGAL` 等号码类错误 = **链路已通**；整个过程**不会真的发出短信**。
@@ -92,11 +92,11 @@ pnpm dlx supabase secrets set \
   函数日志 `send-sms: delivered`，`auth.users` 新增 `providers=phone` 用户。
 - **GoTrue 的 Hook 载荷**：`{"metadata":{…},"user":{…},"sms":{…}}`，其中 **`user.phone` 不带 `+`**（`86138…`）；
   手机号解析需兼容 `+86… / 86… / 11位` 三种写法，否则返回 `Invalid payload sent to hook`。
-- **签名校验暂关闭**：GoTrue 用自己保管的密钥签名，而 Management API 的 `hook_send_sms_secrets`
-  **只回读 64 位十六进制哈希**（我方 PATCH 的原值不可回读），因此本地永远验不过 → 401 → 前端报"暂时无法发送短信验证码"。
-  **补偿措施**：仅接受 `1[3-9]` 号段的大陆手机号 + 同号 60 秒冷却（429 + `Retry-After`）。
-  要恢复校验：在 Dashboard 的 Hooks 页面取回真实密钥（`v1,whsec_…`）→ 写入 `.env` 的
-  `SEND_SMS_WEBHOOK_SECRET` → `supabase secrets set` → 函数自动恢复多变体校验。
+- **签名校验：2026-09-29 已恢复开启并端到端验收**。当年"验不过"的真因是函数自身的密钥字节 bug（见上排障表），**与"拿不到明文密钥"无关**；`hook_send_sms_secrets` 回读的 64 位十六进制只是展示哈希，不代表密钥取不到。
+  本次已轮换为一把我方生成的新密钥，三处保持同值：Dashboard 配置 `hook_send_sms_secrets`、Edge secret `SEND_SMS_WEBHOOK_SECRET`、仓库根 `.env`（不入库）。补偿措施（仅接受 `1[3-9]` 号段大陆手机号 + 同号 60 秒冷却，429 + `Retry-After`）继续保留。
+  **验收证据（2026-09-29）**：错误密钥 → `401 bad signature`；正确密钥 → `400 unusable payload`（已过验签、进入 payload 校验）；真实 `POST /auth/v1/otp` → 日志 `send-sms: verified key=1 msg=1` + `send-sms: delivered`，HTTP 200（2.6 s）。
+  **残余风险（观察级）**：阿里云下发偶发超过 GoTrue 的 5 秒 Hook 上限 → 客户端 `422 hook_timeout`。基线（验签关闭）同样复现，**与验签无关**，重试即可通过；若反复出现需查阿里云侧（余额/频控）。
+  **要再次轮换密钥**：生成 `v1,whsec_<base64(32 字节)>` → `PATCH /v1/projects/{ref}/config/auth` 写 `hook_send_sms_secrets` → `supabase secrets set SEND_SMS_WEBHOOK_SECRET=<同值>` → 同步写入 `.env` → 按下方验收清单跑一条。
 
 ## 已知风险
 
