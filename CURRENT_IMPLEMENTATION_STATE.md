@@ -402,6 +402,7 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 
 - **无** —— 2026-09-29 起 A 4/4、B 5/5、C 14/14、D 8/8、E 8/8、F 4/4 全部 `VERIFIED REAL`，本地 gate（format/lint/typecheck/build/test）全绿。
 - 已拍板推迟（非 gate）：通知点击不回前台（等 `.exe` 打包）；O-1/O-2 建议随打包阶段一并处理。
+- 待定（非 gate）：**O-4** 安卓 Chrome 通知权限"允许"仍无任何通知（有界排查已记，APK 阶段复测）；大课表解析 213 s 耗时（观察）。
 
 ## 17. AI 板块事实核查与课表导入缺陷（2026-09-30）
 
@@ -416,11 +417,11 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 - **回归测试**：新增 `__fixtures__/uni-gb-cjk-timetable.pdf`（手工构造的 `UniGB-UCS2-H` 单页，2.2 KB，无个人信息）+ `pdf-source.test.ts` 用例「decodes CJK CID fonts through the shipped CMaps」；该 fixture 实测**无 cMap 提取 0 字、有 cMap 274 字**，可稳定区分修复前后。
 - **顺带实测**：MiMo **不支持 PDF 输入**（`file` content part → 400 `file type is not supported`，三档模型一致；`/v1/files` → 404），`image_url` 正常 —— 文档与现有"文字+栅格化"方案是对的。
 
-### 三个观察级遗留（未改，待拍板）
+### 观察级遗留（1、2 已修；3 待定）
 
-1. **文案误导**：空结果/校验失败统一显示「文件不清晰」，真实原因是模型没识别出课程；
-2. **可诊断性**：`providerFailure()` 丢弃底层异常（无 `cause`），线上排障只能靠复现；本次另见一次偶发 `UNAVAILABLE`（fetch 层，可重试）；
-3. **耗时**：大课表结构化解析 213 s，逼近 300 s 上限，重试有超时风险。
+1. ~~**文案误导**~~ **已修（`b763063`）**：模型返回 0 门课时给「未从该文件中识别出课程。请确认这是本学期的课程表且内容清晰，也可以改用清晰截图重新导入。」（新 `NO_COURSES`），与"文件读不出"的 `NO_CONTENT` 文案分流；
+2. ~~**可诊断性**~~ **已修（本轮）**：`ProviderError`/`CloudError` 都带 `cause`，`interpretation.ts` 原本的裸 `catch {` 改为 `catch (error)` 并挂 cause，`server.setErrorHandler` 把工程原因写 stderr（进 `%TEMP%\cm-api.log`）、意外 500 也记一行；**响应体仍只含产品文案**，`interpretation.test.ts` 与 `provider-errors.test.ts` 双向断言（日志含原始原因 / 响应不含）。仍见一次偶发 `UNAVAILABLE`（fetch 层，可重试），归因留观；
+3. **耗时（待定）**：大课表结构化解析 213 s，逼近 300 s 上限，重试有超时风险。
 
 ### 本窗口服务状态
 

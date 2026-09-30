@@ -147,9 +147,22 @@ it("interprets only unresolved captures owned by the caller and never creates It
     };
     expect((await request(ambiguous.id)).statusCode).toBe(502);
     providerFails = true;
-    expect((await request(ambiguous.id)).json().error.code).toBe(
-      "AI_UNAVAILABLE",
-    );
+    const logged: string[] = [];
+    const previousConsoleError = console.error;
+    console.error = (...args: unknown[]) => {
+      logged.push(args.map((value) => String(value)).join(" "));
+    };
+    let failed: { error: { code: string; message: string } };
+    try {
+      failed = (await request(ambiguous.id)).json();
+    } finally {
+      console.error = previousConsoleError;
+    }
+    expect(failed.error.code).toBe("AI_UNAVAILABLE");
+    // The engineering reason reaches the API log (stderr) for diagnosis...
+    expect(logged.join("\n")).toContain("timeout");
+    // ...while the response keeps product-level language.
+    expect(failed.error.message).not.toContain("timeout");
     expect((await cloud.getRawCapture(ownerOne, ambiguous.id))?.raw_text).toBe(
       "老师让我们关注一下第三章",
     );

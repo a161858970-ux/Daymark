@@ -75,8 +75,9 @@ export class CloudError extends Error {
     readonly statusCode: number,
     message: string,
     readonly details: Record<string, unknown> = {},
+    options?: { cause?: unknown },
   ) {
-    super(message);
+    super(message, options);
   }
 }
 

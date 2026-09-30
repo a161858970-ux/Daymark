@@ -156,11 +156,13 @@ export class CaptureInterpretationService {
           : null,
         currentDate: new Date().toISOString().slice(0, 10),
       });
-    } catch {
+    } catch (error) {
       throw new CloudError(
         "AI_UNAVAILABLE",
         503,
         "Interpretation provider is unavailable",
+        {},
+        { cause: error },
       );
     }
     const result = interpretationSchema.safeParse(value);
@@ -177,6 +179,12 @@ export class CaptureInterpretationService {
         "AI_INVALID_OUTPUT",
         502,
         "Interpretation could not be validated",
+        {},
+        {
+          cause: result.success
+            ? new Error("interpretation not supported by source text")
+            : result.error,
+        },
       );
     return {
       source: "AI" as const,

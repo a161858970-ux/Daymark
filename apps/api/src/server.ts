@@ -109,11 +109,26 @@ function dateInZone(instant: string, timeZone: string): string {
   }
 }
 
+/**
+ * The Fastify logger is deliberately off, so an error that carries an
+ * engineering cause (provider failure, schema rejection) writes exactly one
+ * line to stderr -- it lands in the API log file, never in the response body,
+ * which stays product-level language.
+ */
+function logEngineeringCause(error: CloudError): void {
+  if (error.cause === undefined) return;
+  const cause = error.cause;
+  const detail =
+    cause instanceof Error ? (cause.stack ?? cause.message) : String(cause);
+  console.error(`[${error.code}] ${detail}`);
+}
+
 /** Domain routes are registered only when both persistence and auth are supplied. */
 export function buildServer(dependencies?: ServerDependencies) {
   const server = Fastify({ logger: false, bodyLimit: apiBodyLimitBytes });
   server.setErrorHandler((error, _request, reply) => {
     if (error instanceof CloudError) {
+      logEngineeringCause(error);
       const retryAfter = error.details.retry_after_seconds;
       if (error.code === "RATE_LIMITED" && typeof retryAfter === "number")
         reply.header("Retry-After", String(retryAfter));
@@ -134,6 +149,9 @@ export function buildServer(dependencies?: ServerDependencies) {
         },
       });
     }
+    // Unexpected failures were previously invisible (logger off, no handler
+    // log), which made production incidents unreproducible.
+    console.error("[SERVER_ERROR]", error);
     return reply.status(500).send({
       error: { code: "SERVER_ERROR", message: "Server error", details: {} },
     });

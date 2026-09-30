@@ -276,7 +276,7 @@ export class CloudCourseImportManager {
          WHERE id=$1 AND owner_id=$2 AND status <> 'COMMITTED'`,
         [id, ownerId, message, source.file_name, source.media_type],
       );
-      throw new CloudError("IMPORT_FAILED", 422, message);
+      throw new CloudError("IMPORT_FAILED", 422, message, {}, { cause: error });
     }
 
     const sourceHash = createHash("sha256").update(bytes).digest("hex");

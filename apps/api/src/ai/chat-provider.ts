@@ -17,8 +17,9 @@ export class ProviderError extends Error {
   constructor(
     readonly kind: ProviderErrorKind,
     readonly status: number | null = null,
+    options?: { cause?: unknown },
   ) {
-    super(kind);
+    super(kind, options);
     this.name = "ProviderError";
   }
 }
@@ -87,32 +88,39 @@ export async function readStructuredResponse(
   let body: unknown;
   try {
     body = await response.json();
-  } catch {
-    throw new ProviderError("UNAVAILABLE", response.status);
+  } catch (error) {
+    throw new ProviderError("UNAVAILABLE", response.status, { cause: error });
   }
   try {
     return structuredContent(body);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (/truncated/i.test(message))
-      throw new ProviderError("TRUNCATED", response.status);
+      throw new ProviderError("TRUNCATED", response.status, { cause: error });
     if (/no choices|no structured text/i.test(message))
-      throw new ProviderError("EMPTY", response.status);
-    throw new ProviderError("MALFORMED", response.status);
+      throw new ProviderError("EMPTY", response.status, { cause: error });
+    throw new ProviderError("MALFORMED", response.status, { cause: error });
   }
 }
 
+/**
+ * Classification must never be a dead end: the original failure stays on
+ * `cause`, so the error handler can write the engineering reason to the API
+ * log while the response keeps product-level language.
+ */
 export function providerFailure(error: unknown): ProviderError {
   if (error instanceof ProviderError) return error;
   const message = error instanceof Error ? error.message : String(error);
+  const cause = { cause: error };
   if (error instanceof Error && error.name === "TimeoutError")
-    return new ProviderError("TIMEOUT");
+    return new ProviderError("TIMEOUT", null, cause);
   if (error instanceof Error && error.name === "AbortError")
-    return new ProviderError("TIMEOUT");
-  if (/timeout|timed out/i.test(message)) return new ProviderError("TIMEOUT");
+    return new ProviderError("TIMEOUT", null, cause);
+  if (/timeout|timed out/i.test(message))
+    return new ProviderError("TIMEOUT", null, cause);
   if (/network|fetch failed|socket|econn/i.test(message))
-    return new ProviderError("UNAVAILABLE");
-  return new ProviderError("UNAVAILABLE");
+    return new ProviderError("UNAVAILABLE", null, cause);
+  return new ProviderError("UNAVAILABLE", null, cause);
 }
 
 const nullableString = { type: ["string", "null"] };
