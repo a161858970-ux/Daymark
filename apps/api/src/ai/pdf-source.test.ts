@@ -25,6 +25,18 @@ it("keeps text-based PDFs on the cheap text path", async () => {
   expect(prepared.rasterizedPages).toBe(0);
 });
 
+it("decodes CJK CID fonts through the shipped CMaps", async () => {
+  // Regression: without cMapUrl pdfjs cannot decode `UniGB-UCS2-H`, so a
+  // Chinese timetable yields an empty text layer *and* blank rasterized
+  // pages -> the model returns zero courses and the import fails.
+  const prepared = await preparePdfSource(
+    await fixture("uni-gb-cjk-timetable.pdf"),
+  );
+  expect(prepared.text).toContain("商业银行经营学");
+  expect(prepared.rasterizedPages).toBe(0);
+  expect(prepared.images).toHaveLength(0);
+});
+
 it("rasterizes a scanned PDF that has no usable text layer", async () => {
   const prepared = await preparePdfSource(
     await fixture("scanned-timetable.pdf"),

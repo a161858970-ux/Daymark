@@ -402,3 +402,26 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 
 - **无** —— 2026-09-29 起 A 4/4、B 5/5、C 14/14、D 8/8、E 8/8、F 4/4 全部 `VERIFIED REAL`，本地 gate（format/lint/typecheck/build/test）全绿。
 - 已拍板推迟（非 gate）：通知点击不回前台（等 `.exe` 打包）；O-1/O-2 建议随打包阶段一并处理。
+
+## 17. AI 板块事实核查与课表导入缺陷（2026-09-30）
+
+> 全项目 AI 使用面见 `docs/AI_USAGE_MAP.md`（只有两个调用点，全部在 `apps/api`，同一 MiMo Chat Completions 端点）。
+
+### 修复：中文课表 PDF 导入必然失败
+
+- **现象**：用户多次导入课表均失败，`course_import_jobs` 只有一条 `FAILED`，错误为「无法可靠识别该课程表，请重新上传清晰文件。」
+- **根因链**（本地用用户的真实 PDF 复现）：`pdfjs.getDocument()` 未传 `cMapUrl`/`standardFontDataUrl` → 中文 CID 字体（`/Encoding/UniGB-UCS2-H`）解不出 → **文字层 0 字** → 全页栅格化出**只有网格线的空白图** → 模型如实返回 `{"courses":[]}` → `courseImportParseResultSchema` 的 `courses.min(1)` 抛 Zod 错 → `importFailureMessage()` 兜底 → 那句误导文案。
+- **修复**：`apps/api/src/ai/pdf-source.ts` 新增 `pdfAssetDirs()`，把 pdfjs 自带 `cmaps/`（含 `UniGB-UCS2-H.bcmap`）与 `standard_fonts/` 传给 `getDocument`（**尾部必须是 `/`**，Windows 反斜杠会被 pdfjs 拒绝）。
+- **证据**：同一份真实课表 文字 **0 → 5207 字**、栅格化 0 → 模型返回 **8+ 门课**（商业银行经营学/夏聪、计量经济学/张彩萍、财政学概论/卢真… 含周次节次教室），`parse OK in 213 s`。
+- **回归测试**：新增 `__fixtures__/uni-gb-cjk-timetable.pdf`（手工构造的 `UniGB-UCS2-H` 单页，2.2 KB，无个人信息）+ `pdf-source.test.ts` 用例「decodes CJK CID fonts through the shipped CMaps」；该 fixture 实测**无 cMap 提取 0 字、有 cMap 274 字**，可稳定区分修复前后。
+- **顺带实测**：MiMo **不支持 PDF 输入**（`file` content part → 400 `file type is not supported`，三档模型一致；`/v1/files` → 404），`image_url` 正常 —— 文档与现有"文字+栅格化"方案是对的。
+
+### 三个观察级遗留（未改，待拍板）
+
+1. **文案误导**：空结果/校验失败统一显示「文件不清晰」，真实原因是模型没识别出课程；
+2. **可诊断性**：`providerFailure()` 丢弃底层异常（无 `cause`），线上排障只能靠复现；本次另见一次偶发 `UNAVAILABLE`（fetch 层，可重试）；
+3. **耗时**：大课表结构化解析 213 s，逼近 300 s 上限，重试有超时风险。
+
+### 本窗口服务状态
+
+- API 与 Web 仍为**局域网模式**（`main.ts` 的 `host` 临时为 `0.0.0.0`、`vite --host 0.0.0.0`）供手机补测通知；**`main.ts` 改动未提交**，手机测完后须改回 `127.0.0.1` 并还原。

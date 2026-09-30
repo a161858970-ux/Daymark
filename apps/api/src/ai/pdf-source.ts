@@ -10,6 +10,9 @@
  * page count, per-page dimension, JPEG quality and total image payload.
  */
 
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 export class CourseImportParseError extends Error {
   constructor(
     readonly kind:
@@ -110,6 +113,30 @@ async function rasterizePage(
 }
 
 /**
+ * pdfjs needs the shipped CMap / standard-font data to decode (and to render)
+ * CJK CID fonts such as `UniGB-UCS2-H`. Without it a Chinese timetable PDF
+ * yields an empty text layer *and* blank rasterized pages, so the import ends
+ * up with zero courses. Resolve both directories from the installed package.
+ */
+export function pdfAssetDirs(): {
+  cMapUrl: string;
+  standardFontDataUrl: string;
+} {
+  const entry = fileURLToPath(
+    import.meta.resolve("pdfjs-dist/legacy/build/pdf.mjs"),
+  );
+  // <pkg>/legacy/build/pdf.mjs -> <pkg>
+  const root = dirname(dirname(dirname(entry)));
+  // pdfjs validates a *URL-style* trailing slash, so keep forward slashes
+  // even on Windows (fs.readFile accepts them).
+  const dir = (name: string) => `${join(root, name).replaceAll("\\", "/")}/`;
+  return {
+    cMapUrl: dir("cmaps"),
+    standardFontDataUrl: dir("standard_fonts"),
+  };
+}
+
+/**
  * Never throws for unreadable content: an unusable file becomes a typed
  * error with a product-facing message, so the import job can stay recoverable.
  */
@@ -119,7 +146,14 @@ export async function preparePdfSource(
 ): Promise<PreparedPdfSource> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const data = Uint8Array.from(Buffer.from(contentBase64, "base64"));
-  const loadingTask = pdfjs.getDocument({ data, useSystemFonts: false });
+  const assets = pdfAssetDirs();
+  const loadingTask = pdfjs.getDocument({
+    data,
+    useSystemFonts: false,
+    cMapUrl: assets.cMapUrl,
+    cMapPacked: true,
+    standardFontDataUrl: assets.standardFontDataUrl,
+  });
   try {
     const document = await loadingTask.promise;
     if (document.numPages > limits.maxPages)

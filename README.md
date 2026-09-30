@@ -38,6 +38,7 @@ AI 解释和 PDF/图片课程导入解析只在已配置认证、数据库与 `A
 - `docs/IMPLEMENTATION_AUDIT.md`：阶段验收、限制与发布阻塞。
 - `docs/ACCEPTANCE_TRACEABILITY.md`：`19_TEST_ACCEPTANCE_SPEC.md` 每个 acceptance ID 的证据与状态。
 - `docs/SYNC_ENTITY_MATRIX.md`：逐实体同步能力核对。
+- `docs/AI_USAGE_MAP.md`：AI 实际调用点、请求形态、限流与实测结论（2026-09-30 事实核查）。
 - `docs/MULTI_DEVICE_VERIFICATION.md`：A–K 多设备协议场景的 initial/operations/expected/actual/result。
 - `docs/ADR-005-collection-replacement-sync.md`：课表与学期周整组替换协议。
 
