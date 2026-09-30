@@ -424,4 +424,6 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 
 ### 本窗口服务状态
 
-- API 与 Web 仍为**局域网模式**（`main.ts` 的 `host` 临时为 `0.0.0.0`、`vite --host 0.0.0.0`）供手机补测通知；**`main.ts` 改动未提交**，手机测完后须改回 `127.0.0.1` 并还原。
+- 手机通知复测（O-4，2026-09-30）结束后**已还原**：`main.ts` 的 `listen host` 回到 `127.0.0.1`（本轮改动随 O-4 一并提交）、Web 按默认 `vite --host 127.0.0.1` 启动。
+- 还原后核验：`127.0.0.1:3100/api/v1/health` → 200、`127.0.0.1:5173` → 200；`10.11.152.182:3100/5173` **均拒绝连接**（局域网暴露已关闭）。
+- API 由原自动重启窗口（`%TEMP%\start-cm-api.cmd`，标题 CourseManager API）承载；Web 当前由本次会话的后台进程承载，若其退出用 `pnpm --filter @course-manager/web dev` 拉起。
