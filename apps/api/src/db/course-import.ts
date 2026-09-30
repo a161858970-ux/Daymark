@@ -252,14 +252,22 @@ export class CloudCourseImportManager {
         retry_after_seconds: gate.retryAfterSeconds,
       });
     try {
-      parsed = courseImportParseResultSchema.parse(
-        await this.parser.parse({
-          sourceType: current.source_type,
-          fileName: source.file_name,
-          mediaType: source.media_type,
-          contentBase64: bytes.toString("base64"),
-        }),
-      );
+      const raw: unknown = await this.parser.parse({
+        sourceType: current.source_type,
+        fileName: source.file_name,
+        mediaType: source.media_type,
+        contentBase64: bytes.toString("base64"),
+      });
+      // The file was readable and the model answered, but it found no course
+      // at all: report that instead of the misleading "file not clear" copy
+      // that only fits an unreadable source.
+      const courses = (raw as { courses?: unknown } | null)?.courses;
+      if (Array.isArray(courses) && courses.length === 0)
+        throw new CourseImportParseError(
+          "NO_COURSES",
+          "未从该文件中识别出课程。请确认这是本学期的课程表且内容清晰，也可以改用清晰截图重新导入。",
+        );
+      parsed = courseImportParseResultSchema.parse(raw);
     } catch (error) {
       const message = importFailureMessage(error);
       await this.db.query(

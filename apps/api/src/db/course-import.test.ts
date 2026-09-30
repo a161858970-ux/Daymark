@@ -387,7 +387,10 @@ it("keeps a failed parse recoverable and commits no partial Course data", async 
     expect(await imports.get(owner, started.id)).toMatchObject({
       status: "FAILED",
       courses: [],
-      error_message: expect.any(String),
+      // The file was readable, the model simply found nothing: say that
+      // instead of blaming the file's clarity.
+      error_message:
+        "未从该文件中识别出课程。请确认这是本学期的课程表且内容清晰，也可以改用清晰截图重新导入。",
     });
     expect(
       (await cloud.listCourses(owner, semester.id, null, 50)).data,

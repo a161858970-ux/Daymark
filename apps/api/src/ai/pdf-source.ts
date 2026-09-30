@@ -16,7 +16,11 @@ import { fileURLToPath } from "node:url";
 export class CourseImportParseError extends Error {
   constructor(
     readonly kind:
-      "TOO_MANY_PAGES" | "TOO_MANY_SCANNED_PAGES" | "TOO_LARGE" | "NO_CONTENT",
+      | "TOO_MANY_PAGES"
+      | "TOO_MANY_SCANNED_PAGES"
+      | "TOO_LARGE"
+      | "NO_CONTENT"
+      | "NO_COURSES",
     readonly userMessage: string,
   ) {
     super(kind);
