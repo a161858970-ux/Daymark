@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { CourseSchedule } from "@course-manager/domain";
+import { DateTimeField } from "./DateTimeField.js";
 import { toUserMessage } from "./errors.js";
 import {
   scheduleSummary,
@@ -172,22 +173,24 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
         </label>
         <label>
           开始
-          <input
-            aria-label="课程安排开始时间"
-            type="time"
-            value={startTime}
-            onChange={(event) => setStartTime(event.target.value)}
+          <DateTimeField
+            mode="time"
+            label="课程安排开始时间"
+            ariaLabel="课程安排开始时间"
             required
+            value={startTime}
+            onChange={setStartTime}
           />
         </label>
         <label>
           结束
-          <input
-            aria-label="课程安排结束时间"
-            type="time"
-            value={endTime}
-            onChange={(event) => setEndTime(event.target.value)}
+          <DateTimeField
+            mode="time"
+            label="课程安排结束时间"
+            ariaLabel="课程安排结束时间"
             required
+            value={endTime}
+            onChange={setEndTime}
           />
         </label>
         <label>

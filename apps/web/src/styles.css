@@ -3436,3 +3436,239 @@ h2 {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* ---------------------------------------------------------------------
+   自研时间选择器（DateTimeField）：替代浏览器原生日期/时间面板。
+   触发器复用各表单已有的 input 外观；面板用同一套 token，
+   桌面端定位在字段下方，窄屏改为底部浮层。
+   --------------------------------------------------------------------- */
+.datetime-wrap {
+  position: relative;
+}
+.datetime-wrap .datetime-field {
+  width: 100%;
+  min-height: 44px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  padding: 10px 34px 10px 13px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.datetime-wrap .datetime-field.is-empty {
+  color: var(--faint);
+}
+.datetime-wrap .datetime-field:hover {
+  border-color: var(--line-strong);
+}
+.datetime-caret {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
+}
+.datetime-panel {
+  position: fixed;
+  z-index: 200;
+  top: 0;
+  left: 0;
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-medium);
+  box-shadow: var(--shadow-soft);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+/* Painted only once measured against its trigger, so it never flashes at
+   the viewport corner before the positioning pass runs. */
+.datetime-panel:not([data-positioned]) {
+  visibility: hidden;
+}
+.datetime-panel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.datetime-panel button {
+  min-width: 0;
+  min-height: 0;
+  font: inherit;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.datetime-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.datetime-nav strong {
+  flex: 1;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 640;
+}
+.datetime-nav > button {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 17px;
+  line-height: 1;
+}
+.datetime-nav > button:hover {
+  background: var(--surface-muted);
+}
+.datetime-nav .datetime-today {
+  width: auto;
+  padding: 0 10px;
+  font-size: 12.5px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+}
+.datetime-nav .datetime-today:hover {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.datetime-weekdays,
+.datetime-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+.datetime-weekdays span {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 2px 0;
+}
+.datetime-panel .datetime-days button {
+  height: 34px;
+  border-radius: var(--radius-small);
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.datetime-days button:hover {
+  background: var(--surface-muted);
+}
+.datetime-days button[data-outside] {
+  color: var(--faint);
+}
+.datetime-days button[data-today] {
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
+  font-weight: 640;
+}
+.datetime-days button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: none;
+}
+.datetime-times {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.datetime-time-label {
+  margin: 0 0 4px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+.datetime-time-col {
+  max-height: 150px;
+  overflow-y: auto;
+  display: grid;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  scrollbar-width: thin;
+}
+.datetime-panel .datetime-time-col button {
+  height: 30px;
+  border-radius: 5px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.datetime-time-col button:hover {
+  background: var(--surface-muted);
+}
+.datetime-time-col button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 640;
+}
+.datetime-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+.datetime-footer-actions {
+  display: flex;
+  gap: 6px;
+}
+.datetime-panel .datetime-footer button {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-small);
+  font-size: 13px;
+}
+.datetime-footer .datetime-clear {
+  color: var(--danger);
+}
+.datetime-footer .datetime-clear:hover {
+  background: var(--danger-soft);
+}
+.datetime-footer .datetime-quiet:hover {
+  background: var(--surface-muted);
+}
+.datetime-footer .datetime-confirm {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.datetime-footer .datetime-confirm:hover {
+  background: var(--accent-strong);
+}
+@media (max-width: 767px) {
+  .datetime-panel {
+    position: fixed;
+    inset: auto 12px calc(12px + env(safe-area-inset-bottom));
+    width: auto;
+    max-width: none;
+    max-height: min(76vh, 560px);
+    overflow-y: auto;
+  }
+  .datetime-panel .datetime-days button {
+    height: 42px;
+    font-size: 15px;
+  }
+  .datetime-time-col {
+    max-height: 176px;
+  }
+  .datetime-panel .datetime-footer button {
+    height: 40px;
+    padding: 0 16px;
+    font-size: 14px;
+  }
+}

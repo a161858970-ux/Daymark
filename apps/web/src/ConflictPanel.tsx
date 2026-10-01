@@ -3,6 +3,7 @@ import type { ConflictResolution } from "@course-manager/contracts";
 import type { Course, Semester } from "@course-manager/domain";
 import type { ConflictDetail } from "./syncTransport.js";
 import { AttentionSummary } from "./AttentionSummary.js";
+import { DateTimeField } from "./DateTimeField.js";
 import { scheduleSummary, type ScheduleFields } from "./scheduleSummary.js";
 
 type FieldChoice = "LOCAL" | "REMOTE" | "EXPLICIT";
@@ -187,29 +188,27 @@ function ExplicitValueEditor({
     );
   if (field === "start_date" || field === "end_date")
     return (
-      <input
-        aria-label={`自定义${fieldNames[field]}`}
-        type="date"
+      <DateTimeField
+        mode="date"
+        label={fieldNames[field] ?? "日期"}
+        ariaLabel={`自定义${fieldNames[field]}`}
         value={typeof value === "string" ? value.slice(0, 10) : ""}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={onChange}
       />
     );
   if (field.endsWith("_at"))
     return (
-      <input
-        aria-label={`自定义${fieldNames[field] ?? "时间"}`}
-        type="datetime-local"
+      <DateTimeField
+        mode="datetime"
+        label={fieldNames[field] ?? "时间"}
+        ariaLabel={`自定义${fieldNames[field] ?? "时间"}`}
         value={
           typeof value === "string" && value
             ? value.replace("Z", "").slice(0, 16)
             : ""
         }
-        onChange={(event) =>
-          onChange(
-            event.target.value
-              ? new Date(event.target.value).toISOString()
-              : null,
-          )
+        onChange={(next) =>
+          onChange(next ? new Date(next).toISOString() : null)
         }
       />
     );

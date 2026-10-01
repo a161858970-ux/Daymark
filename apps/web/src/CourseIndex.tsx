@@ -6,6 +6,7 @@ import type {
 } from "@course-manager/contracts";
 import type { Course, Semester, SemesterWeek } from "@course-manager/domain";
 import { CourseImportPanel } from "./CourseImportPanel.js";
+import { DateTimeField } from "./DateTimeField.js";
 import { SemesterWeekEditor, type WeekFields } from "./SemesterWeekEditor.js";
 import { toUserMessage } from "./errors.js";
 
@@ -282,22 +283,24 @@ export function CourseIndex({
             />
             <label>
               开始日期
-              <input
-                aria-label="学期开始日期"
-                type="date"
-                value={semesterStart}
-                onChange={(event) => setSemesterStart(event.target.value)}
+              <DateTimeField
+                mode="date"
+                label="学期开始日期"
+                ariaLabel="学期开始日期"
                 required
+                value={semesterStart}
+                onChange={setSemesterStart}
               />
             </label>
             <label>
               结束日期
-              <input
-                aria-label="学期结束日期"
-                type="date"
-                value={semesterEnd}
-                onChange={(event) => setSemesterEnd(event.target.value)}
+              <DateTimeField
+                mode="date"
+                label="学期结束日期"
+                ariaLabel="学期结束日期"
                 required
+                value={semesterEnd}
+                onChange={setSemesterEnd}
               />
             </label>
             <button type="submit">保存学期</button>

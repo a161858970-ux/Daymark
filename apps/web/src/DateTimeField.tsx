@@ -1,0 +1,542 @@
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
+
+export type DateTimeMode = "date" | "datetime" | "time";
+
+interface Props {
+  mode: DateTimeMode;
+  value: string;
+  onChange: (value: string) => void;
+  /** Names the popup; the visible label stays in the caller's <label>. */
+  label: string;
+  ariaLabel?: string;
+  required?: boolean;
+  placeholder?: string;
+}
+
+const WEEKDAY_LABEL = ["日", "一", "二", "三", "四", "五", "六"];
+const WEEKDAY_HEADING = ["一", "二", "三", "四", "五", "六", "日"];
+
+const pad = (value: number) => String(value).padStart(2, "0");
+
+function isoDay(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+export function dayLabel(iso: string): string {
+  const [year = 0, month = 0, day = 0] = iso.split("-").map(Number);
+  const weekday = WEEKDAY_LABEL[new Date(year, month - 1, day).getDay()] ?? "";
+  return `${month}月${day}日 周${weekday}`;
+}
+
+/** Display text for the read-only trigger (empty → placeholder). */
+export function displayValue(
+  value: string,
+  mode: DateTimeMode,
+  placeholder: string,
+): string {
+  if (!value) return placeholder;
+  if (mode === "time") return value;
+  if (mode === "date") return dayLabel(value);
+  const [day = "", time = ""] = value.split("T");
+  return time ? `${dayLabel(day)} ${time.slice(0, 5)}` : dayLabel(day);
+}
+
+/** Splits the stored local string into panel state (date + time). */
+export function splitValue(
+  value: string,
+  mode: DateTimeMode,
+  fallbackTime: string,
+): { day: string | null; time: string } {
+  if (mode === "time") return { day: null, time: value || fallbackTime };
+  if (mode === "date") return { day: value || null, time: fallbackTime };
+  if (value.includes("T")) {
+    const [day = "", time = ""] = value.split("T");
+    return { day: day || null, time: time.slice(0, 5) };
+  }
+  return { day: value || null, time: fallbackTime };
+}
+
+interface Draft {
+  day: string | null;
+  time: string;
+  cursor: { year: number; month: number };
+}
+
+/** Initial panel state for a stored value: selected parts + month cursor. */
+export function draftFrom(value: string, mode: DateTimeMode): Draft {
+  const now = new Date();
+  const { day, time } = splitValue(
+    value,
+    mode,
+    `${pad(now.getHours())}:${pad(now.getMinutes())}`,
+  );
+  const [year = now.getFullYear(), month = now.getMonth() + 1] = (
+    day ?? isoDay(now)
+  )
+    .split("-")
+    .map(Number);
+  return { day, time, cursor: { year, month: month - 1 } };
+}
+
+/** Monday-first cells for the month, including the leading/trailing days. */
+export function monthCells(
+  year: number,
+  month: number,
+): { iso: string; outside: boolean }[] {
+  const offset = (new Date(year, month, 1).getDay() + 6) % 7;
+  const days = new Date(year, month + 1, 0).getDate();
+  const cells: { iso: string; outside: boolean }[] = [];
+  for (let step = 0; step < offset; step++)
+    cells.push({
+      iso: isoDay(new Date(year, month, 1 - (offset - step))),
+      outside: true,
+    });
+  for (let day = 1; day <= days; day++)
+    cells.push({
+      iso: `${year}-${pad(month + 1)}-${pad(day)}`,
+      outside: false,
+    });
+  const trailing = 7 - (cells.length % 7);
+  if (trailing < 7)
+    for (let step = 1; step <= trailing; step++)
+      cells.push({
+        iso: isoDay(new Date(year, month, days + step)),
+        outside: true,
+      });
+  return cells;
+}
+
+/** The value the caller receives on 确定, in its existing local format. */
+export function commitValue(
+  mode: DateTimeMode,
+  day: string | null,
+  time: string,
+): string {
+  if (mode === "date") return day ?? "";
+  if (mode === "time") return time;
+  return day ? `${day}T${time}` : "";
+}
+
+function shiftCursor(cursor: Draft["cursor"], delta: number): Draft["cursor"] {
+  const next = new Date(cursor.year, cursor.month + delta, 1);
+  return { year: next.getFullYear(), month: next.getMonth() };
+}
+
+const MONTH_NAMES = [
+  "1月",
+  "2月",
+  "3月",
+  "4月",
+  "5月",
+  "6月",
+  "7月",
+  "8月",
+  "9月",
+  "10月",
+  "11月",
+  "12月",
+];
+
+/**
+ * In-app date/time picker. Native controls would drag in the browser's own
+ * panel (desktop) or the platform picker (mobile), neither of which matches
+ * this product's visual language, so the panel is ours.
+ *
+ * The trigger is a read-only input: it keeps `required` under native form
+ * validation, keeps the caller's `<label>` wiring and inherits the field
+ * styling every form already applies to inputs. The value contract is the
+ * plain local string the forms already use (`YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`,
+ * `HH:mm`), so no caller changes beyond the tag swap.
+ */
+export function DateTimeField({
+  mode,
+  value,
+  onChange,
+  label,
+  ariaLabel,
+  required,
+  placeholder,
+}: Props) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const pendingFocus = useRef<number | null>(null);
+  // Day to focus when the panel opens; kept out of the effect deps so arrow
+  // navigation never fights the initial focus.
+  const focusDayRef = useRef<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Draft>(() => draftFrom(value, mode));
+
+  const resolvedPlaceholder =
+    placeholder ??
+    (mode === "time"
+      ? "选择时间"
+      : mode === "date"
+        ? "选择日期"
+        : "选择日期时间");
+
+  function close(restoreFocus = false) {
+    setOpen(false);
+    if (restoreFocus) triggerRef.current?.focus();
+  }
+
+  function openPanel() {
+    const next = draftFrom(value, mode);
+    setDraft(next);
+    focusDayRef.current = next.day;
+    setOpen(true);
+  }
+
+  // Focus starts on the selected (or today) day so arrow keys navigate at
+  // once; Escape and outside clicks both return the focus to the trigger.
+  useEffect(() => {
+    if (!open) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    if (pendingFocus.current != null) {
+      const index = pendingFocus.current;
+      pendingFocus.current = null;
+      panel
+        .querySelector<HTMLButtonElement>(`button[data-index="${index}"]`)
+        ?.focus();
+      return;
+    }
+    const day = focusDayRef.current;
+    const preferred = day
+      ? panel.querySelector<HTMLButtonElement>(`button[data-iso="${day}"]`)
+      : panel.querySelector<HTMLButtonElement>(
+          `button[data-iso="${isoDay(new Date())}"]`,
+        );
+    (preferred ?? panel).focus();
+  }, [open]);
+
+  // Scrolling the picked time into view; guarded because jsdom has no
+  // scrollIntoView.
+  useEffect(() => {
+    if (!open) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    for (const node of panel.querySelectorAll("[data-time-selected]")) {
+      const element = node as HTMLElement;
+      if (typeof element.scrollIntoView === "function")
+        element.scrollIntoView({ block: "nearest" });
+    }
+  }, [open, draft.time]);
+
+  // The panel is portalled to <body>: every candidate host (the detail
+  // panel, the capture sheet, conflict dialogs) scrolls, and an absolutely
+  // positioned child would be clipped by it. Positioning against the
+  // trigger keeps it visible everywhere; on narrow screens the stylesheet
+  // turns it into a bottom sheet instead, so no inline offsets are set.
+  useEffect(() => {
+    if (!open) return;
+    const trigger = triggerRef.current;
+    const panel = panelRef.current;
+    if (!trigger || !panel) return;
+    if (
+      typeof window.matchMedia !== "function" ||
+      window.matchMedia("(max-width: 767px)").matches
+    ) {
+      panel.dataset.positioned = "true";
+      return;
+    }
+    const rect = trigger.getBoundingClientRect();
+    const width = Math.min(300, window.innerWidth - 24);
+    const height = panel.offsetHeight;
+    let top = rect.bottom + 6;
+    if (top + height > window.innerHeight - 12)
+      top = Math.max(12, rect.top - height - 6);
+    const left = Math.max(
+      12,
+      Math.min(rect.left, window.innerWidth - width - 12),
+    );
+    panel.style.width = `${width}px`;
+    panel.style.top = `${top}px`;
+    panel.style.left = `${left}px`;
+    panel.dataset.positioned = "true";
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: Event) => {
+      const target = event.target as Node;
+      if (wrapRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      close();
+    };
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") close(true);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  function commit() {
+    onChange(commitValue(mode, draft.day, draft.time));
+    close(true);
+  }
+
+  function pickDay(iso: string) {
+    setDraft((current) => ({ ...current, day: iso }));
+    // A date-only choice is complete on its own; date+time waits for 确定.
+    if (mode === "date") {
+      onChange(iso);
+      close(true);
+    }
+  }
+
+  function onGridKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement;
+    const iso = target.dataset.iso;
+    if (!iso) return;
+    const moves: Record<string, number> = {
+      ArrowLeft: -1,
+      ArrowRight: 1,
+      ArrowUp: -7,
+      ArrowDown: 7,
+    };
+    let step: number | undefined = moves[event.key];
+    if (event.key === "Home") step = -(Number(target.dataset.index) % 7);
+    if (event.key === "End") step = 6 - (Number(target.dataset.index) % 7);
+    if (step === undefined) return;
+    event.preventDefault();
+    const cells = monthCells(draft.cursor.year, draft.cursor.month);
+    const next = Number(target.dataset.index) + step;
+    if (next >= 0 && next < cells.length) {
+      panelRef.current
+        ?.querySelector<HTMLButtonElement>(`button[data-index="${next}"]`)
+        ?.focus();
+      return;
+    }
+    // Crossing the month edge: turn the page and land on the matching slot.
+    pendingFocus.current = Math.min(Math.max(next, 0), cells.length - 1);
+    setDraft((current) => ({
+      ...current,
+      cursor: shiftCursor(current.cursor, next < 0 ? -1 : 1),
+    }));
+  }
+
+  const todayIso = isoDay(new Date());
+  const cells = monthCells(draft.cursor.year, draft.cursor.month);
+  const hours = Array.from({ length: 24 }, (_, hour) => pad(hour));
+  const minutes = Array.from({ length: 60 }, (_, minute) => pad(minute));
+  const showTimes = mode !== "date";
+
+  return (
+    <div className="datetime-wrap" ref={wrapRef}>
+      <input
+        ref={triggerRef}
+        className={`datetime-field${value ? "" : " is-empty"}`}
+        readOnly
+        required={required}
+        aria-label={ariaLabel}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        value={displayValue(value, mode, resolvedPlaceholder)}
+        onClick={() => (open ? close() : openPanel())}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "Enter") {
+            event.preventDefault();
+            if (!open) openPanel();
+          }
+        }}
+      />
+      <span className="datetime-caret" aria-hidden="true">
+        ▾
+      </span>
+      {open && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="datetime-panel"
+              role="dialog"
+              aria-label={`${label}选择`}
+              tabIndex={-1}
+              ref={panelRef}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.stopPropagation();
+                  close(true);
+                }
+              }}
+            >
+              <div className="datetime-nav">
+                <button
+                  type="button"
+                  aria-label="上一月"
+                  onClick={() =>
+                    setDraft((current) => ({
+                      ...current,
+                      cursor: shiftCursor(current.cursor, -1),
+                    }))
+                  }
+                >
+                  ‹
+                </button>
+                <strong>
+                  {draft.cursor.year}年{MONTH_NAMES[draft.cursor.month]}
+                </strong>
+                <button
+                  type="button"
+                  aria-label="下一月"
+                  onClick={() =>
+                    setDraft((current) => ({
+                      ...current,
+                      cursor: shiftCursor(current.cursor, 1),
+                    }))
+                  }
+                >
+                  ›
+                </button>
+                <button
+                  type="button"
+                  className="datetime-today"
+                  onClick={() => {
+                    const now = new Date();
+                    setDraft((current) => ({
+                      ...current,
+                      day: isoDay(now),
+                      cursor: {
+                        year: now.getFullYear(),
+                        month: now.getMonth(),
+                      },
+                    }));
+                  }}
+                >
+                  今天
+                </button>
+              </div>
+              <div className="datetime-weekdays" aria-hidden="true">
+                {WEEKDAY_HEADING.map((name) => (
+                  <span key={name}>{name}</span>
+                ))}
+              </div>
+              <div className="datetime-days" onKeyDown={onGridKeyDown}>
+                {cells.map((cell, index) => (
+                  <button
+                    type="button"
+                    key={cell.iso}
+                    data-iso={cell.iso}
+                    data-index={index}
+                    data-outside={cell.outside || undefined}
+                    data-today={cell.iso === todayIso || undefined}
+                    aria-label={dayLabel(cell.iso)}
+                    aria-pressed={cell.iso === draft.day}
+                    aria-current={cell.iso === todayIso ? "date" : undefined}
+                    onClick={() => pickDay(cell.iso)}
+                  >
+                    {Number(cell.iso.slice(8))}
+                  </button>
+                ))}
+              </div>
+              {showTimes ? (
+                <div className="datetime-times">
+                  <div>
+                    <p className="datetime-time-label">时</p>
+                    <div className="datetime-time-col">
+                      {hours.map((hour) => (
+                        <button
+                          type="button"
+                          key={hour}
+                          aria-pressed={draft.time.slice(0, 2) === hour}
+                          data-time-selected={
+                            draft.time.slice(0, 2) === hour ? "hour" : undefined
+                          }
+                          onClick={() =>
+                            setDraft((current) => ({
+                              ...current,
+                              time: `${hour}:${current.time.slice(3, 5)}`,
+                            }))
+                          }
+                        >
+                          {hour}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="datetime-time-label">分</p>
+                    <div className="datetime-time-col">
+                      {minutes.map((minute) => (
+                        <button
+                          type="button"
+                          key={minute}
+                          aria-pressed={draft.time.slice(3, 5) === minute}
+                          data-time-selected={
+                            draft.time.slice(3, 5) === minute
+                              ? "minute"
+                              : undefined
+                          }
+                          onClick={() =>
+                            setDraft((current) => ({
+                              ...current,
+                              time: `${current.time.slice(0, 2)}:${minute}`,
+                            }))
+                          }
+                        >
+                          {minute}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              <div className="datetime-footer">
+                <button
+                  type="button"
+                  className="datetime-clear"
+                  onClick={() => {
+                    onChange("");
+                    close(true);
+                  }}
+                >
+                  清除
+                </button>
+                <span className="datetime-footer-actions">
+                  {mode !== "date" ? (
+                    <button
+                      type="button"
+                      className="datetime-quiet"
+                      onClick={() => {
+                        const now = new Date();
+                        setDraft((current) => ({
+                          ...current,
+                          day: isoDay(now),
+                          time: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
+                          cursor: {
+                            year: now.getFullYear(),
+                            month: now.getMonth(),
+                          },
+                        }));
+                      }}
+                    >
+                      现在
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="datetime-quiet"
+                    onClick={() => close(true)}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    className="datetime-confirm"
+                    onClick={commit}
+                  >
+                    确定
+                  </button>
+                </span>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}

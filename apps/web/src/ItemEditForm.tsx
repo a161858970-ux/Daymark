@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Course, Item } from "@course-manager/domain";
 import { changedItemFields } from "./itemEditDiff.js";
+import { DateTimeField } from "./DateTimeField.js";
 import { fromLocalInput, toLocalInput } from "./timeInputs.js";
 
 export type EditableItemFields = Partial<
@@ -135,34 +136,38 @@ export function ItemEditForm({
         </label>
         <label>
           开始时间
-          <input
-            type="datetime-local"
+          <DateTimeField
+            mode="datetime"
+            label="开始时间"
             value={startAt}
-            onChange={(event) => setStartAt(event.target.value)}
+            onChange={setStartAt}
           />
         </label>
         <label>
           截止时间
-          <input
-            type="datetime-local"
+          <DateTimeField
+            mode="datetime"
+            label="截止时间"
             value={dueAt}
-            onChange={(event) => setDueAt(event.target.value)}
+            onChange={setDueAt}
           />
         </label>
         <label>
           发生开始
-          <input
-            type="datetime-local"
+          <DateTimeField
+            mode="datetime"
+            label="发生开始"
             value={occurrenceStartAt}
-            onChange={(event) => setOccurrenceStartAt(event.target.value)}
+            onChange={setOccurrenceStartAt}
           />
         </label>
         <label>
           发生结束
-          <input
-            type="datetime-local"
+          <DateTimeField
+            mode="datetime"
+            label="发生结束"
             value={occurrenceEndAt}
-            onChange={(event) => setOccurrenceEndAt(event.target.value)}
+            onChange={setOccurrenceEndAt}
           />
         </label>
         <label className="detail-field-wide">
