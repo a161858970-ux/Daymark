@@ -689,8 +689,15 @@ h2 {
   padding: 0;
   border-radius: var(--radius-small);
 }
+/* The row highlight already covers the whole line, so a checkbox-local
+   background paints a 52px block on top of it and splits the row -- desktop
+   hover, and sticky after a tap on touch where there is no hover reset.
+   Feedback stays on the ring instead of the container. */
 .completion-target:hover {
-  background: rgb(223 231 224 / 72%);
+  background: transparent;
+}
+.completion-target:hover .completion-indicator {
+  transform: scale(1.1);
 }
 .completion-target.checked {
   color: #7b857f;
