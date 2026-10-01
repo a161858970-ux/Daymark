@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
+import { TimeWheel } from "./TimeWheel.js";
 
 export type DateTimeMode = "date" | "datetime" | "time";
 
@@ -211,19 +212,6 @@ export function DateTimeField({
     (preferred ?? panel).focus();
   }, [open]);
 
-  // Scrolling the picked time into view; guarded because jsdom has no
-  // scrollIntoView.
-  useEffect(() => {
-    if (!open) return;
-    const panel = panelRef.current;
-    if (!panel) return;
-    for (const node of panel.querySelectorAll("[data-time-selected]")) {
-      const element = node as HTMLElement;
-      if (typeof element.scrollIntoView === "function")
-        element.scrollIntoView({ block: "nearest" });
-    }
-  }, [open, draft.time]);
-
   // The panel is portalled to <body>: every candidate host (the detail
   // panel, the capture sheet, conflict dialogs) scrolls, and an absolutely
   // positioned child would be clipped by it. Positioning against the
@@ -323,8 +311,6 @@ export function DateTimeField({
 
   const todayIso = isoDay(new Date());
   const cells = monthCells(draft.cursor.year, draft.cursor.month);
-  const hours = Array.from({ length: 24 }, (_, hour) => pad(hour));
-  const minutes = Array.from({ length: 60 }, (_, minute) => pad(minute));
   const showTimes = mode !== "date";
 
   return (
@@ -375,7 +361,19 @@ export function DateTimeField({
                     }))
                   }
                 >
-                  ‹
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M15 6l-6 6 6 6" />
+                  </svg>
                 </button>
                 <strong>
                   {draft.cursor.year}年{MONTH_NAMES[draft.cursor.month]}
@@ -390,7 +388,19 @@ export function DateTimeField({
                     }))
                   }
                 >
-                  ›
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 6l6 6-6 6" />
+                  </svg>
                 </button>
                 <button
                   type="button"
@@ -435,54 +445,30 @@ export function DateTimeField({
               </div>
               {showTimes ? (
                 <div className="datetime-times">
-                  <div>
-                    <p className="datetime-time-label">时</p>
-                    <div className="datetime-time-col">
-                      {hours.map((hour) => (
-                        <button
-                          type="button"
-                          key={hour}
-                          aria-pressed={draft.time.slice(0, 2) === hour}
-                          data-time-selected={
-                            draft.time.slice(0, 2) === hour ? "hour" : undefined
-                          }
-                          onClick={() =>
-                            setDraft((current) => ({
-                              ...current,
-                              time: `${hour}:${current.time.slice(3, 5)}`,
-                            }))
-                          }
-                        >
-                          {hour}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="datetime-time-label">分</p>
-                    <div className="datetime-time-col">
-                      {minutes.map((minute) => (
-                        <button
-                          type="button"
-                          key={minute}
-                          aria-pressed={draft.time.slice(3, 5) === minute}
-                          data-time-selected={
-                            draft.time.slice(3, 5) === minute
-                              ? "minute"
-                              : undefined
-                          }
-                          onClick={() =>
-                            setDraft((current) => ({
-                              ...current,
-                              time: `${current.time.slice(0, 2)}:${minute}`,
-                            }))
-                          }
-                        >
-                          {minute}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <TimeWheel
+                    count={24}
+                    value={Number(draft.time.slice(0, 2)) || 0}
+                    onChange={(hour) =>
+                      setDraft((current) => ({
+                        ...current,
+                        time: `${String(hour).padStart(2, "0")}:${current.time.slice(3, 5)}`,
+                      }))
+                    }
+                    label="时"
+                    ariaLabel="小时"
+                  />
+                  <TimeWheel
+                    count={60}
+                    value={Number(draft.time.slice(3, 5)) || 0}
+                    onChange={(minute) =>
+                      setDraft((current) => ({
+                        ...current,
+                        time: `${current.time.slice(0, 2)}:${String(minute).padStart(2, "0")}`,
+                      }))
+                    }
+                    label="分"
+                    ariaLabel="分钟"
+                  />
                 </div>
               ) : null}
               <div className="datetime-footer">

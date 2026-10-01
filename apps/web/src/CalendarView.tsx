@@ -193,14 +193,38 @@ export function CalendarView({
               onClick={() => move(-1)}
               aria-label={mode === "month" ? "上个月" : "上一周"}
             >
-              ‹
+              <svg
+                viewBox="0 0 24 24"
+                width="15"
+                height="15"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M15 6l-6 6 6 6" />
+              </svg>
             </button>
             <button
               type="button"
               onClick={() => move(1)}
               aria-label={mode === "month" ? "下个月" : "下一周"}
             >
-              ›
+              <svg
+                viewBox="0 0 24 24"
+                width="15"
+                height="15"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M9 6l6 6-6 6" />
+              </svg>
             </button>
           </div>
           <div

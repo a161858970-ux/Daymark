@@ -201,6 +201,7 @@ export function ItemDetail({
           <button
             ref={closeButtonRef}
             type="button"
+            className="detail-close"
             onClick={beginExit}
             aria-label="关闭事项详情"
           >

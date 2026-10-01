@@ -63,7 +63,12 @@ export function ErrorNotice({
   return (
     <div className={`error-banner ${exiting ? "closing" : ""}`} role="alert">
       <span>{message}</span>
-      <button type="button" aria-label="关闭错误" onClick={beginExit}>
+      <button
+        type="button"
+        className="detail-close"
+        aria-label="关闭错误"
+        onClick={beginExit}
+      >
         ×
       </button>
     </div>

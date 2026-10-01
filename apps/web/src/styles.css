@@ -1613,7 +1613,9 @@ h2 {
   font-size: 12px;
   margin-bottom: 38px;
 }
-.detail-top button {
+/* Shared circular close control (previously only the detail panel had a
+   rule; the search/account/notice closes were unstyled boxes). */
+.detail-close {
   display: grid;
   place-items: center;
   width: 44px;
@@ -1624,7 +1626,7 @@ h2 {
   color: var(--muted);
   border-radius: 50%;
 }
-.detail-top button:hover {
+.detail-close:hover {
   background: var(--surface-muted);
 }
 .detail-object {
@@ -1967,6 +1969,11 @@ h2 {
   background: rgb(250 248 243 / 58%);
 }
 .calendar-navigation button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 0;
+  padding-bottom: 0;
   font-size: 22px;
   line-height: 1;
 }
@@ -3531,6 +3538,9 @@ h2 {
   font-weight: 640;
 }
 .datetime-nav > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 30px;
   height: 30px;
   flex: 0 0 auto;
@@ -3601,38 +3611,6 @@ h2 {
   font-size: 11px;
   color: var(--muted);
 }
-.datetime-time-col {
-  max-height: 150px;
-  overflow-y: auto;
-  display: grid;
-  gap: 2px;
-  padding: 3px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-small);
-  /* Wheels scroll by wheel/touch/keys; a visible scrollbar would cut a
-     hard grey edge through a panel this small. */
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.datetime-time-col::-webkit-scrollbar {
-  display: none;
-}
-.datetime-panel .datetime-time-col button {
-  height: 30px;
-  border-radius: 5px;
-  font-size: 13.5px;
-  color: var(--ink-soft);
-  font-variant-numeric: tabular-nums;
-}
-.datetime-time-col button:hover {
-  background: var(--surface-muted);
-}
-.datetime-time-col button[aria-pressed="true"] {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  font-weight: 640;
-}
 .datetime-footer {
   display: flex;
   align-items: center;
@@ -3680,9 +3658,6 @@ h2 {
   .datetime-panel .datetime-days button {
     height: 42px;
     font-size: 15px;
-  }
-  .datetime-time-col {
-    max-height: 176px;
   }
   .datetime-panel .datetime-footer button {
     height: 40px;
@@ -3810,4 +3785,98 @@ h2 {
   .week-start-row .select-field {
     min-height: 44px;
   }
+}
+
+/* ---------------------------------------------------------------------
+   日历日期块：今天 = 浅绿整格，鼠标指向的那天 = 深绿整格。
+   同色系两档深浅，一眼可分「浅的是今天」「深的是我正指的」。
+   --------------------------------------------------------------------- */
+.calendar-day {
+  min-height: 44px;
+  padding: 6px 7px;
+}
+.calendar-day.today {
+  background: var(--accent-soft);
+}
+.calendar-day:hover {
+  background: rgb(36 71 60 / 24%);
+}
+
+/* ---------------------------------------------------------------------
+   时间滚轮（TimeWheel）：固定中线窗口，滚到中线的数字即为当前设定，
+   上下做淡出透视；列表循环滚动（23→00、59→00 无缝接回）。
+   --------------------------------------------------------------------- */
+.datetime-wheel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.datetime-wheel-shell {
+  position: relative;
+  width: 100%;
+}
+.datetime-wheel-viewport {
+  position: relative;
+  z-index: 1;
+  height: 102px;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  outline: none;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 26%,
+    #000 74%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 26%,
+    #000 74%,
+    transparent 100%
+  );
+}
+.datetime-wheel-viewport::-webkit-scrollbar {
+  display: none;
+}
+.datetime-wheel-viewport:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+  border-radius: var(--radius-small);
+}
+.datetime-wheel-track {
+  padding: 34px 0;
+}
+.datetime-wheel-item {
+  height: 34px;
+  display: grid;
+  place-items: center;
+  scroll-snap-align: center;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  transition:
+    font-size var(--motion-fast) ease,
+    font-weight var(--motion-fast) ease,
+    color var(--motion-fast) ease;
+}
+.datetime-wheel-item.is-center {
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--accent-strong);
+}
+.datetime-wheel-band {
+  position: absolute;
+  z-index: 0;
+  left: 0;
+  right: 0;
+  top: 34px;
+  height: 34px;
+  background: var(--accent-soft);
+  border-radius: var(--radius-small);
+  pointer-events: none;
 }
