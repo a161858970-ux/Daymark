@@ -61,6 +61,18 @@ textarea,
 select {
   font: inherit;
 }
+/* Global field fallback: a control whose context defines no look of its own
+   inherits the product's field style instead of the browser's raw white
+   box (the pending-capture form was the visible case). :where() keeps the
+   specificity at zero, so every existing context rule still wins. */
+:where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-height: 44px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  padding: 10px 13px;
+  color: inherit;
+}
 button {
   cursor: pointer;
 }
@@ -455,7 +467,7 @@ select:focus-visible {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 9px 12px;
-  background: #fff;
+  background: var(--surface-raised);
   color: inherit;
 }
 .course-delete-actions button.danger {
@@ -480,7 +492,7 @@ select:focus-visible {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 8px 10px;
-  background: #fff;
+  background: var(--surface-raised);
 }
 .semester-create button,
 .course-candidate button:first-child {
@@ -547,7 +559,7 @@ select:focus-visible {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 7px 9px;
-  background: #fff;
+  background: var(--surface-raised);
 }
 .schedule-form button {
   min-height: 40px;
@@ -992,7 +1004,7 @@ h2 {
 }
 .detail-panel textarea {
   min-height: 44px;
-  background: #fff;
+  background: var(--surface-raised);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px 13px;
@@ -3598,7 +3610,13 @@ h2 {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-small);
-  scrollbar-width: thin;
+  /* Wheels scroll by wheel/touch/keys; a visible scrollbar would cut a
+     hard grey edge through a panel this small. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.datetime-time-col::-webkit-scrollbar {
+  display: none;
 }
 .datetime-panel .datetime-time-col button {
   height: 30px;
