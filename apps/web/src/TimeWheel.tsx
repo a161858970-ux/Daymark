@@ -14,6 +14,21 @@ export function valueFromIndex(index: number, count: number): number {
   return ((index % count) + count) % count;
 }
 
+/** Pixels a desktop notch is worth (Chrome/Edge report 100 per notch). */
+export const NOTCH_PX = 100;
+
+/**
+ * Wheel delta → notches. One notch is one row, so precision is kept; a long
+ * spin simply accumulates many notches, so distance is kept too. Deltas are
+ * kept as a remainder instead of being dropped, so fast scrolling never
+ * loses input.
+ */
+export function notchDelta(deltaY: number, deltaMode: number): number {
+  if (deltaMode === 1) return deltaY / 3; // lines: a notch is 3 lines
+  if (deltaMode === 2) return deltaY; // pages: 100px per page-step
+  return deltaY / NOTCH_PX;
+}
+
 /** First index of the middle repeat — the resting place for the wheels. */
 export function centerIndexFor(value: number, count: number): number {
   return ((REPEATS - 1) / 2) * count + value;
@@ -69,22 +84,17 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
     const viewport = viewportRef.current;
     if (!viewport) return;
     let acc = 0;
-    let lockedUntil = 0;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
-      const now = Date.now();
-      if (now < lockedUntil) {
-        acc = 0;
-        return;
-      }
-      acc += event.deltaY;
-      if (Math.abs(acc) < 8) return;
-      const direction = acc > 0 ? 1 : -1;
-      acc = 0;
-      lockedUntil = now + 90;
+      // Whole notches only; the fraction stays queued so nothing is lost
+      // between events (this is what made fast spins fall behind).
+      acc += notchDelta(event.deltaY, event.deltaMode);
+      const steps = Math.trunc(acc);
+      if (steps === 0) return;
+      acc -= steps;
       // Chain from the running glide so fast notches keep moving forward.
       const base = pendingRef.current ?? indexRef.current;
-      const next = base + direction;
+      const next = base + steps;
       pendingRef.current = next;
       indexRef.current = next;
       // Snap would fight a programmatic glide; it is restored on landing.
@@ -131,6 +141,12 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
         pendingRef.current = null;
         viewport.style.scrollSnapType = "";
         index = pending;
+        // A long spin can land on an extreme row; jump a whole cycle there
+        // so the chain keeps a safe runway for the next notch.
+        const total = REPEATS * count;
+        if (index < count) index += count;
+        else if (index >= total - count) index -= count;
+        if (index !== pending) viewport.scrollTop = index * ITEM_HEIGHT;
       }
     } else {
       // External scroll (touch, keyboard, snap settling): keep the loop

@@ -1,6 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
-import { TimeWheel, centerIndexFor, valueFromIndex } from "./TimeWheel.js";
+import {
+  TimeWheel,
+  centerIndexFor,
+  notchDelta,
+  valueFromIndex,
+} from "./TimeWheel.js";
 
 it("wraps scroll indices through the cycle", () => {
   expect(valueFromIndex(0, 24)).toBe(0);
@@ -38,4 +43,19 @@ it("renders a spin button with a fixed centre band, not clickable rows", () => {
   expect(markup).toContain("datetime-wheel-viewport");
   // Selection is scrolling, so rows are plain text — no buttons to click.
   expect(markup).not.toContain("<button");
+});
+
+it("counts wheel input in notches: one notch one row, a long spin keeps its distance", () => {
+  // Chrome/Edge: one notch = 100px → exactly one row.
+  expect(notchDelta(100, 0)).toBe(1);
+  expect(notchDelta(-100, 0)).toBe(-1);
+  // A large delta (or many queued notches) covers its full distance.
+  expect(notchDelta(500, 0)).toBe(5);
+  // Firefox reports lines: three lines is one notch.
+  expect(notchDelta(3, 1)).toBe(1);
+  expect(notchDelta(-6, 1)).toBe(-2);
+  // Partial notches stay queued as a remainder instead of being dropped,
+  // which is what made fast scrolling fall behind before.
+  expect(notchDelta(50, 0)).toBe(0.5);
+  expect(Math.trunc(0.5 + 0.5)).toBe(1);
 });
