@@ -58,10 +58,23 @@ export function splitValue(
   return { day: value || null, time: fallbackTime };
 }
 
-interface Draft {
+export interface Draft {
   day: string | null;
   time: string;
   cursor: { year: number; month: number };
+}
+
+/**
+ * First time change with no date chosen pins the draft to `today`: picking
+ * only an hour/minute must still commit (otherwise 确定 submits an empty
+ * value). A date that is already set is never overwritten.
+ */
+export function withTimeChange(
+  draft: Draft,
+  time: string,
+  today: string,
+): Draft {
+  return { ...draft, day: draft.day ?? today, time };
 }
 
 /** Initial panel state for a stored value: selected parts + month cursor. */
@@ -264,6 +277,17 @@ export function DateTimeField({
     };
   }, [open]);
 
+  /**
+   * Touching the wheels with no date chosen yet means the user is picking a
+   * time *today* — otherwise 确定 would submit an empty value and silently
+   * do nothing. A field opened and confirmed untouched stays untouched.
+   */
+  function touchTime(nextTime: string) {
+    setDraft((current) =>
+      withTimeChange(current, nextTime, isoDay(new Date())),
+    );
+  }
+
   function commit() {
     onChange(commitValue(mode, draft.day, draft.time));
     close(true);
@@ -449,10 +473,9 @@ export function DateTimeField({
                     count={24}
                     value={Number(draft.time.slice(0, 2)) || 0}
                     onChange={(hour) =>
-                      setDraft((current) => ({
-                        ...current,
-                        time: `${String(hour).padStart(2, "0")}:${current.time.slice(3, 5)}`,
-                      }))
+                      touchTime(
+                        `${String(hour).padStart(2, "0")}:${draft.time.slice(3, 5)}`,
+                      )
                     }
                     label="时"
                     ariaLabel="小时"
@@ -461,10 +484,9 @@ export function DateTimeField({
                     count={60}
                     value={Number(draft.time.slice(3, 5)) || 0}
                     onChange={(minute) =>
-                      setDraft((current) => ({
-                        ...current,
-                        time: `${current.time.slice(0, 2)}:${String(minute).padStart(2, "0")}`,
-                      }))
+                      touchTime(
+                        `${draft.time.slice(0, 2)}:${String(minute).padStart(2, "0")}`,
+                      )
                     }
                     label="分"
                     ariaLabel="分钟"

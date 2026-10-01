@@ -8,6 +8,7 @@ import {
   draftFrom,
   monthCells,
   splitValue,
+  withTimeChange,
 } from "./DateTimeField.js";
 
 it("renders a read-only trigger instead of a native date/time control", () => {
@@ -90,4 +91,24 @@ it("builds Monday-first month grids padded to whole weeks", () => {
   expect(october.filter((cell) => !cell.outside)).toHaveLength(31);
   expect(monthCells(2026, 1).filter((cell) => !cell.outside)).toHaveLength(28);
   expect(monthCells(2028, 1).filter((cell) => !cell.outside)).toHaveLength(29);
+});
+
+it("pins an undated draft to today on the first time change", () => {
+  const empty = draftFrom("", "datetime");
+  expect(empty.day).toBeNull();
+  const touched = withTimeChange(empty, "14:30", "2026-10-01");
+  expect(touched.day).toBe("2026-10-01");
+  expect(touched.time).toBe("14:30");
+  // …so a time-only session now commits instead of submitting "".
+  expect(commitValue("datetime", touched.day, touched.time)).toBe(
+    "2026-10-01T14:30",
+  );
+  // A date that is already set is never moved by a time change.
+  const dated = withTimeChange(
+    { ...touched, day: "2026-10-05" },
+    "15:00",
+    "2026-10-01",
+  );
+  expect(dated.day).toBe("2026-10-05");
+  expect(dated.time).toBe("15:00");
 });

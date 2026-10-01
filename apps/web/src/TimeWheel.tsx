@@ -55,6 +55,34 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
     // are handled by the effect below.
   }, []);
 
+  // A mouse notch is ~100px, three rows of 34px, which used to jump over
+  // values (2 → 5) and made whole hours unreachable. The gesture is
+  // therefore normalised: one wheel step = exactly one row, deltas from the
+  // same notch are swallowed during a short lock.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    let pending = 0;
+    let lockedUntil = 0;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const now = Date.now();
+      if (now < lockedUntil) {
+        pending = 0;
+        return;
+      }
+      pending += event.deltaY;
+      if (Math.abs(pending) < 8) return;
+      const direction = pending > 0 ? 1 : -1;
+      pending = 0;
+      lockedUntil = now + 90;
+      const next = Math.round(viewport.scrollTop / ITEM_HEIGHT) + direction;
+      viewport.scrollTop = next * ITEM_HEIGHT;
+    };
+    viewport.addEventListener("wheel", onWheel, { passive: false });
+    return () => viewport.removeEventListener("wheel", onWheel);
+  }, []);
+
   // An external change (e.g. the 现在 preset) re-centres the wheel.
   useEffect(() => {
     if (value === lastValueRef.current) return;
