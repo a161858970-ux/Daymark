@@ -39,6 +39,10 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef(0);
   const lastValueRef = useRef(value);
+  /** Resting row, and the row a running glide is heading for. */
+  const indexRef = useRef(0);
+  const pendingRef = useRef<number | null>(null);
+  const fallbackRef = useRef(0);
   const [centerIndex, setCenterIndex] = useState(() =>
     centerIndexFor(value, count),
   );
@@ -49,6 +53,8 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
     if (!viewport) return;
     const index = centerIndexFor(value, count);
     viewport.scrollTop = index * ITEM_HEIGHT;
+    indexRef.current = index;
+    pendingRef.current = null;
     setCenterIndex(index);
     lastValueRef.current = value;
     // The wheel is re-created whenever the panel opens; later value changes
@@ -62,25 +68,41 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
-    let pending = 0;
+    let acc = 0;
     let lockedUntil = 0;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
       const now = Date.now();
       if (now < lockedUntil) {
-        pending = 0;
+        acc = 0;
         return;
       }
-      pending += event.deltaY;
-      if (Math.abs(pending) < 8) return;
-      const direction = pending > 0 ? 1 : -1;
-      pending = 0;
+      acc += event.deltaY;
+      if (Math.abs(acc) < 8) return;
+      const direction = acc > 0 ? 1 : -1;
+      acc = 0;
       lockedUntil = now + 90;
-      const next = Math.round(viewport.scrollTop / ITEM_HEIGHT) + direction;
-      viewport.scrollTop = next * ITEM_HEIGHT;
+      // Chain from the running glide so fast notches keep moving forward.
+      const base = pendingRef.current ?? indexRef.current;
+      const next = base + direction;
+      pendingRef.current = next;
+      indexRef.current = next;
+      // Snap would fight a programmatic glide; it is restored on landing.
+      viewport.style.scrollSnapType = "none";
+      viewport.scrollTo({ top: next * ITEM_HEIGHT, behavior: "smooth" });
+      window.clearTimeout(fallbackRef.current);
+      fallbackRef.current = window.setTimeout(() => {
+        if (pendingRef.current === next) {
+          pendingRef.current = null;
+          viewport.style.scrollSnapType = "";
+        }
+      }, 400);
     };
     viewport.addEventListener("wheel", onWheel, { passive: false });
-    return () => viewport.removeEventListener("wheel", onWheel);
+    return () => {
+      viewport.removeEventListener("wheel", onWheel);
+      window.clearTimeout(fallbackRef.current);
+    };
   }, []);
 
   // An external change (e.g. the 现在 preset) re-centres the wheel.
@@ -90,6 +112,8 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
     if (!viewport) return;
     const index = centerIndexFor(value, count);
     viewport.scrollTop = index * ITEM_HEIGHT;
+    indexRef.current = index;
+    pendingRef.current = null;
     lastValueRef.current = value;
     setCenterIndex(index);
   }, [value, count]);
@@ -97,15 +121,27 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
   function settle() {
     const viewport = viewportRef.current;
     if (!viewport) return;
-    let index = Math.round(viewport.scrollTop / ITEM_HEIGHT);
-    const total = REPEATS * count;
-    // Jump by a whole cycle inside the middle repeats: same value, same
-    // surrounding rows, so the correction is invisible.
-    if (index < count) index += count;
-    else if (index >= total - count) index -= count;
+    const row = viewport.scrollTop / ITEM_HEIGHT;
+    const pending = pendingRef.current;
+    let index = Math.round(row);
+    if (pending !== null) {
+      // A glide is running: follow the visual centre row by row, but never
+      // re-centre or wrap — that would cancel the animation.
+      if (Math.abs(row - pending) < 0.06) {
+        pendingRef.current = null;
+        viewport.style.scrollSnapType = "";
+        index = pending;
+      }
+    } else {
+      // External scroll (touch, keyboard, snap settling): keep the loop
+      // seamless by jumping a whole cycle inside the middle repeats.
+      const total = REPEATS * count;
+      if (index < count) index += count;
+      else if (index >= total - count) index -= count;
+      if (index !== Math.round(row)) viewport.scrollTop = index * ITEM_HEIGHT;
+    }
+    indexRef.current = index;
     const wrapped = valueFromIndex(index, count);
-    if (Math.round(viewport.scrollTop / ITEM_HEIGHT) !== index)
-      viewport.scrollTop = index * ITEM_HEIGHT;
     if (wrapped !== lastValueRef.current) {
       lastValueRef.current = wrapped;
       onChange(wrapped);
