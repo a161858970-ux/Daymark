@@ -3690,3 +3690,124 @@ h2 {
     font-size: 14px;
   }
 }
+
+/* ---------------------------------------------------------------------
+   自研下拉（SelectField）：原生 <select> 的弹出列表由系统渲染，CSS 改不到，
+   所以和时间选择器一样换成自己的面板（portal + fixed 定位 + 视口翻转）。
+   --------------------------------------------------------------------- */
+.select-wrap {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.select-wrap .select-field {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  padding: 10px 34px 10px 13px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.select-field.is-empty .select-value {
+  color: var(--faint);
+}
+.select-wrap .select-field:hover {
+  border-color: var(--line-strong);
+}
+.select-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.select-caret {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
+}
+.select-panel {
+  position: fixed;
+  z-index: 200;
+  top: 0;
+  left: 0;
+  min-width: 160px;
+  max-width: calc(100vw - 24px);
+  overflow-y: auto;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-medium);
+  box-shadow: var(--shadow-soft);
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  scrollbar-width: thin;
+}
+.select-panel:not([data-positioned]) {
+  visibility: hidden;
+}
+.select-panel button {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.select-panel button:hover,
+.select-panel button[data-active] {
+  background: var(--surface-muted);
+}
+.select-panel button[aria-selected="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 640;
+}
+/* Context specs ported from the native selects these replace. */
+.semester-switcher .select-field {
+  min-height: 40px;
+  border-radius: 18px;
+  background: rgb(250 248 243 / 72%);
+  padding: 8px 32px 8px 12px;
+}
+.week-start-row .select-field {
+  min-height: 36px;
+  background: var(--surface);
+  padding: 6px 30px 6px 10px;
+}
+.association-add .select-wrap {
+  flex: 1;
+  min-width: 0;
+}
+.pending-resolution .select-wrap {
+  width: 100%;
+}
+@media (max-width: 767px) {
+  .select-panel button {
+    min-height: 44px;
+    font-size: 15px;
+  }
+  .week-start-row .select-field {
+    min-height: 44px;
+  }
+}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Course, Item } from "@course-manager/domain";
 import { changedItemFields } from "./itemEditDiff.js";
 import { DateTimeField } from "./DateTimeField.js";
+import { SelectField } from "./SelectField.js";
 import { fromLocalInput, toLocalInput } from "./timeInputs.js";
 
 export type EditableItemFields = Partial<
@@ -109,30 +110,33 @@ export function ItemEditForm({
         </label>
         <label>
           课程
-          <select
+          <SelectField
             value={courseId}
-            onChange={(event) => setCourseId(event.target.value)}
-          >
-            <option value="">无课程</option>
-            {courses.map((value) => (
-              <option key={value.id} value={value.id}>
-                {value.name}
-              </option>
-            ))}
-          </select>
+            onChange={setCourseId}
+            label="课程"
+            options={[
+              { value: "", label: "无课程" },
+              ...courses.map((course) => ({
+                value: course.id,
+                label: course.name,
+              })),
+            ]}
+          />
         </label>
         <label>
           提醒等级
-          <select
+          <SelectField
             value={reminderLevel}
-            onChange={(event) =>
-              setReminderLevel(event.target.value as Item["reminder_level"])
+            onChange={(next) =>
+              setReminderLevel(next as Item["reminder_level"])
             }
-          >
-            <option value="OFF">关闭</option>
-            <option value="NORMAL">普通</option>
-            <option value="HIGH">高</option>
-          </select>
+            label="提醒等级"
+            options={[
+              { value: "OFF", label: "关闭" },
+              { value: "NORMAL", label: "普通" },
+              { value: "HIGH", label: "高" },
+            ]}
+          />
         </label>
         <label>
           开始时间

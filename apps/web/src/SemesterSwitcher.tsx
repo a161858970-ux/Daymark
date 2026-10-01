@@ -1,4 +1,5 @@
 import type { Semester } from "@course-manager/domain";
+import { SelectField } from "./SelectField.js";
 
 interface Props {
   semesters: Semester[];
@@ -11,17 +12,18 @@ export function SemesterSwitcher({ semesters, selectedId, onChange }: Props) {
   return (
     <label className="semester-switcher">
       学期视角
-      <select
+      <SelectField
         value={selectedId ?? ""}
-        onChange={(event) => onChange(event.target.value || null)}
-      >
-        <option value="">当前</option>
-        {semesters.map((semester) => (
-          <option key={semester.id} value={semester.id}>
-            {semester.name}
-          </option>
-        ))}
-      </select>
+        onChange={(next) => onChange(next || null)}
+        label="学期视角"
+        options={[
+          { value: "", label: "当前" },
+          ...semesters.map((semester) => ({
+            value: semester.id,
+            label: semester.name,
+          })),
+        ]}
+      />
     </label>
   );
 }

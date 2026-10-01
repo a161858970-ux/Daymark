@@ -4,6 +4,7 @@ import type { Course, Semester } from "@course-manager/domain";
 import type { ConflictDetail } from "./syncTransport.js";
 import { AttentionSummary } from "./AttentionSummary.js";
 import { DateTimeField } from "./DateTimeField.js";
+import { SelectField } from "./SelectField.js";
 import { scheduleSummary, type ScheduleFields } from "./scheduleSummary.js";
 
 type FieldChoice = "LOCAL" | "REMOTE" | "EXPLICIT";
@@ -122,37 +123,33 @@ function ExplicitValueEditor({
 }) {
   if (field === "course_id")
     return (
-      <select
-        aria-label="自定义所属课程"
+      <SelectField
+        ariaLabel="自定义所属课程"
+        label="所属课程"
         value={typeof value === "string" ? value : ""}
-        onChange={(event) => onChange(event.target.value || null)}
-      >
-        <option value="">无课程</option>
-        {courses
-          .filter((course) => course.deleted_at === null)
-          .map((course) => (
-            <option key={course.id} value={course.id}>
-              {course.name}
-            </option>
-          ))}
-      </select>
+        onChange={(next) => onChange(next || null)}
+        options={[
+          { value: "", label: "无课程" },
+          ...courses
+            .filter((course) => course.deleted_at === null)
+            .map((course) => ({ value: course.id, label: course.name })),
+        ]}
+      />
     );
   if (field === "semester_id")
     return (
-      <select
-        aria-label="自定义所属学期"
+      <SelectField
+        ariaLabel="自定义所属学期"
+        label="所属学期"
         value={typeof value === "string" ? value : ""}
-        onChange={(event) => onChange(event.target.value || null)}
-      >
-        <option value="">无学期</option>
-        {semesters
-          .filter((semester) => semester.deleted_at === null)
-          .map((semester) => (
-            <option key={semester.id} value={semester.id}>
-              {semester.name}
-            </option>
-          ))}
-      </select>
+        onChange={(next) => onChange(next || null)}
+        options={[
+          { value: "", label: "无学期" },
+          ...semesters
+            .filter((semester) => semester.deleted_at === null)
+            .map((semester) => ({ value: semester.id, label: semester.name })),
+        ]}
+      />
     );
   const enumValues: Record<string, [string, string][]> = {
     status: [
@@ -174,17 +171,16 @@ function ExplicitValueEditor({
   };
   if (enumValues[field])
     return (
-      <select
-        aria-label={`自定义${fieldNames[field] ?? "值"}`}
+      <SelectField
+        ariaLabel={`自定义${fieldNames[field] ?? "值"}`}
+        label={fieldNames[field] ?? "值"}
         value={typeof value === "string" ? value : enumValues[field]![0]![0]}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {enumValues[field]!.map(([option, label]) => (
-          <option key={option} value={option}>
-            {label}
-          </option>
-        ))}
-      </select>
+        onChange={onChange}
+        options={enumValues[field]!.map(([option, label]) => ({
+          value: option,
+          label,
+        }))}
+      />
     );
   if (field === "start_date" || field === "end_date")
     return (

@@ -5,6 +5,7 @@ import type {
   ItemAssociation,
   RawCapture,
 } from "@course-manager/domain";
+import { SelectField } from "./SelectField.js";
 
 interface Props {
   item: Item;
@@ -165,18 +166,19 @@ export function ItemDetailView({
         )}
         {associationCandidates.length > 0 && (
           <div className="association-add">
-            <select
-              aria-label="选择关联事项"
+            <SelectField
               value={associationId}
-              onChange={(event) => setAssociationId(event.target.value)}
-            >
-              <option value="">选择事项…</option>
-              {associationCandidates.map((value) => (
-                <option key={value.id} value={value.id}>
-                  {value.title}
-                </option>
-              ))}
-            </select>
+              onChange={setAssociationId}
+              ariaLabel="选择关联事项"
+              label="选择关联事项"
+              options={[
+                { value: "", label: "选择事项…" },
+                ...associationCandidates.map((candidate) => ({
+                  value: candidate.id,
+                  label: candidate.title,
+                })),
+              ]}
+            />
             <button
               type="button"
               disabled={!associationId}

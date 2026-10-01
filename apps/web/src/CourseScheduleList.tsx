@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import type { CourseSchedule } from "@course-manager/domain";
 import { DateTimeField } from "./DateTimeField.js";
+import { SelectField } from "./SelectField.js";
 import { toUserMessage } from "./errors.js";
 import {
   scheduleSummary,
@@ -159,17 +160,16 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
         )}
         <label>
           星期
-          <select
-            aria-label="课程安排星期"
-            value={weekday}
-            onChange={(event) => setWeekday(Number(event.target.value))}
-          >
-            {weekdays.map((name, index) => (
-              <option value={index + 1} key={name}>
-                {name}
-              </option>
-            ))}
-          </select>
+          <SelectField
+            value={String(weekday)}
+            onChange={(next) => setWeekday(Number(next))}
+            ariaLabel="课程安排星期"
+            label="星期"
+            options={weekdays.map((name, index) => ({
+              value: String(index + 1),
+              label: name,
+            }))}
+          />
         </label>
         <label>
           开始

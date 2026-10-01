@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Semester, SemesterWeek } from "@course-manager/domain";
+import { SelectField } from "./SelectField.js";
 import { toUserMessage } from "./errors.js";
 import {
   addDays,
@@ -180,12 +181,13 @@ export function SemesterWeekEditor({
 
       <div className="week-start-row">
         <label htmlFor="week-start">一周起始日</label>
-        <select
+        <SelectField
           id="week-start"
-          aria-label="一周起始日"
-          value={weekStart}
-          onChange={(event) => {
-            const value = Number(event.target.value);
+          ariaLabel="一周起始日"
+          label="一周起始日"
+          value={String(weekStart)}
+          onChange={(next) => {
+            const value = Number(next);
             setWeekStart(value);
             void saveWeekStart(value);
             setStatus(
@@ -193,13 +195,11 @@ export function SemesterWeekEditor({
             );
             setError(null);
           }}
-        >
-          {WEEK_START_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          options={WEEK_START_OPTIONS.map((option) => ({
+            value: String(option.value),
+            label: option.label,
+          }))}
+        />
       </div>
 
       {anchor && !anchorMatchesCalendar(anchor, weekStart) && (

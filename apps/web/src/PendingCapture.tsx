@@ -6,6 +6,7 @@ import {
 } from "@course-manager/application";
 import type { Course, RawCapture } from "@course-manager/domain";
 import { DateTimeField } from "./DateTimeField.js";
+import { SelectField } from "./SelectField.js";
 import { fromLocalInput, toLocalInput } from "./timeInputs.js";
 import type { CaptureInterpretation } from "./authSync.js";
 import { toUserMessage } from "./errors.js";
@@ -246,19 +247,22 @@ export function PendingCapture({
           )}
           <label>
             课程
-            <select
+            <SelectField
               value={courseId}
-              onChange={(event) => setCourseId(event.target.value)}
-            >
-              <option value="">
-                {kind === "COURSE_INFORMATION" ? "请选择课程" : "无课程"}
-              </option>
-              {courses.map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.name}
-                </option>
-              ))}
-            </select>
+              onChange={setCourseId}
+              label="课程"
+              options={[
+                {
+                  value: "",
+                  label:
+                    kind === "COURSE_INFORMATION" ? "请选择课程" : "无课程",
+                },
+                ...courses.map((course) => ({
+                  value: course.id,
+                  label: course.name,
+                })),
+              ]}
+            />
           </label>
           {kind === "ITEM" && (
             <>
