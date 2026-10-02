@@ -220,7 +220,21 @@ export function ItemDetailView({
             aria-expanded={showRaw}
             onClick={() => setShowRaw(!showRaw)}
           >
-            原始记录 {showRaw ? "⌃" : "⌄"}
+            原始记录
+            <svg
+              className={`raw-toggle-glyph${showRaw ? " open" : ""}`}
+              viewBox="0 0 24 24"
+              width="13"
+              height="13"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
           </button>
           {showRaw && <p>{rawCapture.raw_text}</p>}
         </div>

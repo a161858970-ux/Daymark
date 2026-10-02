@@ -3880,3 +3880,15 @@ h2 {
   border-radius: var(--radius-small);
   pointer-events: none;
 }
+
+/* 折叠箭头用 SVG 而非 ⌃/⌄ 字形：那两个码位在主流字体里度量歪斜，
+   会明显偏离文字基线。图标本身用 vertical-align 校到文字中线。 */
+.raw-toggle-glyph {
+  display: inline-block;
+  vertical-align: -0.18em;
+  margin-left: 5px;
+  transition: transform var(--motion-fast) ease;
+}
+.raw-toggle-glyph.open {
+  transform: rotate(180deg);
+}
