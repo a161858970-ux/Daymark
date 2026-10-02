@@ -262,7 +262,6 @@ export function AccountControl({
                 </button>
                 <button
                   type="button"
-                  className="quiet-button"
                   disabled={busy}
                   onClick={() => void signOut()}
                 >

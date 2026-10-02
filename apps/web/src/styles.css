@@ -2948,6 +2948,10 @@ h2 {
   color: var(--muted);
   font-size: 11px;
 }
+.account-popover label {
+  display: grid;
+  gap: 7px;
+}
 .account-popover input {
   width: 100%;
   min-height: 40px;
@@ -2957,8 +2961,19 @@ h2 {
   background: var(--surface);
 }
 .account-popover form > button,
-.account-actions > button:first-child {
+.account-actions > button {
   margin-top: 7px;
+  padding: 9px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-small);
+  background: var(--accent);
+  color: white;
+}
+/* Action rows wrap their buttons inside a div, so the child combinator
+   above never reached them and they fell back to the UA button look. */
+.account-popover .auth-actions > button,
+.account-popover .identity-form-actions > button {
+  margin-top: 0;
   padding: 9px 12px;
   border: 1px solid var(--accent);
   border-radius: var(--radius-small);
@@ -3169,6 +3184,9 @@ h2 {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+.auth-actions {
+  justify-content: space-between;
 }
 .auth-actions > button,
 .identity-form-actions > button {
