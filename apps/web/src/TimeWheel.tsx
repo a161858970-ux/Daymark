@@ -8,14 +8,20 @@ import {
 const ITEM_HEIGHT = 34;
 /** Odd, ≥3: wrap jumps by one full cycle so the middle repeats stay safe. */
 const REPEATS = 7;
+/** Pixels a desktop notch is worth (Chrome/Edge report 100 per notch). */
+export const NOTCH_PX = 100;
+/** Portion of the remaining distance covered each frame while gliding. */
+const EASE = 0.3;
 
 /** Scroll index → selected value, wrapping through the cycle. */
 export function valueFromIndex(index: number, count: number): number {
   return ((index % count) + count) % count;
 }
 
-/** Pixels a desktop notch is worth (Chrome/Edge report 100 per notch). */
-export const NOTCH_PX = 100;
+/** First index of the middle repeat — the resting place for the wheels. */
+export function centerIndexFor(value: number, count: number): number {
+  return ((REPEATS - 1) / 2) * count + value;
+}
 
 /**
  * Wheel delta → notches. One notch is one row, so precision is kept; a long
@@ -27,11 +33,6 @@ export function notchDelta(deltaY: number, deltaMode: number): number {
   if (deltaMode === 1) return deltaY / 3; // lines: a notch is 3 lines
   if (deltaMode === 2) return deltaY; // pages: 100px per page-step
   return deltaY / NOTCH_PX;
-}
-
-/** First index of the middle repeat — the resting place for the wheels. */
-export function centerIndexFor(value: number, count: number): number {
-  return ((REPEATS - 1) / 2) * count + value;
 }
 
 interface Props {
@@ -47,116 +48,22 @@ const pad = (value: number) => String(value).padStart(2, "0");
 /**
  * Cyclic time wheel: the row sitting on the fixed centre band *is* the
  * current setting — there is no click-to-pick, scrolling is the input.
- * The list repeats so 23→00 (or 59→00) rolls over without an edge, and a
- * re-centring jump lands on an identical copy so the loop looks seamless.
+ *
+ * Every step moves a **target**, and one rAF loop eases the viewport toward
+ * it. Retargeting never restarts the motion, so a fast spin covers its full
+ * distance instead of falling behind the way repeated smooth scrollTo calls
+ * did (their remainder was then discarded when the animation timed out).
  */
 export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef(0);
+  const targetRef = useRef(0);
   const lastValueRef = useRef(value);
-  /** Resting row, and the row a running glide is heading for. */
-  const indexRef = useRef(0);
-  const pendingRef = useRef<number | null>(null);
-  const fallbackRef = useRef(0);
   const [centerIndex, setCenterIndex] = useState(() =>
     centerIndexFor(value, count),
   );
 
-  // Land on the value on mount (no animation); this runs once per opening.
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    const index = centerIndexFor(value, count);
-    viewport.scrollTop = index * ITEM_HEIGHT;
-    indexRef.current = index;
-    pendingRef.current = null;
-    setCenterIndex(index);
-    lastValueRef.current = value;
-    // The wheel is re-created whenever the panel opens; later value changes
-    // are handled by the effect below.
-  }, []);
-
-  // A mouse notch is ~100px, three rows of 34px, which used to jump over
-  // values (2 → 5) and made whole hours unreachable. The gesture is
-  // therefore normalised: one wheel step = exactly one row, deltas from the
-  // same notch are swallowed during a short lock.
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    let acc = 0;
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      // Whole notches only; the fraction stays queued so nothing is lost
-      // between events (this is what made fast spins fall behind).
-      acc += notchDelta(event.deltaY, event.deltaMode);
-      const steps = Math.trunc(acc);
-      if (steps === 0) return;
-      acc -= steps;
-      // Chain from the running glide so fast notches keep moving forward.
-      const base = pendingRef.current ?? indexRef.current;
-      const next = base + steps;
-      pendingRef.current = next;
-      indexRef.current = next;
-      // Snap would fight a programmatic glide; it is restored on landing.
-      viewport.style.scrollSnapType = "none";
-      viewport.scrollTo({ top: next * ITEM_HEIGHT, behavior: "smooth" });
-      window.clearTimeout(fallbackRef.current);
-      fallbackRef.current = window.setTimeout(() => {
-        if (pendingRef.current === next) {
-          pendingRef.current = null;
-          viewport.style.scrollSnapType = "";
-        }
-      }, 400);
-    };
-    viewport.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
-      viewport.removeEventListener("wheel", onWheel);
-      window.clearTimeout(fallbackRef.current);
-    };
-  }, []);
-
-  // An external change (e.g. the 现在 preset) re-centres the wheel.
-  useEffect(() => {
-    if (value === lastValueRef.current) return;
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    const index = centerIndexFor(value, count);
-    viewport.scrollTop = index * ITEM_HEIGHT;
-    indexRef.current = index;
-    pendingRef.current = null;
-    lastValueRef.current = value;
-    setCenterIndex(index);
-  }, [value, count]);
-
-  function settle() {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    const row = viewport.scrollTop / ITEM_HEIGHT;
-    const pending = pendingRef.current;
-    let index = Math.round(row);
-    if (pending !== null) {
-      // A glide is running: follow the visual centre row by row, but never
-      // re-centre or wrap — that would cancel the animation.
-      if (Math.abs(row - pending) < 0.06) {
-        pendingRef.current = null;
-        viewport.style.scrollSnapType = "";
-        index = pending;
-        // A long spin can land on an extreme row; jump a whole cycle there
-        // so the chain keeps a safe runway for the next notch.
-        const total = REPEATS * count;
-        if (index < count) index += count;
-        else if (index >= total - count) index -= count;
-        if (index !== pending) viewport.scrollTop = index * ITEM_HEIGHT;
-      }
-    } else {
-      // External scroll (touch, keyboard, snap settling): keep the loop
-      // seamless by jumping a whole cycle inside the middle repeats.
-      const total = REPEATS * count;
-      if (index < count) index += count;
-      else if (index >= total - count) index -= count;
-      if (index !== Math.round(row)) viewport.scrollTop = index * ITEM_HEIGHT;
-    }
-    indexRef.current = index;
+  function applyIndex(index: number) {
     const wrapped = valueFromIndex(index, count);
     if (wrapped !== lastValueRef.current) {
       lastValueRef.current = wrapped;
@@ -165,30 +72,163 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
     setCenterIndex((current) => (current === index ? current : index));
   }
 
-  function handleScroll() {
-    if (frameRef.current) return;
-    frameRef.current = window.requestAnimationFrame(() => {
-      frameRef.current = 0;
-      settle();
-    });
+  /** Land on an exact row, wrapping a full cycle at the extremes. */
+  function land() {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    viewport.style.scrollSnapType = "";
+    let index = Math.round(viewport.scrollTop / ITEM_HEIGHT);
+    const total = REPEATS * count;
+    if (index < count) index += count;
+    else if (index >= total - count) index -= count;
+    if (index * ITEM_HEIGHT !== viewport.scrollTop) {
+      viewport.scrollTop = index * ITEM_HEIGHT;
+      targetRef.current = index * ITEM_HEIGHT;
+    }
+    applyIndex(index);
   }
+
+  function animate() {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      frameRef.current = 0;
+      return;
+    }
+    const diff = targetRef.current - viewport.scrollTop;
+    if (Math.abs(diff) < 0.5) {
+      viewport.scrollTop = targetRef.current;
+      frameRef.current = 0;
+      land();
+      return;
+    }
+    viewport.scrollTop += diff * EASE;
+    frameRef.current = window.requestAnimationFrame(animate);
+  }
+
+  function glide(targetIndex: number) {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    targetRef.current = targetIndex * ITEM_HEIGHT;
+    viewport.style.scrollSnapType = "none";
+    if (frameRef.current) return;
+    frameRef.current = window.requestAnimationFrame(animate);
+  }
+
+  function cancelGlide() {
+    if (frameRef.current) {
+      window.cancelAnimationFrame(frameRef.current);
+      frameRef.current = 0;
+    }
+    const viewport = viewportRef.current;
+    if (viewport) viewport.style.scrollSnapType = "";
+    targetRef.current = viewport ? viewport.scrollTop : targetRef.current;
+  }
+
+  // Land on the value on mount (no animation); this runs once per opening.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const index = centerIndexFor(value, count);
+    targetRef.current = index * ITEM_HEIGHT;
+    viewport.scrollTop = targetRef.current;
+    applyIndex(index);
+    // The wheel is re-created whenever the panel opens; later value changes
+    // are handled by the effect below.
+  }, []);
+
+  // A mouse notch is ~100px, three rows of 34px: the browser's own scroll
+  // would jump three values. The gesture is ours instead — notches queue up
+  // and each whole notch is one row, with the fraction carried over.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    let acc = 0;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      acc += notchDelta(event.deltaY, event.deltaMode);
+      const steps = Math.trunc(acc);
+      if (steps === 0) return;
+      acc -= steps;
+      // Chain from the target (not the viewport) so fast notches keep
+      // adding distance instead of waiting for the glide to catch up.
+      const base = Math.round(targetRef.current / ITEM_HEIGHT) + steps;
+      glide(base);
+    };
+    // A finger drag belongs to the browser (native scroll + snap).
+    const onTouchStart = () => cancelGlide();
+    viewport.addEventListener("wheel", onWheel, { passive: false });
+    viewport.addEventListener("touchstart", onTouchStart, { passive: true });
+    return () => {
+      viewport.removeEventListener("wheel", onWheel);
+      viewport.removeEventListener("touchstart", onTouchStart);
+      if (frameRef.current) window.cancelAnimationFrame(frameRef.current);
+    };
+  }, []);
+
+  // An external change (e.g. the 现在 preset) re-centres the wheel.
+  useEffect(() => {
+    if (value === lastValueRef.current) return;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    cancelGlide();
+    const index = centerIndexFor(value, count);
+    targetRef.current = index * ITEM_HEIGHT;
+    viewport.scrollTop = targetRef.current;
+    lastValueRef.current = value;
+    setCenterIndex(index);
+  }, [value, count]);
+
+  // Scroll position drives the visible value: mid-glide the centre row wins,
+  // an idle scroll (touch, snap settling) also keeps the loop seamless.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    let queued = 0;
+    const onScroll = () => {
+      if (queued) return;
+      queued = window.requestAnimationFrame(() => {
+        queued = 0;
+        const row = Math.round(viewport.scrollTop / ITEM_HEIGHT);
+        if (frameRef.current) {
+          // Glide running: follow what is passing the centre, never jump.
+          applyIndex(row);
+          return;
+        }
+        let index = row;
+        const total = REPEATS * count;
+        if (index < count) index += count;
+        else if (index >= total - count) index -= count;
+        if (index * ITEM_HEIGHT !== viewport.scrollTop) {
+          viewport.scrollTop = index * ITEM_HEIGHT;
+        }
+        targetRef.current = index * ITEM_HEIGHT;
+        applyIndex(index);
+      });
+    };
+    viewport.addEventListener("scroll", onScroll);
+    return () => {
+      viewport.removeEventListener("scroll", onScroll);
+      if (queued) window.cancelAnimationFrame(queued);
+    };
+  }, [count]);
 
   function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     const viewport = viewportRef.current;
     if (!viewport) return;
+    const current = Math.round(targetRef.current / ITEM_HEIGHT);
     const step =
       event.key === "ArrowDown"
-        ? ITEM_HEIGHT
+        ? 1
         : event.key === "ArrowUp"
-          ? -ITEM_HEIGHT
+          ? -1
           : event.key === "PageDown"
-            ? count * ITEM_HEIGHT
+            ? count
             : event.key === "PageUp"
-              ? -count * ITEM_HEIGHT
+              ? -count
               : 0;
     if (!step) return;
     event.preventDefault();
-    viewport.scrollBy({ top: step, behavior: "smooth" });
+    glide(current + step);
   }
 
   const items = Array.from({ length: REPEATS * count }, (_, index) => ({
@@ -210,7 +250,6 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
           aria-valuemax={count - 1}
           aria-valuenow={value}
           aria-valuetext={`${label} ${pad(value)}`}
-          onScroll={handleScroll}
           onKeyDown={handleKeyDown}
         >
           <div className="datetime-wheel-track">
