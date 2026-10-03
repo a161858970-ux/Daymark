@@ -260,8 +260,14 @@ export function CourseImportPanel({
               accept="application/pdf,image/png,image/jpeg,image/webp"
               disabled={loading}
               onChange={(event) => {
-                void selectFile(event.target.files?.[0]);
-                event.currentTarget.value = "";
+                const input = event.currentTarget;
+                // Clear only after the async upload finishes: resetting the
+                // input here invalidates the File before fileBase64 reads it
+                // (token fetch runs first), which reported size 0 and made a
+                // 400 KB image fail the 15 MB guard.
+                void selectFile(input.files?.[0]).finally(() => {
+                  input.value = "";
+                });
               }}
             />
           </label>

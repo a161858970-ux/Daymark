@@ -10,6 +10,7 @@ import {
   type CourseImportSourceType,
 } from "@course-manager/contracts";
 import type { CourseInformation, Semester } from "@course-manager/domain";
+import { ZodError } from "zod";
 import { ProviderError } from "../ai/chat-provider.js";
 import { CourseImportParseError } from "../ai/pdf-source.js";
 import { recordExternalCollectionReplacement } from "./collections.js";
@@ -145,6 +146,11 @@ async function logEntity(
  */
 export function importFailureMessage(cause: unknown): string {
   if (cause instanceof CourseImportParseError) return cause.userMessage;
+  // The model answered but its payload broke a structural rule (e.g. a
+  // schedule whose end precedes its start): the file was fine, so do not
+  // blame its clarity — this is the case a retry is meant to fix.
+  if (cause instanceof ZodError)
+    return "识别结果未能通过校验，请重试一次；若仍失败，再换更清晰的文件。";
   if (cause instanceof ProviderError) {
     if (cause.kind === "AUTH" || cause.kind === "INVALID_REQUEST")
       return "智能整理暂时无法使用，请检查服务配置后重试。";
@@ -252,22 +258,34 @@ export class CloudCourseImportManager {
         retry_after_seconds: gate.retryAfterSeconds,
       });
     try {
-      const raw: unknown = await this.parser.parse({
-        sourceType: current.source_type,
-        fileName: source.file_name,
-        mediaType: source.media_type,
-        contentBase64: bytes.toString("base64"),
-      });
-      // The file was readable and the model answered, but it found no course
-      // at all: report that instead of the misleading "file not clear" copy
-      // that only fits an unreadable source.
-      const courses = (raw as { courses?: unknown } | null)?.courses;
-      if (Array.isArray(courses) && courses.length === 0)
-        throw new CourseImportParseError(
-          "NO_COURSES",
-          "未从该文件中识别出课程。请确认这是本学期的课程表且内容清晰，也可以改用清晰截图重新导入。",
-        );
-      parsed = courseImportParseResultSchema.parse(raw);
+      // A schema rejection means the model produced malformed data (one real
+      // case: a schedule whose end preceded its start). One fresh model round
+      // usually fixes it; only a second failure fails the job, and unreadable
+      // sources or provider errors are not retried here.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const raw: unknown = await this.parser.parse({
+            sourceType: current.source_type,
+            fileName: source.file_name,
+            mediaType: source.media_type,
+            contentBase64: bytes.toString("base64"),
+          });
+          // The file was readable and the model answered, but it found no
+          // course at all: report that instead of the misleading "file not
+          // clear" copy that only fits an unreadable source.
+          const courses = (raw as { courses?: unknown } | null)?.courses;
+          if (Array.isArray(courses) && courses.length === 0)
+            throw new CourseImportParseError(
+              "NO_COURSES",
+              "未从该文件中识别出课程。请确认这是本学期的课程表且内容清晰，也可以改用清晰截图重新导入。",
+            );
+          parsed = courseImportParseResultSchema.parse(raw);
+          break;
+        } catch (error) {
+          if (error instanceof ZodError && attempt === 0) continue;
+          throw error;
+        }
+      }
     } catch (error) {
       const message = importFailureMessage(error);
       await this.db.query(

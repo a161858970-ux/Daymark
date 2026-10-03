@@ -42,8 +42,11 @@ function fileSourceType(file: File): CourseImportSourceType {
 }
 
 async function fileBase64(file: File): Promise<string> {
-  if (!file.size || file.size > 15 * 1024 * 1024)
-    throw new Error("课程表文件需小于 15 MB。");
+  // Distinguish the two failures: an empty read is a stale/unreadable file
+  // (the file input was reset while the token fetch was still in flight),
+  // not an oversized one — collapsing them made both say "15 MB".
+  if (!file.size) throw new Error("无法读取该课程表文件，请重新选择一次。");
+  if (file.size > 15 * 1024 * 1024) throw new Error("课程表文件需小于 15 MB。");
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("无法读取课程表文件。"));

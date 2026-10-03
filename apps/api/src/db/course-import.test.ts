@@ -568,3 +568,87 @@ it("rate-limits source parsing and leaves the import job usable", async () => {
     await postgres.close();
   }
 });
+
+it("retries one model round when the payload breaks a schema rule", async () => {
+  let calls = 0;
+  const parser: CourseImportParser = {
+    parse: async () => {
+      calls += 1;
+      if (calls > 1) return parsedCourses;
+      // Real failure sample: a schedule whose end precedes its start.
+      return {
+        courses: parsedCourses.courses.map((course) => ({
+          ...course,
+          schedules: course.schedules.map((schedule) => ({
+            ...schedule,
+            start_time: "08:00",
+            end_time: "07:00",
+          })),
+        })),
+      };
+    },
+  };
+  const { postgres, academic, imports, server } = await harness(parser);
+  try {
+    const semester = await academic.createSemester(owner, randomUUID(), {
+      name: "2026 秋季学期",
+      start_date: "2026-09-01",
+      end_date: "2026-12-31",
+    });
+    const job = await imports.start(owner, semester.id, "IMAGE");
+    const source = {
+      file_name: "课程表.png",
+      media_type: "image/png",
+      content_base64: Buffer.from("image fixture").toString("base64"),
+    };
+    const ready = await imports.parseSource(owner, job.id, source);
+    expect(ready.status).toBe("READY");
+    expect(calls).toBe(2);
+  } finally {
+    await server.close();
+    await postgres.close();
+  }
+});
+
+it("fails with accurate copy when the second round still breaks the schema", async () => {
+  let calls = 0;
+  const parser: CourseImportParser = {
+    parse: async () => {
+      calls += 1;
+      return {
+        courses: parsedCourses.courses.map((course) => ({
+          ...course,
+          schedules: course.schedules.map((schedule) => ({
+            ...schedule,
+            start_time: "08:00",
+            end_time: "07:00",
+          })),
+        })),
+      };
+    },
+  };
+  const { postgres, academic, imports, server } = await harness(parser);
+  try {
+    const semester = await academic.createSemester(owner, randomUUID(), {
+      name: "2026 秋季学期",
+      start_date: "2026-09-01",
+      end_date: "2026-12-31",
+    });
+    const job = await imports.start(owner, semester.id, "IMAGE");
+    const source = {
+      file_name: "课程表.png",
+      media_type: "image/png",
+      content_base64: Buffer.from("image fixture").toString("base64"),
+    };
+    const message =
+      "识别结果未能通过校验，请重试一次；若仍失败，再换更清晰的文件。";
+    await expect(
+      imports.parseSource(owner, job.id, source),
+    ).rejects.toMatchObject({ code: "IMPORT_FAILED", message });
+    expect(calls).toBe(2);
+    expect((await imports.get(owner, job.id)).error_message).toBe(message);
+  } finally {
+    await server.close();
+    await postgres.close();
+  }
+});
