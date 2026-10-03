@@ -55,6 +55,7 @@ it("presents courses as an index with incomplete counts and a quiet add entry", 
         throw new Error("unused");
       }}
       onImportCommitted={async () => undefined}
+      onDiscardImport={async () => undefined}
     />,
   );
   expect(markup).toContain("课程索引");

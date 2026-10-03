@@ -57,7 +57,7 @@ async function harness(parser: CourseImportParser, limiter?: RateLimiter) {
 
 function request(
   server: Awaited<ReturnType<typeof harness>>["server"],
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "DELETE",
   url: string,
   payload?: object,
   token = "owner",
@@ -649,6 +649,99 @@ it("fails with accurate copy when the second round still breaks the schema", asy
     expect((await imports.get(owner, job.id)).error_message).toBe(message);
   } finally {
     await server.close();
+    await postgres.close();
+  }
+});
+
+it("discards a recognition result instead of letting it resurface", async () => {
+  const parser: CourseImportParser = { parse: async () => parsedCourses };
+  const { academic, server, postgres } = await harness(parser);
+  try {
+    const current = await academic.createSemester(owner, randomUUID(), {
+      name: "2026 秋季学期",
+      start_date: "2026-09-01",
+      end_date: "2026-12-31",
+    });
+    const source = {
+      file_name: "课程表.pdf",
+      media_type: "application/pdf",
+      content_base64: Buffer.from("%PDF deterministic fixture").toString(
+        "base64",
+      ),
+    };
+
+    const first = (
+      await request(server, "POST", "/api/v1/course-imports", {
+        semester_id: current.id,
+        source_type: "PDF",
+      })
+    ).json().data;
+    const preview = await request(
+      server,
+      "POST",
+      `/api/v1/course-imports/${first.id}/source`,
+      source,
+    );
+    expect(preview.statusCode).toBe(200);
+    expect(preview.json().data.courses).toHaveLength(2);
+
+    // Discarding removes the job: listPending would otherwise hand the same
+    // preview back on the next page load.
+    const discarded = await request(
+      server,
+      "DELETE",
+      `/api/v1/course-imports/${first.id}`,
+    );
+    expect(discarded.statusCode).toBe(200);
+    expect(
+      (
+        await request(
+          server,
+          "GET",
+          `/api/v1/course-imports?semester_id=${current.id}`,
+        )
+      ).json().data,
+    ).toEqual([]);
+    expect(
+      (
+        await request(
+          server,
+          "POST",
+          `/api/v1/course-imports/${first.id}/commit`,
+          undefined,
+          "owner",
+          randomUUID(),
+        )
+      ).statusCode,
+    ).toBe(404);
+
+    // A committed result keeps its courses and cannot be discarded.
+    const second = (
+      await request(server, "POST", "/api/v1/course-imports", {
+        semester_id: current.id,
+        source_type: "PDF",
+      })
+    ).json().data;
+    await request(
+      server,
+      "POST",
+      `/api/v1/course-imports/${second.id}/source`,
+      source,
+    );
+    const committed = await request(
+      server,
+      "POST",
+      `/api/v1/course-imports/${second.id}/commit`,
+      undefined,
+      "owner",
+      randomUUID(),
+    );
+    expect(committed.statusCode).toBe(200);
+    expect(
+      (await request(server, "DELETE", `/api/v1/course-imports/${second.id}`))
+        .statusCode,
+    ).toBe(409);
+  } finally {
     await postgres.close();
   }
 });

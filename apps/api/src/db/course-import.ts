@@ -214,6 +214,32 @@ export class CloudCourseImportManager {
     return publicJob(row);
   }
 
+  /**
+   * Discards a recognition result the user chose not to write.
+   *
+   * The row is deleted rather than flagged: listPending returns every job
+   * that is not COMMITTED, so only clearing the panel would bring the same
+   * preview back on the next page load. A committed result is refused — the
+   * courses already exist and must be removed from the course list instead.
+   */
+  async discard(ownerId: string, id: string): Promise<void> {
+    await this.db.transaction(async (query) => {
+      const job = await findJob(query, ownerId, id, true);
+      if (!job)
+        throw new CloudError("NOT_FOUND", 404, "Course import not found");
+      if (job.status === "COMMITTED")
+        throw new CloudError(
+          "VALIDATION_ERROR",
+          409,
+          "Course import is already committed",
+        );
+      await query.query(
+        "DELETE FROM course_import_jobs WHERE id=$1 AND owner_id=$2",
+        [id, ownerId],
+      );
+    });
+  }
+
   async parseSource(
     ownerId: string,
     id: string,

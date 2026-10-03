@@ -5,6 +5,7 @@ import {
   CourseImportParseError,
   DEFAULT_PDF_LIMITS,
   imageBatches,
+  layoutText,
   mergeCoursePreviews,
   preparePdfSource,
 } from "./pdf-source.js";
@@ -129,4 +130,63 @@ it("batches page images and merges batch results without duplicates", () => {
   )!;
   expect(economics.instructor).toBe("王老师");
   expect(economics.schedules).toHaveLength(2);
+});
+
+it("rebuilds timetable columns from item coordinates", () => {
+  const items = [
+    // Page title: spans two weekday columns, appears once — it must not
+    // weld them together the way an overlap-based grid did.
+    { str: "刘展呈课表", x: 140, y: -10 },
+    { str: "时间段", x: 0, y: 0 },
+    { str: "星期一", x: 100, y: 0 },
+    { str: "星期二", x: 200, y: 0 },
+    { str: "星期三", x: 300, y: 0 },
+    { str: "上午", x: 0, y: 20 },
+    { str: "商业银行经营学★", x: 100, y: 20 },
+    // Wrapped continuation lines stay under their own column.
+    { str: "区/场地沙河", x: 100, y: 32 },
+    { str: "教师夏聪", x: 100, y: 44 },
+  ];
+  const content = {
+    items: items.map((item) => ({
+      str: item.str,
+      transform: [1, 0, 0, 1, item.x, item.y],
+    })),
+  };
+
+  expect(layoutText(content)).toBe(
+    [
+      " | 刘展呈课表",
+      "时间段 | 星期一 | 星期二 | 星期三",
+      "上午 | 商业银行经营学★",
+      " | 区/场地沙河",
+      " | 教师夏聪",
+    ].join("\n"),
+  );
+
+  // The same page with rotate=90 arrives transposed; mapping it through the
+  // page viewport has to produce the identical table.
+  const rotated = {
+    items: items.map((item) => ({
+      str: item.str,
+      transform: [1, 0, 0, 1, item.y, item.x],
+    })),
+  };
+  expect(layoutText(rotated, (x, y) => [y, x] as [number, number])).toBe(
+    layoutText(content),
+  );
+});
+
+it("keeps plain documents as natural lines instead of padding columns", () => {
+  const content = {
+    items: [
+      { str: "课程简介", transform: [1, 0, 0, 1, 72, 0] },
+      { str: "本课程介绍环境经济学", transform: [1, 0, 0, 1, 72, 14] },
+      { str: "考核方式为考试", transform: [1, 0, 0, 1, 72, 28] },
+    ],
+  };
+
+  expect(layoutText(content)).toBe(
+    ["课程简介", "本课程介绍环境经济学", "考核方式为考试"].join("\n"),
+  );
 });

@@ -439,6 +439,12 @@ export function buildServer(dependencies?: ServerDependencies) {
           meta: {},
         };
       });
+      server.delete("/api/v1/course-imports/:id", async (request) => {
+        const ownerId = await owner(request.headers.authorization);
+        const id = uuidSchema.parse((request.params as { id: string }).id);
+        await dependencies.courseImports!.discard(ownerId, id);
+        return { data: { id }, meta: {} };
+      });
     }
     if (dependencies.notifications) {
       server.post("/api/v1/devices", async (request) => {

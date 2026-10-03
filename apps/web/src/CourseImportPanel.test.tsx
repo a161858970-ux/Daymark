@@ -48,6 +48,7 @@ it("keeps import as a reviewable Course flow with an explicit duplicate decision
       busy={false}
       onResolve={() => undefined}
       onCommit={() => undefined}
+      onDiscard={() => undefined}
     />,
   );
   expect(markup).toContain("识别预览");
@@ -58,6 +59,7 @@ it("keeps import as a reviewable Course flow with an explicit duplicate decision
   expect(markup).toContain("是同一门，继承课程信息");
   expect(markup).toContain("不是，作为新课程");
   expect(markup).toContain("请先确认同名课程");
+  expect(markup).toContain("放弃本次识别");
   expect(markup).toContain("disabled");
   expect(markup).not.toContain("自动生成事项");
 });

@@ -42,6 +42,7 @@ interface Props {
   ): Promise<CourseImportJob>;
   onCommitImport(jobId: string): Promise<CourseImportCommitResult>;
   onImportCommitted(result: CourseImportCommitResult): Promise<void>;
+  onDiscardImport(jobId: string): Promise<void>;
 }
 
 export function CourseIndex({
@@ -62,6 +63,7 @@ export function CourseIndex({
   onResolveImport,
   onCommitImport,
   onImportCommitted,
+  onDiscardImport,
 }: Props) {
   const [courseName, setCourseName] = useState("");
   const [showCourseForm, setShowCourseForm] = useState(false);
@@ -170,6 +172,7 @@ export function CourseIndex({
           onResolve={onResolveImport}
           onCommit={onCommitImport}
           onCommitted={onImportCommitted}
+          onDiscard={onDiscardImport}
         />
       )}
       {showCourseForm && (

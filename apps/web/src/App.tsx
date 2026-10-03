@@ -48,6 +48,7 @@ import { CalendarView } from "./CalendarView.js";
 import { CourseIndex } from "./CourseIndex.js";
 import {
   commitCourseImport,
+  discardCourseImport,
   pendingCourseImports,
   resolveImportedCourse,
   retryCourseImport,
@@ -1116,6 +1117,7 @@ export function App() {
                 onRetryImport={retryCourseImport}
                 onResolveImport={resolveImportedCourse}
                 onCommitImport={commitCourseImport}
+                onDiscardImport={discardCourseImport}
                 onImportCommitted={async () => {
                   await refresh();
                 }}

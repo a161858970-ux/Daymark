@@ -1217,6 +1217,26 @@ h2 {
   background: var(--accent);
   color: white;
 }
+.course-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.course-import-actions .course-import-commit {
+  flex: 1 1 220px;
+}
+.course-import-discard {
+  min-height: 40px;
+  padding: 9px 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-small);
+  background: var(--surface-raised);
+  color: var(--muted);
+}
+.course-import-discard:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
 .course-import-commit {
   margin-top: 18px;
 }

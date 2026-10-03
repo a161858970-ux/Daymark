@@ -20,6 +20,7 @@ interface Props {
   ): Promise<CourseImportJob>;
   onCommit(jobId: string): Promise<CourseImportCommitResult>;
   onCommitted(result: CourseImportCommitResult): Promise<void>;
+  onDiscard(jobId: string): Promise<void>;
 }
 
 function scheduleLabel(
@@ -39,11 +40,13 @@ export function CourseImportReview({
   busy,
   onResolve,
   onCommit,
+  onDiscard,
 }: {
   job: CourseImportJob;
   busy: boolean;
   onResolve(resolution: CourseImportResolution): void;
   onCommit(): void;
+  onDiscard(): void;
 }) {
   return (
     <div className="course-import-review">
@@ -122,18 +125,28 @@ export function CourseImportReview({
           </li>
         ))}
       </ol>
-      <button
-        type="button"
-        className="primary-action course-import-commit"
-        disabled={busy || job.status !== "READY"}
-        onClick={onCommit}
-      >
-        {job.status === "NEEDS_RESOLUTION"
-          ? "请先确认同名课程"
-          : busy
-            ? "正在建立课程…"
-            : "确认并建立课程"}
-      </button>
+      <div className="course-import-actions">
+        <button
+          type="button"
+          className="primary-action course-import-commit"
+          disabled={busy || job.status !== "READY"}
+          onClick={onCommit}
+        >
+          {job.status === "NEEDS_RESOLUTION"
+            ? "请先确认同名课程"
+            : busy
+              ? "正在建立课程…"
+              : "确认并建立课程"}
+        </button>
+        <button
+          type="button"
+          className="course-import-discard"
+          disabled={busy}
+          onClick={onDiscard}
+        >
+          放弃本次识别
+        </button>
+      </div>
     </div>
   );
 }
@@ -148,6 +161,7 @@ export function CourseImportPanel({
   onResolve,
   onCommit,
   onCommitted,
+  onDiscard,
 }: Props) {
   const [job, setJob] = useState<CourseImportJob | null>(null);
   const [loading, setLoading] = useState(available && Boolean(semester));
@@ -203,6 +217,21 @@ export function CourseImportPanel({
     setError(null);
     try {
       setJob(await onResolve(job.id, resolution));
+    } catch (cause) {
+      setError(toUserMessage(cause));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function discard() {
+    if (!job) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await onDiscard(job.id);
+      setJob(null);
+      setSuccess("已放弃本次识别，未写入任何课程。");
     } catch (cause) {
       setError(toUserMessage(cause));
     } finally {
@@ -283,6 +312,7 @@ export function CourseImportPanel({
               busy={loading}
               onResolve={(resolution) => void resolve(resolution)}
               onCommit={() => void commit()}
+              onDiscard={() => void discard()}
             />
           )}
         </>

@@ -73,6 +73,7 @@ const instructions = [
   "Use 24-hour HH:MM times. Use null for facts that are absent, unreadable, or not expressed as clock times.",
   "Do not invent courses, schedules, instructors, rooms, week ranges, tasks, deadlines, or recommendations.",
   "Every schedule end time must be strictly later than its start time; when a row's times are unreadable or inconsistent, return null for those fields instead of an inverted range.",
+  'Text pages arrive rebuilt as a table: one visual line per row, cells separated by " | ", an empty cell meaning no meeting in that slot, and each page prefixed "Page N:". Take a meeting\'s weekday from the column header above it, never from the order courses appear in.',
   "Exclude headings, personal identifiers, and unrelated text.",
 ].join(" ");
 

@@ -71,16 +71,172 @@ export interface PreparedPdfSource {
   rasterizedPages: number;
 }
 
-function pageText(content: { items: unknown[] }): string {
-  return content.items
-    .map((item) =>
-      item && typeof item === "object" && "str" in item
-        ? String((item as { str: unknown }).str)
-        : "",
-    )
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
+interface PlacedText {
+  str: string;
+  x: number;
+  y: number;
+}
+
+function placedItems(
+  content: { items: unknown[] },
+  mapPoint: (x: number, y: number) => [number, number],
+): PlacedText[] {
+  const placed: PlacedText[] = [];
+  for (const raw of content.items) {
+    if (!raw || typeof raw !== "object") continue;
+    const item = raw as { str?: unknown; transform?: unknown };
+    if (typeof item.str !== "string" || !item.str.trim()) continue;
+    const transform = Array.isArray(item.transform)
+      ? (item.transform as number[])
+      : [];
+    const [x, y] = mapPoint(transform[4] ?? 0, transform[5] ?? 0);
+    placed.push({ str: item.str.trim(), x, y });
+  }
+  return placed;
+}
+
+interface Column {
+  min: number;
+  max: number;
+}
+
+/**
+ * Rebuild the table from item coordinates instead of joining every run of
+ * text with a space.
+ *
+ * A timetable lays weekday columns side by side; flattening the stream keeps
+ * the header (时间段 节次 星期一 …) but throws away which column each cell came
+ * from, so the model cannot tell weekdays apart — and because `weekday` is
+ * 1..7 and never null, it guessed and returned 1 for every meeting. Pages
+ * may also be rotated (this one is rotate=90), so coordinates are mapped
+ * through the page viewport first. Rows group by visual baseline, columns
+ * are built from *overlapping* x ranges (a centred header label and the
+ * left-aligned cell under it share one range, while a line that fills its
+ * column never swallows its neighbour), and every row is padded to the full
+ * width so a wrapped continuation line stays under its own column.
+ */
+export function layoutText(
+  content: { items: unknown[] },
+  mapPoint?: (x: number, y: number) => [number, number],
+): string {
+  const identity = (x: number, y: number): [number, number] => [x, y];
+  const items = placedItems(content, mapPoint ?? identity);
+  if (!items.length) return "";
+
+  const rows: PlacedText[][] = [];
+  // Viewport y grows downward: ascending y is top → bottom.
+  const ordered = [...items].sort((a, b) => a.y - b.y || a.x - b.x);
+  for (const item of ordered) {
+    const row = rows.at(-1);
+    if (row && Math.abs((row[0] as PlacedText).y - item.y) <= ROW_GAP)
+      row.push(item);
+    else rows.push([item]);
+  }
+
+  const columns = buildColumns(rows);
+  return rows.map((row) => placeRow(row, columns)).join("\n");
+}
+
+interface Edge {
+  min: number;
+  max: number;
+  owners: Set<number>;
+}
+
+/**
+ * Columns come from item left edges, in two groups.
+ *
+ * Recurring edges (hit from at least two rows) are the real grid: cells
+ * repeat their left edge on every line they wrap onto. A page title spans
+ * two weekday columns but appears once, so it can never weld them — that was
+ * the bug in the overlap-based version. Once the grid exists, an edge that
+ * sits *far* from every grid column (more than half a column pitch) is a
+ * one-off that belongs to its own column: the header labels of empty
+ * weekday columns (周末没有课) have no recurring cell under them, and
+ * without this they collapsed into the last busy column.
+ */
+function buildColumns(rows: PlacedText[][]): Column[] {
+  const edges: Edge[] = [];
+  rows.forEach((row, rowIndex) => {
+    for (const item of row) {
+      const edge = edges.find(
+        (candidate) =>
+          item.x >= candidate.min - START_TOLERANCE &&
+          item.x <= candidate.max + START_TOLERANCE,
+      );
+      if (edge) {
+        edge.min = Math.min(edge.min, item.x);
+        edge.max = Math.max(edge.max, item.x);
+        edge.owners.add(rowIndex);
+        continue;
+      }
+      edges.push({ min: item.x, max: item.x, owners: new Set([rowIndex]) });
+    }
+  });
+
+  edges.sort((a, b) => a.min - b.min);
+  const grid = edges.filter((edge) => edge.owners.size >= 2);
+  // One recurring edge is just a document margin; without a second there is
+  // no pitch to judge one-off edges against.
+  if (grid.length < 2) return [];
+
+  const pitch = medianGap(grid);
+  const columns: Column[] = [...grid];
+  for (const edge of edges) {
+    if (edge.owners.size >= 2) continue;
+    const nearest = Math.min(
+      ...columns.map((column) => Math.abs(column.min - edge.min)),
+    );
+    if (nearest > pitch / 2) columns.push({ min: edge.min, max: edge.max });
+  }
+  if (columns.length < MIN_TABLE_COLUMNS) return [];
+  return columns.sort((a, b) => a.min - b.min);
+}
+
+function medianGap(columns: Column[]): number {
+  const gaps = columns
+    .slice(1)
+    .map((column, index) => column.min - (columns[index] as Column).min)
+    .filter((gap) => gap > START_TOLERANCE)
+    .sort((a, b) => a - b);
+  if (!gaps.length) return Number.POSITIVE_INFINITY;
+  return gaps[Math.floor(gaps.length / 2)] as number;
+}
+
+function placeRow(row: PlacedText[], columns: Column[]): string {
+  const ordered = [...row].sort((a, b) => a.x - b.x);
+  if (!columns.length) return ordered.map((item) => item.str).join(" ");
+
+  const filled: string[] = [];
+  for (const item of ordered) {
+    let index = 0;
+    let distance = Number.POSITIVE_INFINITY;
+    columns.forEach((column, position) => {
+      const gap = Math.abs(column.min - item.x);
+      if (gap < distance) {
+        distance = gap;
+        index = position;
+      }
+    });
+    while (filled.length < index) filled.push("");
+    filled[index] = filled[index]
+      ? `${filled[index]} ${item.str}`.replace(/\s+/g, " ")
+      : item.str.replace(/\s+/g, " ");
+  }
+  return filled.join(" | ");
+}
+
+/** Baselines this close belong to one visual line. */
+const ROW_GAP = 4;
+/** Left edges this close are the same column; three of them mean a table. */
+const START_TOLERANCE = 3;
+const MIN_TABLE_COLUMNS = 3;
+
+function pageText(
+  content: { items: unknown[] },
+  mapPoint?: (x: number, y: number) => [number, number],
+): string {
+  return layoutText(content, mapPoint).trim();
 }
 
 async function rasterizePage(
@@ -169,9 +325,16 @@ export async function preparePdfSource(
     const pageTexts: { page: number; text: string }[] = [];
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
       const page = await document.getPage(pageNumber);
+      // Coordinates are in PDF user space; a rotated page (rotate=90) puts
+      // weekday columns on the y axis, which must be mapped to viewport
+      // space before rows and columns mean anything.
+      const viewport = page.getViewport({ scale: 1 });
       pageTexts.push({
         page: pageNumber,
-        text: pageText(await page.getTextContent()),
+        text: pageText(
+          await page.getTextContent(),
+          (x, y) => viewport.convertToViewportPoint(x, y) as [number, number],
+        ),
       });
       page.cleanup();
     }

@@ -128,6 +128,13 @@ export async function resolveImportedCourse(
   );
 }
 
+export async function discardCourseImport(jobId: string): Promise<void> {
+  const token = await synchronizeAuthenticatedData();
+  await call<{ id: string }>(token, `/api/v1/course-imports/${jobId}`, {
+    method: "DELETE",
+  });
+}
+
 export async function commitCourseImport(
   jobId: string,
 ): Promise<CourseImportCommitResult> {
