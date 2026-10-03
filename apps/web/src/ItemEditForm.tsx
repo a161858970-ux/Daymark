@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Course, Item } from "@course-manager/domain";
 import { changedItemFields } from "./itemEditDiff.js";
-import { DateTimeField } from "./DateTimeField.js";
 import { SelectField } from "./SelectField.js";
+import { TimeBlock } from "./TimeBlock.js";
 import { fromLocalInput, toLocalInput } from "./timeInputs.js";
 
 export type EditableItemFields = Partial<
@@ -138,42 +138,20 @@ export function ItemEditForm({
             ]}
           />
         </label>
-        <label>
-          开始时间
-          <DateTimeField
-            mode="datetime"
-            label="开始时间"
-            value={startAt}
-            onChange={setStartAt}
-          />
-        </label>
-        <label>
-          截止时间
-          <DateTimeField
-            mode="datetime"
-            label="截止时间"
-            value={dueAt}
-            onChange={setDueAt}
-          />
-        </label>
-        <label>
-          发生开始
-          <DateTimeField
-            mode="datetime"
-            label="发生开始"
-            value={occurrenceStartAt}
-            onChange={setOccurrenceStartAt}
-          />
-        </label>
-        <label>
-          发生结束
-          <DateTimeField
-            mode="datetime"
-            label="发生结束"
-            value={occurrenceEndAt}
-            onChange={setOccurrenceEndAt}
-          />
-        </label>
+        <TimeBlock
+          value={{
+            startAt,
+            occurrenceStartAt,
+            occurrenceEndAt,
+            dueAt,
+          }}
+          onChange={(next) => {
+            setStartAt(next.startAt);
+            setOccurrenceStartAt(next.occurrenceStartAt);
+            setOccurrenceEndAt(next.occurrenceEndAt);
+            setDueAt(next.dueAt);
+          }}
+        />
         <label className="detail-field-wide">
           补充内容
           <textarea

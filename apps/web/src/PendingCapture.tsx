@@ -5,8 +5,8 @@ import {
   type ManualCaptureResolution,
 } from "@course-manager/application";
 import type { Course, RawCapture } from "@course-manager/domain";
-import { DateTimeField } from "./DateTimeField.js";
 import { SelectField } from "./SelectField.js";
+import { TimeBlock } from "./TimeBlock.js";
 import { fromLocalInput, toLocalInput } from "./timeInputs.js";
 import type { CaptureInterpretation } from "./authSync.js";
 import { toUserMessage } from "./errors.js";
@@ -130,16 +130,6 @@ export function PendingCapture({
       }
       return;
     }
-    if (
-      kind === "ITEM" &&
-      capture.unresolved_reason === "需要确认时间语义" &&
-      !startAt &&
-      !occurrenceStartAt &&
-      !dueAt
-    ) {
-      setError("请确认这条记录对应的时间，或暂不处理。");
-      return;
-    }
     if (kind === "COURSE_INFORMATION" && !courseId) {
       setError("课程信息需要选择一门课程。");
       return;
@@ -186,33 +176,36 @@ export function PendingCapture({
         </p>
       )}
       {!kind ? (
-        <div className="pending-actions">
-          <button type="button" onClick={() => setKind("ITEM")}>
-            {splitTitles.length > 1 ? "保持一条事项" : "记为事项"}
-          </button>
-          {splitTitles.length > 1 && (
-            <button type="button" onClick={() => setKind("SPLIT")}>
-              拆为 {splitTitles.length} 条事项
+        <>
+          <p className="pending-question">这条记录是什么？</p>
+          <div className="pending-actions">
+            <button type="button" onClick={() => setKind("ITEM")}>
+              {splitTitles.length > 1 ? "保持一条事项" : "记为事项"}
             </button>
-          )}
-          <button
-            type="button"
-            className="quiet-button"
-            onClick={() => setKind("COURSE_INFORMATION")}
-          >
-            记为课程信息
-          </button>
-          {onInterpret && (
+            {splitTitles.length > 1 && (
+              <button type="button" onClick={() => setKind("SPLIT")}>
+                拆为 {splitTitles.length} 条事项
+              </button>
+            )}
             <button
               type="button"
               className="quiet-button"
-              disabled={busy}
-              onClick={() => void interpret()}
+              onClick={() => setKind("COURSE_INFORMATION")}
             >
-              尝试智能整理
+              记为课程信息
             </button>
-          )}
-        </div>
+            {onInterpret && (
+              <button
+                type="button"
+                className="quiet-button"
+                disabled={busy}
+                onClick={() => void interpret()}
+              >
+                尝试智能整理
+              </button>
+            )}
+          </div>
+        </>
       ) : (
         <form
           className="pending-resolution"
@@ -266,42 +259,20 @@ export function PendingCapture({
           </label>
           {kind === "ITEM" && (
             <>
-              <label>
-                开始时间
-                <DateTimeField
-                  mode="datetime"
-                  label="开始时间"
-                  value={startAt}
-                  onChange={setStartAt}
-                />
-              </label>
-              <label>
-                发生开始
-                <DateTimeField
-                  mode="datetime"
-                  label="发生开始"
-                  value={occurrenceStartAt}
-                  onChange={setOccurrenceStartAt}
-                />
-              </label>
-              <label>
-                发生结束
-                <DateTimeField
-                  mode="datetime"
-                  label="发生结束"
-                  value={occurrenceEndAt}
-                  onChange={setOccurrenceEndAt}
-                />
-              </label>
-              <label>
-                截止时间
-                <DateTimeField
-                  mode="datetime"
-                  label="截止时间"
-                  value={dueAt}
-                  onChange={setDueAt}
-                />
-              </label>
+              <TimeBlock
+                value={{
+                  startAt,
+                  occurrenceStartAt,
+                  occurrenceEndAt,
+                  dueAt,
+                }}
+                onChange={(next) => {
+                  setStartAt(next.startAt);
+                  setOccurrenceStartAt(next.occurrenceStartAt);
+                  setOccurrenceEndAt(next.occurrenceEndAt);
+                  setDueAt(next.dueAt);
+                }}
+              />
               <label>
                 补充内容
                 <textarea

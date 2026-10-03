@@ -3910,3 +3910,99 @@ h2 {
 .raw-toggle-glyph.open {
   transform: rotate(180deg);
 }
+
+/* ---------------------------------------------------------------------
+   统一时间区块（TimeBlock）：一个“时间”入口替代四个裸字段。
+   收起态用自然语言（时间未定 / 开始于… / …发生 / 截止于…），
+   展开后按 开始 / 发生 / 截止 三种用户语义各一行。
+   底层仍是 start_at / occurrence_start_at / occurrence_end_at / due_at。
+   --------------------------------------------------------------------- */
+.time-block {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  padding: 12px 13px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+}
+.time-block-head {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.time-block-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 13px;
+  background: var(--surface-raised);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-small);
+  color: var(--faint);
+  font: inherit;
+  text-align: left;
+}
+.time-block-empty span {
+  color: var(--accent);
+  font-size: 13px;
+}
+.time-block-empty:hover {
+  border-color: var(--accent);
+}
+.time-block-summary {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.time-block-summary li {
+  position: relative;
+  padding-left: 14px;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+.time-block-summary li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.time-block-edit {
+  margin-top: 6px;
+}
+.time-block-editor {
+  display: grid;
+  gap: 8px;
+}
+/* Higher specificity than the parent forms' `label` rules, which would
+   otherwise stack these rows vertically (detail panel) or grid them. */
+.time-block .time-block-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0;
+}
+.time-block .time-block-row .datetime-wrap {
+  flex: 1;
+  min-width: 0;
+}
+.time-block-kind {
+  flex: 0 0 34px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.time-block-done {
+  justify-self: start;
+}
+.pending-question {
+  margin: 14px 0 2px;
+  font-weight: 620;
+  color: var(--ink);
+}
