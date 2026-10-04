@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
-import { ChatCompletionsCourseImportParser } from "./course-import-chat-parser.js";
+import {
+  ChatCompletionsCourseImportParser,
+  splitTextBatches,
+} from "./course-import-chat-parser.js";
 
 async function fixture(name: string): Promise<string> {
   const path = fileURLToPath(
@@ -242,4 +245,24 @@ it("classifies timeouts, truncation, empty and malformed responses", async () =>
     new ChatCompletionsCourseImportParser(config, empty.transport).parse(image),
   ).rejects.toMatchObject({ kind: "EMPTY" });
   expect(empty.calls).toHaveLength(2);
+});
+
+it("splits rebuilt page text into page-pair batches", () => {
+  const text = [
+    "Page 1: 时间段 | 节次 | 星期一",
+    "Page 2: 第二页的课程",
+    "Page 3: 第三页的课程",
+    "Page 4: 第四页的课程",
+  ].join("\n");
+
+  const two = splitTextBatches(text, 2);
+  expect(two).toHaveLength(2);
+  expect(two[0]).toContain("Page 1:");
+  expect(two[0]).toContain("Page 2:");
+  expect(two[0]).not.toContain("Page 3:");
+  expect(two[1]).toContain("Page 3:");
+  expect(two[1]).toContain("Page 4:");
+
+  // A short timetable stays in one request.
+  expect(splitTextBatches("Page 1: 只有一页", 2)).toHaveLength(1);
 });

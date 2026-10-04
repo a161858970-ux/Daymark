@@ -120,7 +120,18 @@ function logEngineeringCause(error: CloudError): void {
   const cause = error.cause;
   const detail =
     cause instanceof Error ? (cause.stack ?? cause.message) : String(cause);
-  console.error(`[${error.code}] ${detail}`);
+  // The stack of the first wrapper rarely says why the request died; walk the
+  // cause chain so a body-timeout or a socket reset is visible in the log
+  // instead of a bare "UNAVAILABLE" that has to be guessed at.
+  const chain: string[] = [];
+  let current: unknown = cause;
+  while (current instanceof Error && chain.length < 5) {
+    chain.push(`${current.name}: ${current.message}`);
+    current = (current as { cause?: unknown }).cause;
+  }
+  console.error(
+    `[${error.code}] ${detail}\n  cause-chain: ${chain.join(" <- ")}`,
+  );
 }
 
 /** Domain routes are registered only when both persistence and auth are supplied. */

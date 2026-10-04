@@ -74,6 +74,7 @@ const instructions = [
   "Do not invent courses, schedules, instructors, rooms, week ranges, tasks, deadlines, or recommendations.",
   "Every schedule end time must be strictly later than its start time; when a row's times are unreadable or inconsistent, return null for those fields instead of an inverted range.",
   'Text pages arrive rebuilt as a table: one visual line per row, cells separated by " | ", an empty cell meaning no meeting in that slot, and each page prefixed "Page N:". Take a meeting\'s weekday from the column header above it, never from the order courses appear in.',
+  "Extract directly from the supplied structure: decide weekdays and times from the table columns as you read them, and do not deliberate at length before answering.",
   "Exclude headings, personal identifiers, and unrelated text.",
 ].join(" ");
 
@@ -81,10 +82,33 @@ type ContentPart =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
 
+/**
+ * Splits rebuilt page text into per-batch chunks on the `Page N:` markers.
+ *
+ * One request that emits every course of a timetable is what blows past the
+ * provider's response ceilings (a real 4-page parse exceeded 600 s while two
+ * smaller batches each fit), so text pages travel in pairs and the results
+ * are merged by name afterwards.
+ */
+export function splitTextBatches(
+  text: string,
+  pagesPerBatch: number,
+): string[] {
+  const pages = text.split(/(?=Page \d+:)/).filter((part) => part.trim());
+  if (pages.length <= pagesPerBatch) return [text];
+  const batches: string[] = [];
+  for (let index = 0; index < pages.length; index += pagesPerBatch)
+    batches.push(pages.slice(index, index + pagesPerBatch).join("\n"));
+  return batches;
+}
+
 const introPart: ContentPart = {
   type: "text",
   text: "Extract a course preview for user review. Do not commit anything.",
 };
+
+/** Pages per request for text-only PDFs; results are merged by course. */
+const TEXT_PAGES_PER_BATCH = 2;
 
 interface RequestBatch {
   parts: ContentPart[];
@@ -107,9 +131,12 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
     input: Parameters<CourseImportParser["parse"]>[0],
   ): Promise<unknown> {
     const batches = await this.batches(input);
-    const results: unknown[] = [];
-    for (const batch of batches)
-      results.push(await this.request(batch, input.sourceType === "PDF"));
+    // Parallel: each batch carries a slice of the timetable, and running them
+    // together keeps the wall clock at one batch's duration instead of the
+    // sum of both (sequential runs doubled the exposure to response timeouts).
+    const results = await Promise.all(
+      batches.map((batch) => this.request(batch, input.sourceType === "PDF")),
+    );
     return results.length === 1 ? results[0] : mergeCoursePreviews(results);
   }
 
@@ -139,11 +166,17 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
       ];
     }
     const prepared = await preparePdfSource(input.contentBase64, limits);
+    const imageGroups = imageBatches(prepared.images);
+    // Pure text: send page pairs, merge afterwards (see splitTextBatches).
+    if (prepared.text && !imageGroups.length)
+      return splitTextBatches(prepared.text, TEXT_PAGES_PER_BATCH).map(
+        (chunk) => ({
+          parts: [introPart, { type: "text", text: `PDF content:\n${chunk}` }],
+        }),
+      );
     const textParts: ContentPart[] = prepared.text
       ? [{ type: "text", text: `PDF content:\n${prepared.text}` }]
       : [];
-    const imageGroups = imageBatches(prepared.images);
-    if (!imageGroups.length) return [{ parts: [introPart, ...textParts] }];
     return [
       { parts: [introPart, ...textParts, ...toParts(imageGroups[0]!)] },
       ...imageGroups.slice(1).map((group) => ({
