@@ -8,6 +8,7 @@ import { CaptureInterpretationService } from "./ai/interpretation.js";
 import { ChatCompletionsInterpretationProvider } from "./ai/chat-provider.js";
 import { CloudConflictManager } from "./db/conflicts.js";
 import { CloudCourseImportManager } from "./db/course-import.js";
+import { surviveIdleDisconnects } from "./db/poolSupervisor.js";
 import { CloudNotificationManager } from "./db/notifications.js";
 import { RateLimiter, rateLimitFromEnv } from "./rateLimit.js";
 
@@ -48,6 +49,9 @@ if (Boolean(databaseUrl) !== Boolean(supabaseUrl))
 const pool = databaseUrl
   ? new pg.Pool({ connectionString: databaseUrl })
   : null;
+// Without a listener a dropped idle socket is an uncaught pool error and
+// takes the API down (Connection terminated unexpectedly).
+if (pool) surviveIdleDisconnects(pool);
 const cloudDatabase = pool ? new PoolCloudDatabase(pool) : null;
 const apiKey =
   process.env.AI_API_KEY ??
