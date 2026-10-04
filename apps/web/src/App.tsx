@@ -82,9 +82,12 @@ import {
   localDeviceId,
 } from "./reminders.js";
 import { toUserMessage } from "./errors.js";
+import type { AiTaskKind } from "./aiTaskStore.js";
 
 export function App() {
   const [page, setPage] = useState<PrimaryPage>("overview");
+  /** Bumped to reopen the import panel when a finished AI task is clicked. */
+  const [importOpenSignal, setImportOpenSignal] = useState(0);
   const [initializing, setInitializing] = useState(true);
   const [online, setOnline] = useState(
     () => typeof navigator === "undefined" || navigator.onLine,
@@ -790,6 +793,16 @@ export function App() {
     setShowCourseDelete(false);
   }
 
+  function openCompletedAiTask(kind: AiTaskKind) {
+    if (kind === "course-import") {
+      navigate("courses");
+      setImportOpenSignal((value) => value + 1);
+    } else {
+      navigate("overview");
+      setPendingExpanded(true);
+    }
+  }
+
   return (
     <div className="app-shell">
       <AccountControl
@@ -797,6 +810,7 @@ export function App() {
         status={syncStatus}
         attentionCount={syncConflicts.length + syncIssues.length}
         onOpenRepair={() => setRepairOpenSignal((value) => value + 1)}
+        onOpenCompletedTask={openCompletedAiTask}
       />
       <AppNavigation page={page} onNavigate={navigate} onSearch={openSearch} />
       <main className="main-content">
@@ -1111,6 +1125,7 @@ export function App() {
                   );
                   await refresh();
                 }}
+                openImportSignal={importOpenSignal}
                 courseImportAvailable={Boolean(authClient)}
                 onLoadPendingImports={pendingCourseImports}
                 onStartImport={startCourseImport}

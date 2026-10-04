@@ -75,7 +75,7 @@ export async function requestCaptureInterpretation(
   const token = await synchronizeAuthenticatedData();
   // From here the backend waits on the model; the widget covers that window
   // even when the user switches views while the answer is still coming.
-  const endAiTask = beginAiTask();
+  const endAiTask = beginAiTask("capture");
   try {
     return await runCaptureInterpretation(
       token,

@@ -68,7 +68,7 @@ async function uploadSource(
 ): Promise<CourseImportJob> {
   // The server parses with the AI model while this request is open; the
   // widget must start when the upload leaves, not when the answer lands.
-  const endAiTask = beginAiTask();
+  const endAiTask = beginAiTask("course-import");
   try {
     return await call<CourseImportJob>(
       token,

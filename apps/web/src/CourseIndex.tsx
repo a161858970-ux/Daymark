@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type {
   CourseImportCommitResult,
   CourseImportJob,
@@ -32,6 +32,8 @@ interface Props {
     endDate: string,
   ): Promise<void>;
   onReplaceWeeks(values: WeekFields[]): Promise<void>;
+  /** 0 = idle; each bump reopens the import panel for a finished task. */
+  openImportSignal?: number;
   courseImportAvailable: boolean;
   onLoadPendingImports(semesterId: string): Promise<CourseImportJob[]>;
   onStartImport(semesterId: string, file: File): Promise<CourseImportJob>;
@@ -56,6 +58,7 @@ export function CourseIndex({
   onCreateCourse,
   onCreateSemester,
   onReplaceWeeks,
+  openImportSignal,
   courseImportAvailable,
   onLoadPendingImports,
   onStartImport,
@@ -75,6 +78,11 @@ export function CourseIndex({
   const [showWeekEditor, setShowWeekEditor] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Reopened when the user clicks a finished import task in the AI hint.
+  useEffect(() => {
+    if (openImportSignal) setShowImport(true);
+  }, [openImportSignal]);
 
   async function createCourse(inheritFromId: string | null) {
     try {

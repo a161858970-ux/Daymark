@@ -2866,7 +2866,8 @@ h2 {
    and is pushed to full width the moment the request settles. */
 .ai-task-progress {
   order: -1;
-  width: min(262px, calc(100vw - 62px));
+  /* Stays inside the left rail: 31px offset + 14px breathing room. */
+  width: calc(var(--nav-width) - 45px);
   padding: 7px 11px 9px;
   border: 1px solid rgb(199 200 191 / 75%);
   border-radius: 12px;
@@ -2933,11 +2934,37 @@ h2 {
   }
 }
 /* The request settled: sweep the bar to the full width, then retire. */
-.phase-finishing .bar-one {
+/* Settled: the bar sweeps to full width and stays as a clickable hint
+   until the user opens the page that holds the result. */
+.phase-completed {
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+.phase-completed:hover,
+.phase-completed:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 10px 26px rgb(33 43 38 / 16%);
+}
+.phase-completed:active {
+  transform: translateY(1px);
+}
+.phase-completed .ai-task-progress-label {
+  color: var(--accent-strong, #31564a);
+  font-weight: 650;
+}
+.phase-completed .bar-two {
+  display: none;
+}
+.phase-completed .bar-one {
   animation: ai-progress-complete 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
-.phase-finishing .bar-two {
-  display: none;
+.phase-completed .ai-task-progress-track {
+  background: rgb(85 121 104 / 22%);
 }
 @keyframes ai-progress-complete {
   from {
@@ -2946,9 +2973,6 @@ h2 {
   to {
     transform: scaleX(1);
   }
-}
-.phase-finishing .ai-task-progress-track {
-  background: rgb(85 121 104 / 22%);
 }
 .sync-status-trigger {
   display: flex;
@@ -3236,6 +3260,9 @@ h2 {
     right: clamp(18px, 5vw, 28px);
     bottom: auto;
     left: auto;
+    /* The widget is wider than the pill, so keep both hugged to the right
+       edge — otherwise the sync status slides inwards and looks detached. */
+    align-items: flex-end;
   }
   .account-control > button {
     min-width: 44px;

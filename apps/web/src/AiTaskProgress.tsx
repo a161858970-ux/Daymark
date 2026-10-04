@@ -1,58 +1,74 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { getAiTaskCount, subscribeAiTasks } from "./aiTaskStore.js";
+import { useSyncExternalStore } from "react";
+import {
+  dismissCompletedAiTasks,
+  getAiTaskSnapshot,
+  subscribeAiTasks,
+  type AiTaskKind,
+} from "./aiTaskStore.js";
+
+const completedLabels: Record<AiTaskKind, string> = {
+  "course-import": "课表识别完成，点击查看",
+  capture: "智能整理完成，点击查看",
+};
+
+/** Import results matter more, so when a wave mixed kinds it wins the hint. */
+function pickCompleted(completed: AiTaskKind[]): AiTaskKind {
+  return completed.includes("course-import") ? "course-import" : completed[0]!;
+}
 
 /**
- * Placeholder progress for backend AI work (课表识别 / 智能整理).
+ * Placeholder for backend AI work (课表识别 / 智能整理).
  *
- * Deliberately indeterminate: the backend exposes no real percentage, so this
- * never prints a number and never claims a completion value — the bar only
- * says "a background process is running", switches to a full bar when the
- * request settles, and retires itself.
+ * Deliberately indeterminate: the backend exposes no real percentage, so the
+ * bar never prints a number and loops before the end. Once the wave settles
+ * the widget does not vanish — it stays as a clickable hint until the user
+ * opens the page that holds the result.
  */
-export function AiTaskProgress() {
-  const count = useSyncExternalStore(
+export function AiTaskProgress({ onOpen }: { onOpen(kind: AiTaskKind): void }) {
+  const { active, completed } = useSyncExternalStore(
     subscribeAiTasks,
-    getAiTaskCount,
-    getAiTaskCount,
+    getAiTaskSnapshot,
+    getAiTaskSnapshot,
   );
-  const active = count > 0;
-  const wasActive = useRef(false);
-  const [finishing, setFinishing] = useState(false);
 
-  useEffect(() => {
-    if (active) {
-      wasActive.current = true;
-      setFinishing(false);
-      return;
-    }
-    // Only a task that actually ran may push the bar to 100 %.
-    if (!wasActive.current) return;
-    wasActive.current = false;
-    setFinishing(true);
-    const retire = setTimeout(() => setFinishing(false), 1400);
-    return () => clearTimeout(retire);
-  }, [active]);
-
-  const phase = active ? "running" : finishing ? "finishing" : "idle";
-  if (phase === "idle") return null;
-
-  return (
-    <div
-      className={`ai-task-progress phase-${phase}`}
-      role="status"
-      aria-live="polite"
-      data-phase={phase}
-      data-active-tasks={count}
-    >
-      <p className="ai-task-progress-label">
-        {phase === "running"
-          ? "AI 正在后台处理，可以先去别的页面"
-          : "后台处理完成，回来看看结果"}
-      </p>
-      <div className="ai-task-progress-track" aria-hidden="true">
-        <span className="ai-task-progress-bar bar-one" />
-        <span className="ai-task-progress-bar bar-two" />
+  if (active > 0) {
+    return (
+      <div
+        className="ai-task-progress phase-running"
+        role="status"
+        aria-live="polite"
+        data-phase="running"
+        data-active-tasks={active}
+      >
+        <p className="ai-task-progress-label">AI 正在后台处理中</p>
+        <div className="ai-task-progress-track" aria-hidden="true">
+          <span className="ai-task-progress-bar bar-one" />
+          <span className="ai-task-progress-bar bar-two" />
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (completed.length > 0) {
+    const kind = pickCompleted(completed);
+    return (
+      <button
+        type="button"
+        className="ai-task-progress phase-completed"
+        data-phase="completed"
+        data-kind={kind}
+        onClick={() => {
+          dismissCompletedAiTasks();
+          onOpen(kind);
+        }}
+      >
+        <span className="ai-task-progress-label">{completedLabels[kind]}</span>
+        <span className="ai-task-progress-track" aria-hidden="true">
+          <span className="ai-task-progress-bar bar-one" />
+        </span>
+      </button>
+    );
+  }
+
+  return null;
 }

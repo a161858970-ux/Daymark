@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AiTaskProgress } from "./AiTaskProgress.js";
+import type { AiTaskKind } from "./aiTaskStore.js";
 import {
   authAdapter,
   authClient,
@@ -87,10 +88,13 @@ export function AccountControl({
   status,
   attentionCount,
   onOpenRepair,
+  onOpenCompletedTask,
 }: {
   online: boolean;
   status: AuthenticatedSyncStatus;
   attentionCount: number;
+  /** Sends the user to the page holding a finished AI task's result. */
+  onOpenCompletedTask?: (kind: AiTaskKind) => void;
   /** Reveals the repair panel; the summary block is a status, so it needs an
    * explicit action to reach the retry/abandon exit (spec: ACTION_REQUIRED
    * must always have a way out). */
@@ -190,7 +194,7 @@ export function AccountControl({
 
   return (
     <div className="account-control" ref={rootRef}>
-      <AiTaskProgress />
+      <AiTaskProgress onOpen={(kind) => onOpenCompletedTask?.(kind)} />
       <button
         ref={buttonRef}
         type="button"
