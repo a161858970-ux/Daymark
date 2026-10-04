@@ -25,8 +25,11 @@ export class ProviderError extends Error {
 }
 
 /** Retry only transient classes; a rejected payload never gets a second try. */
+// TIMEOUT is deliberately absent: an attempt that times out has already
+// spent the whole budget, so retrying doubles the user's wait for the same
+// slow model instead of buying a better chance (observed: 2 x 300 s of
+// waiting, both attempts timing out).
 const transient = new Set<ProviderErrorKind>([
-  "TIMEOUT",
   "UNAVAILABLE",
   "RATE_LIMITED",
   "EMPTY",
@@ -89,7 +92,11 @@ export async function readStructuredResponse(
   try {
     body = await response.json();
   } catch (error) {
-    throw new ProviderError("UNAVAILABLE", response.status, { cause: error });
+    // A body that never finishes is usually the abort signal firing mid-read
+    // (slow model); classifying that as UNAVAILABLE hid the real cause and
+    // triggered a pointless second attempt.
+    const failure = providerFailure(error);
+    throw new ProviderError(failure.kind, response.status, { cause: error });
   }
   try {
     return structuredContent(body);

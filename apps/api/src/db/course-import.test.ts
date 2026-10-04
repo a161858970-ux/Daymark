@@ -7,6 +7,7 @@ import { buildServer } from "../server.js";
 import { CloudAcademicManager } from "./academic.js";
 import {
   CloudCourseImportManager,
+  importFailureMessage,
   type CourseImportParser,
 } from "./course-import.js";
 import { CloudCourseManager, type CloudDatabase } from "./cloud.js";
@@ -784,4 +785,13 @@ it("rejects a source that is neither a PDF nor an image", async () => {
   } finally {
     await postgres.close();
   }
+});
+
+it("reports a timeout as a timeout, not as a generic AI outage", () => {
+  expect(importFailureMessage(new ProviderError("TIMEOUT", null))).toBe(
+    "识别服务响应超时，文件已保留，请稍后再试。",
+  );
+  expect(importFailureMessage(new ProviderError("UNAVAILABLE", null))).toBe(
+    "智能整理暂时不可用，文件已保留，请稍后重试。",
+  );
 });

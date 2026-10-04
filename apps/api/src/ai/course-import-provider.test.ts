@@ -141,7 +141,8 @@ it("classifies timeouts, truncation, empty and malformed responses", async () =>
     contentBase64: Buffer.from("fixture").toString("base64"),
   };
 
-  // Timeout: transient, retried once, then surfaced as TIMEOUT.
+  // Timeout: surfaced as TIMEOUT and NOT retried — the attempt already used
+  // the whole budget, so a second attempt only doubles the user's wait.
   const timeout = recorder([
     Object.assign(new Error("The operation timed out"), {
       name: "TimeoutError",
@@ -155,7 +156,31 @@ it("classifies timeouts, truncation, empty and malformed responses", async () =>
       image,
     ),
   ).rejects.toMatchObject({ name: "ProviderError", kind: "TIMEOUT" });
-  expect(timeout.calls).toHaveLength(2);
+  expect(timeout.calls).toHaveLength(1);
+
+  // Body read interrupted by the abort signal (slow model, status 200): the
+  // real cause is a timeout, not a garbled gateway.
+  const stalled = {
+    ok: true,
+    status: 200,
+    clone() {
+      return this;
+    },
+    async json(): Promise<unknown> {
+      throw Object.assign(
+        new Error("The operation was aborted due to timeout"),
+        {
+          name: "TimeoutError",
+        },
+      );
+    },
+  };
+  await expect(
+    new ChatCompletionsCourseImportParser(
+      config,
+      (async () => stalled) as unknown as typeof fetch,
+    ).parse(image),
+  ).rejects.toMatchObject({ name: "ProviderError", kind: "TIMEOUT" });
 
   // Non-JSON 200 body: garbled gateway response, retried once as UNAVAILABLE.
   const garbled = recorder([

@@ -184,6 +184,8 @@ export function importFailureMessage(cause: unknown): string {
       return "无法可靠识别该课程表，请重新上传清晰文件。";
     if (cause.kind === "TRUNCATED")
       return "课程表内容过长，无法一次识别，请拆分后重试。";
+    if (cause.kind === "TIMEOUT")
+      return "识别服务响应超时，文件已保留，请稍后再试。";
     return "智能整理暂时不可用，文件已保留，请稍后重试。";
   }
   return "无法可靠识别该课程表，请重新上传清晰文件。";

@@ -186,7 +186,10 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
             authorization: ["Bearer", this.config.apiKey].join(" "),
             "content-type": "application/json",
           },
-          signal: AbortSignal.timeout(this.config.timeoutMs ?? 300_000),
+          // A full timetable is a large structured output: yesterday's real
+          // parse took 213 s and today's repeatedly crossed 300 s, so the
+          // budget covers the model rather than the network.
+          signal: AbortSignal.timeout(this.config.timeoutMs ?? 600_000),
           body: payload,
         });
       } catch (error) {
