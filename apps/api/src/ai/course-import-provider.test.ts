@@ -144,8 +144,9 @@ it("classifies timeouts, truncation, empty and malformed responses", async () =>
     contentBase64: Buffer.from("fixture").toString("base64"),
   };
 
-  // Timeout: surfaced as TIMEOUT and NOT retried — the attempt already used
-  // the whole budget, so a second attempt only doubles the user's wait.
+  // Timeout: surfaced as TIMEOUT and retried once — the per-attempt budget
+  // is now small (300 s), so a second attempt buys a fresh provider window
+  // instead of gambling one long run.
   const timeout = recorder([
     Object.assign(new Error("The operation timed out"), {
       name: "TimeoutError",
@@ -159,7 +160,7 @@ it("classifies timeouts, truncation, empty and malformed responses", async () =>
       image,
     ),
   ).rejects.toMatchObject({ name: "ProviderError", kind: "TIMEOUT" });
-  expect(timeout.calls).toHaveLength(1);
+  expect(timeout.calls).toHaveLength(2);
 
   // Body read interrupted by the abort signal (slow model, status 200): the
   // real cause is a timeout, not a garbled gateway.

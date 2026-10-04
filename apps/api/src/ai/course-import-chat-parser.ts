@@ -202,6 +202,11 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
           schema,
         },
       },
+      // Bounds a runaway generation: one measured attempt burned 33.9 k
+      // completion tokens thinking about a table that answers in ~3 k, which
+      // is exactly what pushes a request past every time ceiling. Hitting the
+      // cap surfaces as finish=length -> TRUNCATED instead of a silent wait.
+      max_tokens: 12_000,
     });
     return withProviderRetry(async () => {
       let attempt: Response;
@@ -212,10 +217,11 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
             authorization: ["Bearer", this.config.apiKey].join(" "),
             "content-type": "application/json",
           },
-          // A full timetable is a large structured output: yesterday's real
-          // parse took 213 s and today's repeatedly crossed 300 s, so the
-          // budget covers the model rather than the network.
-          signal: AbortSignal.timeout(this.config.timeoutMs ?? 600_000),
+          // Per-attempt budget: measured runs finish in 53-272 s but drift
+          // far beyond 600 s in a bad window, where a single long attempt
+          // gives the user one result in ten minutes. Fail fast and let
+          // withProviderRetry take a second bite instead.
+          signal: AbortSignal.timeout(this.config.timeoutMs ?? 300_000),
           body: payload,
         });
       } catch (error) {

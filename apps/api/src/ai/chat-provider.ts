@@ -25,11 +25,12 @@ export class ProviderError extends Error {
 }
 
 /** Retry only transient classes; a rejected payload never gets a second try. */
-// TIMEOUT is deliberately absent: an attempt that times out has already
-// spent the whole budget, so retrying doubles the user's wait for the same
-// slow model instead of buying a better chance (observed: 2 x 300 s of
-// waiting, both attempts timing out).
+// TIMEOUT is transient again now that a single attempt is capped at 300 s:
+// measured runs land anywhere between 53 s and "never" depending on the
+// provider's mood, so a second attempt buys a fresh window instead of one
+// ten-minute gamble (the budget per attempt is small enough to afford it).
 const transient = new Set<ProviderErrorKind>([
+  "TIMEOUT",
   "UNAVAILABLE",
   "RATE_LIMITED",
   "EMPTY",
