@@ -255,9 +255,13 @@ export function structuredContent(body: unknown): unknown {
   const first = body.choices[0] as Record<string, unknown>;
   const message = first.message as Record<string, unknown> | undefined;
   const content = message?.content;
-  if (typeof content !== "string" || !content.trim())
-    throw new Error("Provider returned no structured text");
+  // finish_reason first: when the output cap is hit mid-reasoning the model
+  // returns finish=length WITH empty content, and checking emptiness first
+  // mislabelled that truncation as an empty response (EMPTY is retried, so
+  // every attempt burned the whole budget for nothing).
   if (first.finish_reason === "length")
     throw new Error("Provider response was truncated");
+  if (typeof content !== "string" || !content.trim())
+    throw new Error("Provider returned no structured text");
   return JSON.parse(content) as unknown;
 }

@@ -1221,9 +1221,20 @@ h2 {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: stretch;
+  margin-top: 18px;
 }
 .course-import-actions .course-import-commit {
   flex: 1 1 220px;
+  /* These two lived on the standalone button and broke the row: the margin
+     shifted it down inside the stretched flex line and width:100% fought
+     the flex basis, leaving the pair top-misaligned. */
+  width: auto;
+  margin-top: 0;
+  min-height: 44px;
+}
+.course-import-actions .course-import-discard {
+  min-height: 44px;
 }
 .course-import-discard {
   min-height: 40px;

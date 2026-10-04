@@ -186,6 +186,28 @@ it("classifies timeouts, truncation, empty and malformed responses", async () =>
     ).parse(image),
   ).rejects.toMatchObject({ name: "ProviderError", kind: "TIMEOUT" });
 
+  // finish=length with EMPTY content is a truncated answer, not an empty
+  // one: checking emptiness first mislabelled it and burned a retry.
+  const capped = recorder([
+    new Response(
+      JSON.stringify({
+        choices: [
+          {
+            finish_reason: "length",
+            message: { role: "assistant", content: "" },
+          },
+        ],
+      }),
+      { status: 200 },
+    ),
+  ]);
+  await expect(
+    new ChatCompletionsCourseImportParser(config, capped.transport).parse(
+      image,
+    ),
+  ).rejects.toMatchObject({ name: "ProviderError", kind: "TRUNCATED" });
+  expect(capped.calls).toHaveLength(1);
+
   // Non-JSON 200 body: garbled gateway response, retried once as UNAVAILABLE.
   const garbled = recorder([
     new Response("not json", { status: 200 }),
