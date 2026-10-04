@@ -19,6 +19,15 @@ import type { RateLimiter } from "../rateLimit.js";
 
 const MAX_IMPORT_BYTES = 15 * 1024 * 1024;
 
+/** Kind of the file being uploaded now; null = unsupported media type. */
+function courseImportSourceType(
+  mediaType: string,
+): CourseImportSourceType | null {
+  if (mediaType === "application/pdf") return "PDF";
+  if (mediaType.startsWith("image/")) return "IMAGE";
+  return null;
+}
+
 export interface CourseImportParser {
   parse(input: {
     sourceType: CourseImportSourceType;
@@ -275,17 +284,14 @@ export class CloudCourseImportManager {
         409,
         "Course import is already committed",
       );
-    const mediaMatches =
-      (current.source_type === "PDF" &&
-        source.media_type === "application/pdf") ||
-      (current.source_type === "IMAGE" &&
-        source.media_type.startsWith("image/"));
-    if (!mediaMatches)
-      throw new CloudError(
-        "VALIDATION_ERROR",
-        400,
-        "Import source does not match its declared type",
-      );
+    // The type comes from the file the user picked now, not from the type
+    // the job was created with: the panel offers "重新选择课程表文件" on a
+    // pending job, so switching image -> PDF must work. Matching against the
+    // stored type rejected that with an English message that errors.ts
+    // translated into the oversized-file copy, hiding the real cause.
+    const uploadedType = courseImportSourceType(source.media_type);
+    if (!uploadedType)
+      throw new CloudError("VALIDATION_ERROR", 400, "只支持 PDF 和图片文件。");
     const bytes = decodeBase64(source.content_base64);
     if (!this.parser)
       throw new CloudError(
@@ -308,7 +314,7 @@ export class CloudCourseImportManager {
       for (let attempt = 0; ; attempt++) {
         try {
           const raw: unknown = await this.parser.parse({
-            sourceType: current.source_type,
+            sourceType: uploadedType,
             fileName: source.file_name,
             mediaType: source.media_type,
             contentBase64: bytes.toString("base64"),
@@ -333,9 +339,16 @@ export class CloudCourseImportManager {
       const message = importFailureMessage(error);
       await this.db.query(
         `UPDATE course_import_jobs SET status='FAILED',error_message=$3,
-         source_name=$4,source_media_type=$5,updated_at=now()
+         source_name=$4,source_media_type=$5,source_type=$6,updated_at=now()
          WHERE id=$1 AND owner_id=$2 AND status <> 'COMMITTED'`,
-        [id, ownerId, message, source.file_name, source.media_type],
+        [
+          id,
+          ownerId,
+          message,
+          source.file_name,
+          source.media_type,
+          uploadedType,
+        ],
       );
       throw new CloudError("IMPORT_FAILED", 422, message, {}, { cause: error });
     }
@@ -381,8 +394,9 @@ export class CloudCourseImportManager {
         `WITH changed AS (
            UPDATE course_import_jobs SET source_name=$3,source_media_type=$4,
              source_sha256=$5,preview=$6::jsonb,resolutions='{}'::jsonb,
-             status=$7,error_message=NULL,commit_result=NULL,committed_at=NULL,
-             updated_at=now() WHERE id=$1 AND owner_id=$2 RETURNING *
+             status=$7,source_type=$8,error_message=NULL,commit_result=NULL,
+             committed_at=NULL,updated_at=now()
+             WHERE id=$1 AND owner_id=$2 RETURNING *
          ) SELECT row_to_json(changed) AS value FROM changed`,
         [
           id,
@@ -392,6 +406,7 @@ export class CloudCourseImportManager {
           sourceHash,
           JSON.stringify(preview),
           needsResolution ? "NEEDS_RESOLUTION" : "READY",
+          uploadedType,
         ],
       );
       return publicJob(updated.rows[0]!.value);

@@ -482,7 +482,7 @@ it("maps provider and source failures to product messages and stays recoverable"
   }
 });
 
-it("refuses a source whose media type does not match the declared import type", async () => {
+it("accepts a different media type when the user re-picks a file", async () => {
   const { postgres, academic, imports, server } = await harness({
     parse: async () => parsedCourses,
   });
@@ -492,6 +492,10 @@ it("refuses a source whose media type does not match the declared import type", 
       start_date: "2026-09-01",
       end_date: "2026-12-31",
     });
+    // The job was created from a screenshot; the panel then offers
+    // "重新选择课程表文件" and the user picks a PDF. Comparing the upload
+    // against the stored type rejected that with an English message that
+    // errors.ts translated into the oversized-file copy.
     const job = await imports.start(owner, semester.id, "IMAGE");
     const response = await request(
       server,
@@ -500,13 +504,20 @@ it("refuses a source whose media type does not match the declared import type", 
       {
         file_name: "课程表.pdf",
         media_type: "application/pdf",
-        content_base64: Buffer.from("not an image").toString("base64"),
+        content_base64: Buffer.from("%PDF deterministic fixture").toString(
+          "base64",
+        ),
       },
     );
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe("VALIDATION_ERROR");
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({
+      source_type: "PDF",
+      status: "READY",
+    });
     expect(await imports.get(owner, job.id)).toMatchObject({
-      status: "AWAITING_SOURCE",
+      source_type: "PDF",
+      status: "READY",
+      error_message: null,
     });
   } finally {
     await server.close();
@@ -741,6 +752,35 @@ it("discards a recognition result instead of letting it resurface", async () => 
       (await request(server, "DELETE", `/api/v1/course-imports/${second.id}`))
         .statusCode,
     ).toBe(409);
+  } finally {
+    await postgres.close();
+  }
+});
+
+it("rejects a source that is neither a PDF nor an image", async () => {
+  const parser: CourseImportParser = { parse: async () => parsedCourses };
+  const { academic, imports, postgres } = await harness(parser);
+  try {
+    const current = await academic.createSemester(owner, randomUUID(), {
+      name: "2026 秋季学期",
+      start_date: "2026-09-01",
+      end_date: "2026-12-31",
+    });
+    const job = await imports.start(owner, current.id, "PDF");
+    // Called directly: HTTP would be stopped by the media_type enum first.
+    await expect(
+      imports.parseSource(owner, job.id, {
+        file_name: "notes.txt",
+        media_type: "text/plain",
+        content_base64: Buffer.from("hello").toString("base64"),
+      }),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "只支持 PDF 和图片文件。",
+    });
+    expect(await imports.get(owner, job.id)).toMatchObject({
+      status: "AWAITING_SOURCE",
+    });
   } finally {
     await postgres.close();
   }

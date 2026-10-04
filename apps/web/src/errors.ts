@@ -29,7 +29,13 @@ const known: [RegExp, string][] = [
     "无法可靠识别该文件，请重新上传清晰文件。",
   ],
   [/IMPORT_FAILED/i, "课程表导入未能完成，文件已保留，请重试。"],
-  [/Import source|15 MB/i, "课程表文件需要在 15 MB 以内。"],
+  // "Invalid import source" is a corrupt/misread payload, not a size
+  // problem — mapping it to the size copy hid the real cause.
+  [/Invalid import source/i, "课程表文件读取异常，请重新选择一次。"],
+  [
+    /Import source must be between 1 byte and 15 MB|15 MB/i,
+    "课程表文件需要在 15 MB 以内。",
+  ],
   [/AUTH_REQUIRED|Authentication required|401/i, "请先登录后再试。"],
   [/RATE_LIMITED|rate limit/i, "请求过于频繁，请稍后重试。"],
   [
