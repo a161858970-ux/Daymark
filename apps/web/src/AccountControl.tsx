@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AiTaskProgress } from "./AiTaskProgress.js";
 import {
   authAdapter,
   authClient,
@@ -189,6 +190,7 @@ export function AccountControl({
 
   return (
     <div className="account-control" ref={rootRef}>
+      <AiTaskProgress />
       <button
         ref={buttonRef}
         type="button"

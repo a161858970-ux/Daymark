@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { beginAiTask } from "./aiTaskStore.js";
 import {
   conflictResolutionSchema,
   interpretationSchema,
@@ -72,6 +73,27 @@ export async function requestCaptureInterpretation(
   if (!navigator.onLine)
     throw new Error("当前离线；记录已保存在本机，可稍后整理。");
   const token = await synchronizeAuthenticatedData();
+  // From here the backend waits on the model; the widget covers that window
+  // even when the user switches views while the answer is still coming.
+  const endAiTask = beginAiTask();
+  try {
+    return await runCaptureInterpretation(
+      token,
+      captureId,
+      currentCourseId,
+      candidateCourseIds,
+    );
+  } finally {
+    endAiTask();
+  }
+}
+
+async function runCaptureInterpretation(
+  token: string,
+  captureId: string,
+  currentCourseId: string | null,
+  candidateCourseIds: string[],
+): Promise<CaptureInterpretation> {
   const response = await fetch("/api/v1/ai/capture-interpretations", {
     method: "POST",
     headers: {

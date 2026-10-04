@@ -6,6 +6,7 @@ import {
   type CourseImportSourceType,
 } from "@course-manager/contracts";
 import { synchronizeAuthenticatedData } from "./authSync.js";
+import { beginAiTask } from "./aiTaskStore.js";
 
 async function responseData<T>(response: Response): Promise<T> {
   const body = (await response.json()) as {
@@ -65,18 +66,25 @@ async function uploadSource(
   jobId: string,
   file: File,
 ): Promise<CourseImportJob> {
-  return call<CourseImportJob>(
-    token,
-    `/api/v1/course-imports/${jobId}/source`,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        file_name: file.name,
-        media_type: file.type,
-        content_base64: await fileBase64(file),
-      }),
-    },
-  );
+  // The server parses with the AI model while this request is open; the
+  // widget must start when the upload leaves, not when the answer lands.
+  const endAiTask = beginAiTask();
+  try {
+    return await call<CourseImportJob>(
+      token,
+      `/api/v1/course-imports/${jobId}/source`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          file_name: file.name,
+          media_type: file.type,
+          content_base64: await fileBase64(file),
+        }),
+      },
+    );
+  } finally {
+    endAiTask();
+  }
 }
 
 export async function pendingCourseImports(
