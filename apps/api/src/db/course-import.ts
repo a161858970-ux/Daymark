@@ -94,19 +94,36 @@ function publicJob(row: ImportJobRow): CourseImportJob {
 
 function decodeBase64(value: string): Buffer {
   const compact = value.replace(/\s+/g, "");
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(compact) || compact.length % 4 !== 0)
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(compact) || compact.length % 4 !== 0) {
+    // Engineering detail for the API log only (never the payload): which
+    // check rejected the upload, and how big it was.
+    console.error(
+      `[IMPORT_SOURCE] rejected: base64Length=${compact.length} ` +
+        `multipleOfFour=${compact.length % 4 === 0} ` +
+        `base64Charset=${/^[A-Za-z0-9+/=]*$/.test(compact)}`,
+    );
     throw new CloudError("VALIDATION_ERROR", 400, "Invalid import source");
+  }
   const bytes = Buffer.from(compact, "base64");
-  if (!bytes.length || bytes.length > MAX_IMPORT_BYTES)
+  if (!bytes.length || bytes.length > MAX_IMPORT_BYTES) {
+    console.error(
+      `[IMPORT_SOURCE] rejected: decodedBytes=${bytes.length} ` +
+        `limit=${MAX_IMPORT_BYTES}`,
+    );
     throw new CloudError(
       "VALIDATION_ERROR",
       400,
       "Import source must be between 1 byte and 15 MB",
     );
+  }
   if (
     bytes.toString("base64").replace(/=+$/u, "") !== compact.replace(/=+$/u, "")
-  )
+  ) {
+    console.error(
+      `[IMPORT_SOURCE] rejected: round-trip mismatch base64Length=${compact.length}`,
+    );
     throw new CloudError("VALIDATION_ERROR", 400, "Invalid import source");
+  }
   return bytes;
 }
 
