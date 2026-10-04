@@ -1103,7 +1103,9 @@ export class CourseManager {
       .filter((value) => value.deleted_at === null)
       .sort(
         (a, b) =>
-          a.weekday - b.weekday || a.start_time.localeCompare(b.start_time),
+          a.weekday - b.weekday ||
+          // Undated rows (start_time null) sort after timed ones.
+          (a.start_time ?? "99:99").localeCompare(b.start_time ?? "99:99"),
       );
   }
 
@@ -1129,13 +1131,21 @@ export class CourseManager {
     for (const value of schedules) {
       const validWeek = (week: number | null) =>
         week === null || (Number.isSafeInteger(week) && week > 0);
+      // Both times or neither; when present they must be valid HH:MM with
+      // end strictly after start — mirrors the database CHECK.
+      const timesValid =
+        value.start_time === null && value.end_time === null
+          ? true
+          : value.start_time !== null &&
+            value.end_time !== null &&
+            time.test(value.start_time) &&
+            time.test(value.end_time) &&
+            value.start_time < value.end_time;
       if (
         !Number.isSafeInteger(value.weekday) ||
         value.weekday < 1 ||
         value.weekday > 7 ||
-        !time.test(value.start_time) ||
-        !time.test(value.end_time) ||
-        value.start_time >= value.end_time ||
+        !timesValid ||
         !validWeek(value.week_start) ||
         !validWeek(value.week_end) ||
         (value.week_start !== null &&
@@ -1152,11 +1162,17 @@ export class CourseManager {
       course_id: courseId,
       ...value,
       start_time:
-        value.start_time.length === 5
-          ? `${value.start_time}:00`
-          : value.start_time,
+        value.start_time === null
+          ? null
+          : value.start_time.length === 5
+            ? `${value.start_time}:00`
+            : value.start_time,
       end_time:
-        value.end_time.length === 5 ? `${value.end_time}:00` : value.end_time,
+        value.end_time === null
+          ? null
+          : value.end_time.length === 5
+            ? `${value.end_time}:00`
+            : value.end_time,
       created_at: now,
       updated_at: now,
       deleted_at: null,

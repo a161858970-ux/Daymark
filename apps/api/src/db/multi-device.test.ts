@@ -27,7 +27,11 @@ afterEach(async () => {
 
 async function harness() {
   const postgres = new PGlite();
-  for (const name of ["001_initial.sql", "002_collection_sync.sql"]) {
+  for (const name of [
+    "001_initial.sql",
+    "002_collection_sync.sql",
+    "005_schedule_times_nullable.sql",
+  ]) {
     const path = fileURLToPath(
       new URL(`../../../../backend/migrations/${name}`, import.meta.url),
     );

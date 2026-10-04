@@ -24,6 +24,7 @@ async function harness(parser: CourseImportParser, limiter?: RateLimiter) {
     "001_initial.sql",
     "002_collection_sync.sql",
     "003_course_import.sql",
+    "005_schedule_times_nullable.sql",
   ]) {
     const path = fileURLToPath(
       new URL(`../../../../backend/migrations/${name}`, import.meta.url),
@@ -405,6 +406,57 @@ it("keeps a failed parse recoverable and commits no partial Course data", async 
     expect(
       (await cloud.listCourses(owner, semester.id, null, 50)).data,
     ).toHaveLength(2);
+  } finally {
+    await server.close();
+    await postgres.close();
+  }
+});
+
+it("imports a periods-only timetable with null clock times end to end", async () => {
+  let calls = 0;
+  const parser: CourseImportParser = {
+    parse: async () => {
+      calls += 1;
+      return {
+        courses: parsedCourses.courses.map((course) => ({
+          ...course,
+          schedules: course.schedules.map((schedule) => ({
+            ...schedule,
+            start_time: null,
+            end_time: null,
+            stage_label: "12-13节",
+          })),
+        })),
+      };
+    },
+  };
+  const { postgres, academic, imports, server } = await harness(parser);
+  try {
+    const semester = await academic.createSemester(owner, randomUUID(), {
+      name: "2026 秋季学期",
+      start_date: "2026-09-01",
+      end_date: "2026-12-31",
+    });
+    const job = await imports.start(owner, semester.id, "IMAGE");
+    const source = {
+      file_name: "课程表.png",
+      media_type: "image/png",
+      content_base64: Buffer.from("image fixture").toString("base64"),
+    };
+    // null times pass the contract, so the first round is already valid —
+    // no schema retry (the old end>start failure would have needed two).
+    const ready = await imports.parseSource(owner, job.id, source);
+    expect(ready.status).toBe("READY");
+    expect(calls).toBe(1);
+    const result = await imports.commit(owner, job.id, randomUUID());
+    expect(result.course_ids.length).toBeGreaterThan(0);
+    const rows = await academic.schedules(owner, result.course_ids[0]!);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0]).toMatchObject({
+      start_time: null,
+      end_time: null,
+      stage_label: "12-13节",
+    });
   } finally {
     await server.close();
     await postgres.close();

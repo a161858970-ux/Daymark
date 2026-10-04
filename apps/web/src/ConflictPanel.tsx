@@ -42,8 +42,10 @@ function collectionLines(value: unknown): string[] {
     const entry = raw as Record<string, unknown>;
     if (
       typeof entry.weekday === "number" &&
-      typeof entry.start_time === "string" &&
-      typeof entry.end_time === "string"
+      (entry.start_time === null || typeof entry.start_time === "string") &&
+      (entry.end_time === null || typeof entry.end_time === "string") &&
+      entry.start_time !== undefined &&
+      entry.end_time !== undefined
     )
       return scheduleSummary(entry as unknown as ScheduleFields);
     if (typeof entry.week_number === "number")

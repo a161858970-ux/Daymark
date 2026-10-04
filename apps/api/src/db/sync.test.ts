@@ -414,6 +414,13 @@ it("syncs CourseSchedule as a separate course fact with owner and version checks
     new URL("../../../../backend/migrations/001_initial.sql", import.meta.url),
   );
   await db.exec(await readFile(migration, "utf8"));
+  const nullableMigration = fileURLToPath(
+    new URL(
+      "../../../../backend/migrations/005_schedule_times_nullable.sql",
+      import.meta.url,
+    ),
+  );
+  await db.exec(await readFile(nullableMigration, "utf8"));
   const port: CloudDatabase = {
     query: async (sql, params) => db.query(sql, params),
     transaction: (work) =>
@@ -471,6 +478,30 @@ it("syncs CourseSchedule as a separate course fact with owner and version checks
       result: "ACK",
       entity_version: 1,
     });
+    // Periods-only member: both times null syncs as-is with the stage label.
+    const undated = create("COURSE_SCHEDULE", randomUUID(), {
+      course_id: courseId,
+      weekday: 5,
+      start_time: null,
+      end_time: null,
+      week_start: null,
+      week_end: null,
+      classroom: null,
+      stage_label: "12-13节",
+      created_at: now,
+      updated_at: now,
+    });
+    expect(await sync.pushOne(firstOwner, undated)).toMatchObject({
+      result: "ACK",
+    });
+    const undatedRows = await port.query<{
+      start_time: string | null;
+      stage_label: string | null;
+    }>(
+      "SELECT start_time, stage_label FROM course_schedules WHERE start_time IS NULL",
+    );
+    expect(undatedRows.rows).toHaveLength(1);
+    expect(undatedRows.rows[0]).toMatchObject({ stage_label: "12-13节" });
     const deletion = {
       mutation_id: randomUUID(),
       entity_type: "COURSE_SCHEDULE" as const,
@@ -501,7 +532,9 @@ it("syncs CourseSchedule as a separate course fact with owner and version checks
       changes.data
         .filter((value) => value.entity_type === "COURSE_SCHEDULE")
         .map((value) => value.operation),
-    ).toEqual(["CREATE", "DELETE"]);
+      // Two CREATEs: the timed member plus the periods-only member pushed
+      // for the null-times case, then the timed member's DELETE.
+    ).toEqual(["CREATE", "CREATE", "DELETE"]);
   } finally {
     await db.close();
   }

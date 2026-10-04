@@ -7,17 +7,36 @@ export const courseImportSourceTypeSchema = z.enum(["PDF", "IMAGE"]);
 export const courseImportScheduleSchema = z
   .object({
     weekday: z.number().int().min(1).max(7),
-    start_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/),
-    end_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/),
+    // null: the source gives periods only, no clock time — an absent fact
+    // is stored as absent, never guessed.
+    start_time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/)
+      .nullable(),
+    end_time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/)
+      .nullable(),
     week_start: z.number().int().positive().nullable(),
     week_end: z.number().int().positive().nullable(),
     classroom: z.string().trim().max(500).nullable(),
     stage_label: z.string().trim().max(500).nullable(),
   })
   .strict()
-  .refine((value) => value.start_time < value.end_time, {
-    message: "Course schedule end must follow start",
-  })
+  .refine(
+    (value) => (value.start_time === null) === (value.end_time === null),
+    {
+      message: "Course schedule must hold both times or neither",
+    },
+  )
+  .refine(
+    (value) =>
+      value.start_time === null ||
+      (value.end_time !== null && value.start_time < value.end_time),
+    {
+      message: "Course schedule end must follow start",
+    },
+  )
   .refine(
     (value) =>
       value.week_start === null ||

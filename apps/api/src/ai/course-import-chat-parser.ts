@@ -50,8 +50,9 @@ const schema = {
               ],
               properties: {
                 weekday: { type: "integer", minimum: 1, maximum: 7 },
-                start_time: { type: "string" },
-                end_time: { type: "string" },
+                // null: the timetable gave periods only, never a clock time.
+                start_time: { type: ["string", "null"] },
+                end_time: { type: ["string", "null"] },
                 week_start: nullablePositiveInteger,
                 week_end: nullablePositiveInteger,
                 classroom: nullableString,
@@ -75,8 +76,8 @@ const instructions = [
   // times must be worked out from the period label with end > start; an
   // example time in the prompt anchored the model to "08:00"/"08:00", which
   // failed the schedule refine on all 26 meetings.
-  "Times are zero-padded 24-hour HH:MM; when the timetable labels rows by period (节次) or a band instead of clock times, work out each meeting's start and end from its period — approximate times are fine, decide quickly — so that end is always strictly after start, and keep the period text in stage_label.",
-  "Use null when any other fact is absent or unreadable, and never invent courses, rooms, teachers or week ranges.",
+  "Times are zero-padded 24-hour HH:MM when the timetable states them; when it only labels rows by period (节次) or a band, return start_time and end_time as null — never guess a clock time — and keep the period text in stage_label.",
+  "Use null when any other fact is absent or unreadable, and never invent courses, rooms, teachers, times or week ranges.",
   "Return each course once with all of its schedules.",
 ].join(" ");
 

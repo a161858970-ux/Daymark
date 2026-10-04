@@ -29,18 +29,28 @@ export function summaryParts(value: ScheduleFields): {
   weekday: string;
   rest: string;
 } {
-  let rest = `${value.start_time.slice(0, 5)}–${value.end_time.slice(0, 5)}`;
+  const hasTime = Boolean(value.start_time && value.end_time);
+  // Without a stated clock time the period label leads the line; with one,
+  // the line is unchanged and the period label stays an extra part.
+  const parts: string[] = [
+    hasTime
+      ? `${value.start_time!.slice(0, 5)}–${value.end_time!.slice(0, 5)}`
+      : value.stage_label?.trim() || "时间待定",
+  ];
   if (value.week_start !== null && value.week_start !== undefined) {
-    rest += ` · 第${value.week_start}${
-      value.week_end !== null &&
-      value.week_end !== undefined &&
-      value.week_end !== value.week_start
-        ? `–${value.week_end}`
-        : ""
-    }周`;
+    parts.push(
+      `第${value.week_start}${
+        value.week_end !== null &&
+        value.week_end !== undefined &&
+        value.week_end !== value.week_start
+          ? `–${value.week_end}`
+          : ""
+      }周`,
+    );
   }
-  if (value.classroom) rest += ` · ${value.classroom}`;
-  if (value.stage_label) rest += ` · ${value.stage_label}`;
+  if (value.classroom) parts.push(value.classroom);
+  if (hasTime && value.stage_label) parts.push(value.stage_label);
+  const rest = parts.join(" · ");
   return {
     weekday: weekdays[value.weekday - 1] ?? String(value.weekday),
     rest,

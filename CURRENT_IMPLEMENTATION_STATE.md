@@ -148,7 +148,7 @@ Phase 6 的自动证据包括：
 
 - **现象**：普通 `pnpm test` 显示 1 skipped，而 `pnpm test:postgres` 在同一机器直接失败。**原因**：前者允许缺少 `REAL_DATABASE_URL` 时跳过真实 PostgreSQL 文件，后者是显式外部 gate。**解决**：本地回归使用 `pnpm test`；只在提供可丢弃真实数据库后运行 `pnpm test:postgres`，不得把 skipped 写成真实 PASS。
 - **现象**：当前环境直接执行 `pnpm exec prettier ...` 报找不到命令。**原因**：本机 pnpm command shim 没有通过该调用解析 root dev binary。**解决**：使用已验证的项目脚本 `pnpm format` 或 `pnpm format:check`。
-- **现象**：旧验证文档只列两份 migration。**原因**：Course Import 后新增 `003_course_import.sql`，历史说明未同步。**解决**：文档已修正；真实数据库必须依次应用 `001_initial.sql`、`002_collection_sync.sql`、`003_course_import.sql`、`004_reminder_delivery.sql`。
+- **现象**：旧验证文档只列两份 migration。**原因**：Course Import 后新增 `003_course_import.sql`，历史说明未同步。**解决**：文档已修正；真实数据库必须依次应用 `001_initial.sql`、`002_collection_sync.sql`、`003_course_import.sql`、`004_reminder_delivery.sql`、`005_schedule_times_nullable.sql`（2026-10-05 新增：课表行允许无钟点时间——PDF 只有节次时 `start_time`/`end_time` 存 NULL，两值必须同有或同无，由 `course_schedules_time_range_check` 约束）。
 - **现象**：无外部配置时 API 只有 health，Course Import 不能上传解析。**原因**：认证业务路由要求同时配置 `DATABASE_URL` 与 `SUPABASE_URL`，provider 另需 `AI_API_KEY`（MiMo）。**解决**：本地继续使用 IndexedDB、确定性解析和手工 Course/CourseSchedule；外部 lane 按 `docs/REAL_POSTGRES_VERIFICATION.md` 配置。
 - **现象**：API 前端报「稍后重试」，端口 3100 无监听。**原因**：API 由 Hermes 会话托管，关闭 Hermes 被 SIGTERM 连坐杀掉（累计 4 次）。**解决**：改用独立最小化窗口启动——`%TEMP%\start-cm-api.cmd`（内含 5 秒自动重启循环 + 日志落 `%TEMP%\cm-api.log`），与会话生命周期解耦；排障先 `netstat -ano | grep :3100`，再看日志。
 - **现象**：双 profile 验收时"断网改标题 → 重连不上去 / 重开退回旧值"，一度判为数据丢失。**原因**：B 端用了**无痕窗口**，关窗即清空 IndexedDB。**解决**：持久化/同步类验收**必须用普通窗口**；无痕窗口结果无效。

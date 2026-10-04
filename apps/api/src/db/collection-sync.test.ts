@@ -13,7 +13,11 @@ const now = "2026-09-23T08:00:00.000Z";
 
 async function setup() {
   const db = new PGlite();
-  for (const name of ["001_initial.sql", "002_collection_sync.sql"]) {
+  for (const name of [
+    "001_initial.sql",
+    "002_collection_sync.sql",
+    "005_schedule_times_nullable.sql",
+  ]) {
     const path = fileURLToPath(
       new URL(`../../../../backend/migrations/${name}`, import.meta.url),
     );

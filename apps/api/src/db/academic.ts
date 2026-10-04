@@ -25,10 +25,19 @@ export const weekInputSchema = z.object({
   end_date: dateOnlySchema,
 });
 
+// null = no clock time stated in the source (periods only). The both-or-
+// neither and end>start rules stay in replaceSchedules so a violation
+// surfaces as the usual 400 VALIDATION_ERROR instead of a thrown ZodError.
 export const scheduleInputSchema = z.object({
   weekday: z.number().int().min(1).max(7),
-  start_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/),
-  end_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/),
+  start_time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/)
+    .nullable(),
+  end_time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/)
+    .nullable(),
   week_start: z.number().int().positive().nullable(),
   week_end: z.number().int().positive().nullable(),
   classroom: z.string().nullable(),
@@ -343,8 +352,15 @@ export class CloudAcademicManager {
         if (!course.rows[0])
           throw new CloudError("NOT_FOUND", 404, "Course not found");
         for (const value of schedules) {
+          // Both times or neither; when present, end must follow start.
+          const timesValid =
+            value.start_time === null && value.end_time === null
+              ? true
+              : value.start_time !== null &&
+                value.end_time !== null &&
+                value.start_time < value.end_time;
           if (
-            value.start_time >= value.end_time ||
+            !timesValid ||
             (value.week_start !== null &&
               value.week_end !== null &&
               value.week_start > value.week_end)

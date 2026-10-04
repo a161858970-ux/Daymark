@@ -35,8 +35,9 @@ export interface Course extends EntityBase {
 export interface CourseSchedule extends EntityBase {
   course_id: UUID;
   weekday: number;
-  start_time: string;
-  end_time: string;
+  /** null = the timetable states no clock time (periods only). */
+  start_time: string | null;
+  end_time: string | null;
   week_start: number | null;
   week_end: number | null;
   classroom: string | null;

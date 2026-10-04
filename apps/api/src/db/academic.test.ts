@@ -24,6 +24,13 @@ it("serves owner-scoped Semester weeks and atomic Course schedules on the canoni
     ),
   );
   await db.exec(await readFile(collectionMigration, "utf8"));
+  const nullableMigration = fileURLToPath(
+    new URL(
+      "../../../../backend/migrations/005_schedule_times_nullable.sql",
+      import.meta.url,
+    ),
+  );
+  await db.exec(await readFile(nullableMigration, "utf8"));
   const port: CloudDatabase = {
     query: async (sql, params) => db.query(sql, params),
     transaction: (work) =>
@@ -205,6 +212,54 @@ it("serves owner-scoped Semester weeks and atomic Course schedules on the canoni
       (await request("GET", `/api/v1/courses/${courseId}/schedules`, "two"))
         .statusCode,
     ).toBe(404);
+    // Periods-only timetable: both times null is stored as-is with its
+    // stage label; a one-sided pair is rejected with the usual 400.
+    const undated = await request(
+      "PUT",
+      `/api/v1/courses/${courseId}/schedules`,
+      "one",
+      {
+        schedules: [
+          {
+            weekday: 5,
+            start_time: null,
+            end_time: null,
+            week_start: 1,
+            week_end: 16,
+            classroom: null,
+            stage_label: "12-13节",
+          },
+        ],
+      },
+      randomUUID(),
+    );
+    expect(undated.statusCode).toBe(200);
+    expect(undated.json().data[0]).toMatchObject({
+      weekday: 5,
+      start_time: null,
+      end_time: null,
+      stage_label: "12-13节",
+    });
+    const oneSided = await request(
+      "PUT",
+      `/api/v1/courses/${courseId}/schedules`,
+      "one",
+      {
+        schedules: [
+          {
+            weekday: 5,
+            start_time: "14:00:00",
+            end_time: null,
+            week_start: null,
+            week_end: null,
+            classroom: null,
+            stage_label: null,
+          },
+        ],
+      },
+      randomUUID(),
+    );
+    expect(oneSided.statusCode).toBe(400);
     expect(
       (await request("GET", "/api/v1/items?has_time=true", "one")).json().data,
     ).toEqual([]);

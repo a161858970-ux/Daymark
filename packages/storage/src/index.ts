@@ -71,11 +71,13 @@ function courseScheduleSnapshot(
   const endTime = textField(value, "end_time");
   const createdAt = textField(value, "created_at");
   const updatedAt = textField(value, "updated_at");
+  // Times may be absent together (periods-only timetable); one without the
+  // other is an invalid row and is dropped, as before.
+  const bothTimes = (startTime === null) === (endTime === null);
   if (
     !id ||
     !courseId ||
-    !startTime ||
-    !endTime ||
+    !bothTimes ||
     !createdAt ||
     !updatedAt ||
     !Number.isSafeInteger(value.weekday)

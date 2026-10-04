@@ -34,6 +34,13 @@ it("applies the canonical schema and enforces two-state Item and provenance cons
       ),
     );
     await db.exec(await readFile(reminderPath, "utf8"));
+    const nullablePath = fileURLToPath(
+      new URL(
+        "../../../../backend/migrations/005_schedule_times_nullable.sql",
+        import.meta.url,
+      ),
+    );
+    await db.exec(await readFile(nullablePath, "utf8"));
     const tables = await db.query<{ tablename: string }>(
       "SELECT tablename FROM pg_tables WHERE schemaname = 'public'",
     );
@@ -71,6 +78,34 @@ it("applies the canonical schema and enforces two-state Item and provenance cons
     expect(found.rows[0]?.due_at).toBeNull();
     await expect(
       db.query("UPDATE items SET status = 'OVERDUE' WHERE id = $1", [itemId]),
+    ).rejects.toThrow();
+
+    // 005: a periods-only timetable carries no clock time. Both times are
+    // absent together; a one-sided or inverted pair still violates the CHECK.
+    const undatedCourse = "55555555-5555-4555-8555-555555555555";
+    await db.query(
+      "INSERT INTO courses(id, owner_id, name, created_at, updated_at) VALUES($1,$2,'健康经济学',$3,$3)",
+      [undatedCourse, owner, now],
+    );
+    await db.query(
+      "INSERT INTO course_schedules(id, owner_id, course_id, weekday, start_time, end_time, stage_label, created_at, updated_at) VALUES('66666666-6666-4666-8666-666666666666',$1,$2,1,NULL,NULL,'12-13节',$3,$3)",
+      [owner, undatedCourse, now],
+    );
+    const undated = await db.query<{ start_time: string | null }>(
+      "SELECT start_time FROM course_schedules WHERE id='66666666-6666-4666-8666-666666666666'",
+    );
+    expect(undated.rows[0]?.start_time).toBeNull();
+    await expect(
+      db.query(
+        "INSERT INTO course_schedules(id, owner_id, course_id, weekday, start_time, end_time, created_at, updated_at) VALUES('77777777-7777-4777-8777-777777777777',$1,$2,1,'08:00',NULL,$3,$3)",
+        [owner, undatedCourse, now],
+      ),
+    ).rejects.toThrow();
+    await expect(
+      db.query(
+        "INSERT INTO course_schedules(id, owner_id, course_id, weekday, start_time, end_time, created_at, updated_at) VALUES('88888888-8888-4888-8888-888888888888',$1,$2,1,'09:00','08:00',$3,$3)",
+        [owner, undatedCourse, now],
+      ),
     ).rejects.toThrow();
   } finally {
     await db.close();

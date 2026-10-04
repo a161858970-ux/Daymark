@@ -27,6 +27,7 @@ realPostgres(
         "002_collection_sync.sql",
         "003_course_import.sql",
         "004_reminder_delivery.sql",
+        "005_schedule_times_nullable.sql",
       ])
         await client.query(await readFile(join(directory, name), "utf8"));
       const port: CloudDatabase = {

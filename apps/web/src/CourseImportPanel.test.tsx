@@ -63,3 +63,36 @@ it("keeps import as a reviewable Course flow with an explicit duplicate decision
   expect(markup).toContain("disabled");
   expect(markup).not.toContain("自动生成事项");
 });
+
+it("shows the period label instead of a clock time when the source has none", () => {
+  const undated: CourseImportJob = {
+    ...job,
+    courses: [
+      {
+        ...job.courses[0]!,
+        schedules: [
+          {
+            weekday: 3,
+            start_time: null,
+            end_time: null,
+            week_start: 1,
+            week_end: 16,
+            classroom: null,
+            stage_label: "12-13节",
+          },
+        ],
+      },
+    ],
+  };
+  const markup = renderToStaticMarkup(
+    <CourseImportReview
+      job={undated}
+      busy={false}
+      onResolve={() => undefined}
+      onCommit={() => undefined}
+      onDiscard={() => undefined}
+    />,
+  );
+  expect(markup).toContain("周三 12-13节 · 第 1–16 周");
+  expect(markup).not.toContain("--");
+});

@@ -91,3 +91,33 @@ it("appends when the editing id no longer exists instead of dropping data", () =
   expect(replaced).toHaveLength(2);
   expect(replaced[1]).toEqual(entry);
 });
+
+it("shows the period label and a time placeholder for an undated row", () => {
+  const undated: CourseSchedule = {
+    ...first,
+    weekday: 5,
+    start_time: null,
+    end_time: null,
+    classroom: null,
+    stage_label: "12-13节",
+  };
+  const markup = renderToStaticMarkup(
+    <CourseScheduleList schedules={[undated]} onReplace={async () => {}} />,
+  );
+  expect(markup).toContain("</strong> 12-13节");
+  expect(markup).toContain("暂无时间");
+  expect(markup).not.toContain("时间待定");
+});
+
+it("keeps a fully empty time pair when building a replace", () => {
+  const replaced = buildScheduleReplace([first], null, {
+    ...entry,
+    start_time: null,
+    end_time: null,
+  });
+  expect(replaced.at(-1)).toMatchObject({
+    start_time: null,
+    end_time: null,
+    weekday: 5,
+  });
+});

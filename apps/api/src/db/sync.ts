@@ -259,10 +259,12 @@ export class CloudSync {
                 weekday: z.number().int().min(1).max(7),
                 start_time: z
                   .string()
-                  .regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/),
+                  .regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/)
+                  .nullable(),
                 end_time: z
                   .string()
-                  .regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/),
+                  .regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/)
+                  .nullable(),
                 week_start: z.number().int().positive().nullable(),
                 week_end: z.number().int().positive().nullable(),
                 classroom: z.string().nullable(),
@@ -271,8 +273,14 @@ export class CloudSync {
                 updated_at: isoDateTimeSchema,
               })
               .parse(input);
+            const timesValid =
+              value.start_time === null && value.end_time === null
+                ? true
+                : value.start_time !== null &&
+                  value.end_time !== null &&
+                  value.start_time < value.end_time;
             if (
-              value.start_time >= value.end_time ||
+              !timesValid ||
               (value.week_start !== null &&
                 value.week_end !== null &&
                 value.week_start > value.week_end)

@@ -32,7 +32,13 @@ function scheduleLabel(
       ? ` · 第 ${schedule.week_start}–${schedule.week_end} 周`
       : "";
   const place = schedule.classroom ? ` · ${schedule.classroom}` : "";
-  return `周${weekdays[schedule.weekday - 1]} ${schedule.start_time.slice(0, 5)}–${schedule.end_time.slice(0, 5)}${week}${place}`;
+  // No clock time in the source: show the period label (节次) instead of
+  // inventing a range.
+  const timePart =
+    schedule.start_time && schedule.end_time
+      ? `${schedule.start_time.slice(0, 5)}–${schedule.end_time.slice(0, 5)}`
+      : schedule.stage_label?.trim() || "时间待定";
+  return `周${weekdays[schedule.weekday - 1]} ${timePart}${week}${place}`;
 }
 
 export function CourseImportReview({
@@ -66,7 +72,7 @@ export function CourseImportReview({
               <ul className="course-import-schedules">
                 {course.schedules.map((schedule, index) => (
                   <li
-                    key={`${schedule.weekday}:${schedule.start_time}:${index}`}
+                    key={`${schedule.weekday}:${schedule.start_time ?? "none"}:${index}`}
                   >
                     {scheduleLabel(schedule)}
                   </li>

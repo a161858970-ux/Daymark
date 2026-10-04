@@ -35,8 +35,14 @@ const scheduleMemberSchema = z
     id: uuidSchema,
     course_id: uuidSchema,
     weekday: z.number().int().min(1).max(7),
-    start_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/),
-    end_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/),
+    start_time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/)
+      .nullable(),
+    end_time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/)
+      .nullable(),
     week_start: z.number().int().positive().nullable(),
     week_end: z.number().int().positive().nullable(),
     classroom: z.string().nullable(),
@@ -87,7 +93,8 @@ interface IdempotencyRow {
   response: CollectionPushResult;
 }
 
-function time(value: string): string {
+function time(value: string | null): string | null {
+  if (value === null) return null;
   return value.length === 5 ? `${value}:00` : value;
 }
 
@@ -108,8 +115,14 @@ function comparable(
     id: value.id,
     course_id: value.course_id,
     weekday: Number(value.weekday),
-    start_time: time(String(value.start_time)),
-    end_time: time(String(value.end_time)),
+    start_time:
+      value.start_time === null || value.start_time === undefined
+        ? null
+        : time(String(value.start_time)),
+    end_time:
+      value.end_time === null || value.end_time === undefined
+        ? null
+        : time(String(value.end_time)),
     week_start: value.week_start === null ? null : Number(value.week_start),
     week_end: value.week_end === null ? null : Number(value.week_end),
     classroom: value.classroom ?? null,
@@ -254,8 +267,15 @@ function validateMembers(
     }
   } else {
     for (const schedule of members as ScheduleMember[]) {
+      // Both times or neither; when present, end must follow start.
+      const timesValid =
+        schedule.start_time === null && schedule.end_time === null
+          ? true
+          : schedule.start_time !== null &&
+            schedule.end_time !== null &&
+            time(schedule.start_time)! < time(schedule.end_time)!;
       if (
-        time(schedule.start_time) >= time(schedule.end_time) ||
+        !timesValid ||
         (schedule.week_start !== null &&
           schedule.week_end !== null &&
           schedule.week_start > schedule.week_end)

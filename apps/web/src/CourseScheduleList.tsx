@@ -78,8 +78,8 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
   function startEdit(value: CourseSchedule) {
     setEditingId(value.id);
     setWeekday(value.weekday);
-    setStartTime(value.start_time);
-    setEndTime(value.end_time);
+    setStartTime(value.start_time ?? "");
+    setEndTime(value.end_time ?? "");
     setWeekStart(value.week_start === null ? "" : String(value.week_start));
     setWeekEnd(value.week_end === null ? "" : String(value.week_end));
     setClassroom(value.classroom ?? "");
@@ -89,12 +89,22 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    // Times are optional now, but only as a pair: one-sided rows are invalid
+    // in the database, so reject them here with a readable message.
+    if (Boolean(startTime) !== Boolean(endTime)) {
+      setError("开始与结束时间必须同时填写，或同时留空。");
+      return;
+    }
+    if (startTime && endTime && startTime >= endTime) {
+      setError("结束时间必须晚于开始时间。");
+      return;
+    }
     try {
       await onReplace(
         buildScheduleReplace(schedules, editingId, {
           weekday,
-          start_time: startTime,
-          end_time: endTime,
+          start_time: startTime || null,
+          end_time: endTime || null,
           week_start: weekStart ? Number(weekStart) : null,
           week_end: weekEnd ? Number(weekEnd) : null,
           classroom: classroom.trim() || null,
@@ -177,7 +187,7 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
             mode="time"
             label="课程安排开始时间"
             ariaLabel="课程安排开始时间"
-            required
+            placeholder="暂无时间"
             value={startTime}
             onChange={setStartTime}
           />
@@ -188,7 +198,7 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
             mode="time"
             label="课程安排结束时间"
             ariaLabel="课程安排结束时间"
-            required
+            placeholder="暂无时间"
             value={endTime}
             onChange={setEndTime}
           />

@@ -634,3 +634,37 @@ describe("local-first persistence and Item identity", () => {
     ).rejects.toThrow("already been resolved");
   });
 });
+
+it("keeps a schedule with no clock time and rejects one-sided times", async () => {
+  const { manager } = setup();
+  const course = await manager.createCourse("统计学");
+  const [undated] = await manager.replaceCourseSchedules(course.id, [
+    {
+      weekday: 5,
+      start_time: null,
+      end_time: null,
+      week_start: null,
+      week_end: null,
+      classroom: null,
+      stage_label: "12-13节",
+    },
+  ]);
+  expect(undated).toMatchObject({
+    start_time: null,
+    end_time: null,
+    stage_label: "12-13节",
+  });
+  await expect(
+    manager.replaceCourseSchedules(course.id, [
+      {
+        weekday: 5,
+        start_time: "14:00",
+        end_time: null,
+        week_start: null,
+        week_end: null,
+        classroom: null,
+        stage_label: null,
+      },
+    ]),
+  ).rejects.toThrow(/schedule/);
+});
