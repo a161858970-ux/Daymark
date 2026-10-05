@@ -14,6 +14,7 @@ import {
   visibleOverviewItems,
 } from "@course-manager/domain";
 import type { Semester } from "@course-manager/domain";
+import { recordExternalCollectionReplacement } from "./collections.js";
 import type {
   CreateItemInput,
   CreateRawCaptureInput,
@@ -296,6 +297,20 @@ export class CloudCourseManager {
             );
         }
         const when = deletedAt ?? new Date().toISOString();
+        // A course's schedules die with it. Skipping this left orphan rows
+        // (40 found in production after a cleanup) that no view shows and
+        // that the schedule collection would keep publishing to devices.
+        await q.query(
+          `UPDATE course_schedules SET deleted_at=$3,updated_at=$3,row_version=row_version+1
+           WHERE owner_id=$1 AND course_id=$2 AND deleted_at IS NULL`,
+          [ownerId, courseId, when],
+        );
+        await recordExternalCollectionReplacement(
+          q,
+          ownerId,
+          "COURSE_SCHEDULE_COLLECTION",
+          courseId,
+        );
         const items: Item[] = [];
         for (const item of current) {
           const changed =

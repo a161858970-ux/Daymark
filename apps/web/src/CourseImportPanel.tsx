@@ -162,6 +162,18 @@ export function CourseImportReview({
  * file, no courses…); older rows without a message fall back to the generic
  * hint. Nothing is written on failure, so "no courses" is always accurate.
  */
+/**
+ * Success copy for a commit. A true reuse (same file already imported and
+ * every original course still alive) created nothing — claiming
+ * "已建立 22 门课程" there sent the user looking for courses that were
+ * never written.
+ */
+export function committedMessage(result: CourseImportCommitResult): string {
+  return result.reused_existing_import
+    ? `本学期已导入过这份课程表，未重复建立（${result.course_ids.length} 门课程已在列表中）。`
+    : `已建立 ${result.course_ids.length} 门课程。`;
+}
+
 export function importFailureNote(job: CourseImportJob | null): string | null {
   if (!job || job.status !== "FAILED") return null;
   return (
@@ -268,7 +280,7 @@ export function CourseImportPanel({
       const result = await onCommit(job.id);
       await onCommitted(result);
       setJob(null);
-      setSuccess(`已建立 ${result.course_ids.length} 门课程。`);
+      setSuccess(committedMessage(result));
     } catch (cause) {
       setError(toUserMessage(cause));
     } finally {

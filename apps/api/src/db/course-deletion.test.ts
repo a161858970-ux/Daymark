@@ -16,6 +16,15 @@ it("deletes a Course atomically with either explicit Item strategy and replays s
     new URL("../../../../backend/migrations/001_initial.sql", import.meta.url),
   );
   await db.exec(await readFile(migration, "utf8"));
+  // The schedule-collection replacement marker written by the cascade lives
+  // in 002.
+  const collectionMigration = fileURLToPath(
+    new URL(
+      "../../../../backend/migrations/002_collection_sync.sql",
+      import.meta.url,
+    ),
+  );
+  await db.exec(await readFile(collectionMigration, "utf8"));
   const port: CloudDatabase = {
     query: async (sql, params) => db.query(sql, params),
     transaction: (work) =>
@@ -127,6 +136,15 @@ it("deletes a Course atomically with either explicit Item strategy and replays s
     ).toBeNull();
 
     const removed = await courseWithItem("经济法");
+    // A course carries timetable rows; the deletion must take them along.
+    // (Inserted directly: this server harness has no academic routes.)
+    await db.query(
+      `INSERT INTO course_schedules
+         (id,owner_id,course_id,weekday,start_time,end_time,week_start,week_end,
+          classroom,stage_label,created_at,updated_at,deleted_at,row_version)
+       VALUES ($1,$2,$3,3,'14:00:00','15:40:00',1,16,'101',NULL,now(),now(),NULL,1)`,
+      [randomUUID(), firstOwner, removed.courseId],
+    );
     const stale = await request(
       "POST",
       `/api/v1/courses/${removed.courseId}/delete-with-strategy`,
@@ -149,6 +167,14 @@ it("deletes a Course atomically with either explicit Item strategy and replays s
     expect(
       (await request("GET", `/api/v1/items/${removed.itemId}`)).statusCode,
     ).toBe(404);
+    // Orphan schedules were the production finding: a deleted course left
+    // its timetable rows alive forever, invisible to every view.
+    const orphans = await db.query<{ deleted_at: string | null }>(
+      "SELECT deleted_at FROM course_schedules WHERE course_id=$1",
+      [removed.courseId],
+    );
+    expect(orphans.rows).toHaveLength(1);
+    expect(orphans.rows[0]!.deleted_at).not.toBeNull();
 
     const viaSync = await courseWithItem("线性代数");
     const mutation = {

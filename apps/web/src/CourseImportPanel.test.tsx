@@ -1,7 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import type { CourseImportJob } from "@course-manager/contracts";
-import { CourseImportReview, importFailureNote } from "./CourseImportPanel.js";
+import {
+  CourseImportReview,
+  committedMessage,
+  importFailureNote,
+} from "./CourseImportPanel.js";
 
 const job: CourseImportJob = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -113,4 +117,16 @@ it("shows the stored failure reason for a failed import instead of a generic hin
   // Anything that is not FAILED shows no failure note at all.
   expect(importFailureNote(job)).toBeNull();
   expect(importFailureNote(null)).toBeNull();
+});
+
+it("tells the truth about what a commit did", () => {
+  expect(
+    committedMessage({ course_ids: ["a", "b"], reused_existing_import: false }),
+  ).toBe("已建立 2 门课程。");
+  const reused = committedMessage({
+    course_ids: ["a", "b"],
+    reused_existing_import: true,
+  });
+  expect(reused).toContain("未重复建立");
+  expect(reused).not.toContain("已建立 2");
 });

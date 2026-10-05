@@ -523,6 +523,79 @@ it("serves repeat uploads from the parse cache and re-parses per generation", as
   }
 });
 
+it("writes fresh courses when the previous commit's courses were cleaned up", async () => {
+  const parser: CourseImportParser = {
+    fingerprint: "gen-1",
+    parse: async () => parsedCourses,
+  };
+  const { postgres, cloud, academic, imports, server } = await harness(parser);
+  try {
+    const semester = await academic.createSemester(owner, randomUUID(), {
+      name: "2026 秋季学期",
+      start_date: "2026-09-01",
+      end_date: "2026-12-31",
+    });
+    const source = {
+      file_name: "课程表.png",
+      media_type: "image/png",
+      content_base64: Buffer.from("image fixture").toString("base64"),
+    };
+
+    const first = await imports.start(owner, semester.id, "IMAGE");
+    await imports.parseSource(owner, first.id, source);
+    const firstResult = await imports.commit(owner, first.id, randomUUID());
+    expect(firstResult.reused_existing_import).toBe(false);
+    const expected = firstResult.course_ids.length;
+    expect(expected).toBeGreaterThan(0);
+    expect(
+      (await cloud.listCourses(owner, semester.id, null, 50)).data,
+    ).toHaveLength(expected);
+
+    // The production bug: the user cleaned the semester up, then imported
+    // the same file again — the stale commit record made the commit
+    // "succeed" (已建立 22 门课程) without writing a single row.
+    await postgres.query(
+      "UPDATE courses SET deleted_at=now() WHERE owner_id=$1",
+      [owner],
+    );
+    expect(
+      (await cloud.listCourses(owner, semester.id, null, 50)).data,
+    ).toHaveLength(0);
+
+    const second = await imports.start(owner, semester.id, "IMAGE");
+    await imports.parseSource(owner, second.id, source);
+    const secondResult = await imports.commit(owner, second.id, randomUUID());
+    expect(secondResult.reused_existing_import).toBe(false);
+    expect(secondResult.course_ids).toHaveLength(expected);
+    expect(secondResult.course_ids).not.toEqual(firstResult.course_ids);
+    expect(
+      (await cloud.listCourses(owner, semester.id, null, 50)).data,
+    ).toHaveLength(expected);
+
+    // Partial cleanup: survivors are kept by name (no twins), the deleted
+    // entry is created fresh.
+    const alive = (await cloud.listCourses(owner, semester.id, null, 50))
+      .data as { id: string; name: string }[];
+    const victim = alive[0]!;
+    await postgres.query("UPDATE courses SET deleted_at=now() WHERE id=$1", [
+      victim.id,
+    ]);
+    const third = await imports.start(owner, semester.id, "IMAGE");
+    await imports.parseSource(owner, third.id, source);
+    const thirdResult = await imports.commit(owner, third.id, randomUUID());
+    expect(thirdResult.reused_existing_import).toBe(false);
+    expect(thirdResult.course_ids).toHaveLength(expected);
+    expect(thirdResult.course_ids).not.toContain(victim.id);
+    const after = (await cloud.listCourses(owner, semester.id, null, 50))
+      .data as { id: string; name: string }[];
+    expect(after).toHaveLength(expected);
+    expect(new Set(after.map((course) => course.name)).size).toBe(expected);
+  } finally {
+    await server.close();
+    await postgres.close();
+  }
+});
+
 it("maps provider and source failures to product messages and stays recoverable", async () => {
   let mode: "provider" | "too_large" | "valid" = "provider";
   const parser: CourseImportParser = {

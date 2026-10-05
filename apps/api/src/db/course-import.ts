@@ -597,23 +597,39 @@ export class CloudCourseImportManager {
            WHERE owner_id=$1 AND semester_id=$2 AND source_sha256=$3`,
           [ownerId, job.semester_id, job.source_sha256],
         );
-        if (priorSource.rows[0]) {
-          const result = {
-            ...normalizeJson(priorSource.rows[0].result, {
-              course_ids: [],
-              reused_existing_import: false,
-            }),
-            reused_existing_import: true,
-          };
-          await this.finishCommit(
-            query,
-            ownerId,
-            job.id,
-            idempotencyKey,
-            requestHash,
-            result,
+        // The commit record outlives the courses it created: after a cleanup,
+        // re-importing the same file used to "succeed" without writing a
+        // single row (the success copy promised 22 courses, the list stayed
+        // empty). Reuse only while every original course is still alive;
+        // otherwise fall through to insertion and keep survivors matched by
+        // name so a partial cleanup can never duplicate them.
+        const priorResult = priorSource.rows[0]?.result ?? null;
+        let survivorsByName = new Map<string, string>();
+        if (priorResult && priorResult.course_ids.length) {
+          const alive = await query.query<{ id: string; name: string }>(
+            `SELECT id,name FROM courses
+             WHERE owner_id=$1 AND semester_id=$2 AND deleted_at IS NULL
+               AND id = ANY($3::uuid[])`,
+            [ownerId, job.semester_id, priorResult.course_ids],
           );
-          return result;
+          if (alive.rows.length === priorResult.course_ids.length) {
+            const result = {
+              ...priorResult,
+              reused_existing_import: true,
+            };
+            await this.finishCommit(
+              query,
+              ownerId,
+              job.id,
+              idempotencyKey,
+              requestHash,
+              result,
+            );
+            return result;
+          }
+          survivorsByName = new Map(
+            alive.rows.map((row) => [row.name, row.id]),
+          );
         }
 
         const courseIds: string[] = [];
@@ -625,6 +641,13 @@ export class CloudCourseImportManager {
               409,
               "Course import still needs duplicate decisions",
             );
+          const survivor = survivorsByName.get(incoming.name);
+          if (survivor) {
+            // This course survived the cleanup: keep its row (and the
+            // schedules it already owns) instead of creating a twin.
+            courseIds.push(survivor);
+            continue;
+          }
           const courseId = randomUUID();
           const inserted = await query.query<{
             value: Record<string, unknown>;
@@ -720,7 +743,9 @@ export class CloudCourseImportManager {
         await query.query(
           `INSERT INTO course_import_commits
            (owner_id,semester_id,source_sha256,job_id,result)
-           VALUES ($1,$2,$3,$4,$5::jsonb)`,
+           VALUES ($1,$2,$3,$4,$5::jsonb)
+           ON CONFLICT (owner_id,semester_id,source_sha256)
+           DO UPDATE SET job_id=$4,result=$5::jsonb,committed_at=now()`,
           [
             ownerId,
             job.semester_id,
