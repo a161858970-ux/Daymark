@@ -609,6 +609,26 @@ export function App() {
     showFeedback({ message: "课程已删除", duration: 4000 });
   }
 
+  async function deleteSemester(id: string) {
+    try {
+      const result = await courseManager.deleteSemester(id);
+      if (selectedSemesterId === id) setSelectedSemesterId(null);
+      if (activeCourse?.semester_id === id) {
+        setCurrentCourseId(null);
+        setSelectedItem(null);
+        setShowCourseDelete(false);
+      }
+      await refresh();
+      showFeedback({
+        message: `学期已删除（${result.course_count} 门课程）`,
+        duration: 4000,
+      });
+    } catch (cause) {
+      setError(toUserMessage(cause));
+      throw cause;
+    }
+  }
+
   async function editInformation(id: string, content: string) {
     try {
       await courseManager.updateCourseInformation(id, content);
@@ -1128,6 +1148,7 @@ export function App() {
                   );
                   await refresh();
                 }}
+                onDeleteSemester={deleteSemester}
                 openImportSignal={importOpenSignal}
                 courseImportAvailable={Boolean(authClient)}
                 onLoadPendingImports={pendingCourseImports}

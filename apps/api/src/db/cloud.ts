@@ -297,67 +297,160 @@ export class CloudCourseManager {
             );
         }
         const when = deletedAt ?? new Date().toISOString();
-        // A course's schedules die with it. Skipping this left orphan rows
-        // (40 found in production after a cleanup) that no view shows and
-        // that the schedule collection would keep publishing to devices.
-        await q.query(
-          `UPDATE course_schedules SET deleted_at=$3,updated_at=$3,row_version=row_version+1
-           WHERE owner_id=$1 AND course_id=$2 AND deleted_at IS NULL`,
-          [ownerId, courseId, when],
-        );
-        await recordExternalCollectionReplacement(
+        return this.cascadeCourseDeletion(
           q,
           ownerId,
-          "COURSE_SCHEDULE_COLLECTION",
-          courseId,
+          course,
+          current,
+          strategy,
+          when,
         );
-        const items: Item[] = [];
-        for (const item of current) {
-          const changed =
-            strategy === "DELETE_ASSOCIATED_ITEMS"
-              ? await singleJson<Item>(
-                  q,
-                  `WITH changed AS (UPDATE items SET deleted_at=$3,updated_at=$3,row_version=row_version+1
+      },
+    );
+  }
+
+  /**
+   * Shared by the per-course delete route and whole-semester removal: a
+   * course's schedules, attached items and course row die together, each with
+   * the change_log entries peer devices replay. Lives here so both callers
+   * cannot drift apart (the production orphan-schedule fix is in this path).
+   */
+  private async cascadeCourseDeletion(
+    q: QueryPort,
+    ownerId: string,
+    course: Course,
+    current: Item[],
+    strategy: "DELETE_ASSOCIATED_ITEMS" | "UNLINK_ASSOCIATED_ITEMS",
+    when: string,
+  ): Promise<{ course: Course; items: Item[] }> {
+    const courseId = course.id;
+    // A course's schedules die with it. Skipping this left orphan rows
+    // (40 found in production after a cleanup) that no view shows and
+    // that the schedule collection would keep publishing to devices.
+    await q.query(
+      `UPDATE course_schedules SET deleted_at=$3,updated_at=$3,row_version=row_version+1
+           WHERE owner_id=$1 AND course_id=$2 AND deleted_at IS NULL`,
+      [ownerId, courseId, when],
+    );
+    await recordExternalCollectionReplacement(
+      q,
+      ownerId,
+      "COURSE_SCHEDULE_COLLECTION",
+      courseId,
+    );
+    const items: Item[] = [];
+    for (const item of current) {
+      const changed =
+        strategy === "DELETE_ASSOCIATED_ITEMS"
+          ? await singleJson<Item>(
+              q,
+              `WITH changed AS (UPDATE items SET deleted_at=$3,updated_at=$3,row_version=row_version+1
                WHERE id=$1 AND owner_id=$2 RETURNING *) SELECT row_to_json(changed) AS value FROM changed`,
-                  [item.id, ownerId, when],
-                )
-              : await singleJson<Item>(
-                  q,
-                  `WITH changed AS (UPDATE items SET course_id=NULL,updated_at=$3,row_version=row_version+1
+              [item.id, ownerId, when],
+            )
+          : await singleJson<Item>(
+              q,
+              `WITH changed AS (UPDATE items SET course_id=NULL,updated_at=$3,row_version=row_version+1
                WHERE id=$1 AND owner_id=$2 RETURNING *) SELECT row_to_json(changed) AS value FROM changed`,
-                  [item.id, ownerId, when],
-                );
-          if (!changed)
-            throw new CloudError(
-              "SERVER_ERROR",
-              500,
-              "Course item update failed",
+              [item.id, ownerId, when],
             );
-          items.push(changed);
-          await q.query(
-            "INSERT INTO change_log (owner_id,entity_type,entity_id,operation,changed_fields,entity_version) VALUES ($1,'ITEM',$2,$3,$4::jsonb,$5)",
-            [
-              ownerId,
-              item.id,
-              strategy === "DELETE_ASSOCIATED_ITEMS" ? "DELETE" : "UPDATE",
-              JSON.stringify(changed),
-              changed.row_version,
-            ],
-          );
-        }
-        const deleted = await singleJson<Course>(
-          q,
-          `WITH changed AS (UPDATE courses SET deleted_at=$3,updated_at=$3,row_version=row_version+1
+      if (!changed)
+        throw new CloudError("SERVER_ERROR", 500, "Course item update failed");
+      items.push(changed);
+      await q.query(
+        "INSERT INTO change_log (owner_id,entity_type,entity_id,operation,changed_fields,entity_version) VALUES ($1,'ITEM',$2,$3,$4::jsonb,$5)",
+        [
+          ownerId,
+          item.id,
+          strategy === "DELETE_ASSOCIATED_ITEMS" ? "DELETE" : "UPDATE",
+          JSON.stringify(changed),
+          changed.row_version,
+        ],
+      );
+    }
+    const deleted = await singleJson<Course>(
+      q,
+      `WITH changed AS (UPDATE courses SET deleted_at=$3,updated_at=$3,row_version=row_version+1
          WHERE id=$1 AND owner_id=$2 RETURNING *) SELECT row_to_json(changed) AS value FROM changed`,
-          [courseId, ownerId, when],
+      [courseId, ownerId, when],
+    );
+    if (!deleted)
+      throw new CloudError("SERVER_ERROR", 500, "Course deletion failed");
+    await q.query(
+      "INSERT INTO change_log (owner_id,entity_type,entity_id,operation,changed_fields,entity_version) VALUES ($1,'COURSE',$2,'DELETE',$3::jsonb,$4)",
+      [ownerId, courseId, JSON.stringify(deleted), deleted.row_version],
+    );
+    return { course: deleted, items };
+  }
+
+  /**
+   * Removes a semester and everything that lives under it. Each course dies
+   * via the shared cascade, then the semester row is soft-deleted with its own
+   * change_log entry so peer switchers drop it too. A push racing an
+   * already-deleted semester ACKs instead of failing: two devices may both
+   * press delete, and neither call should poison the outbox with NOT_FOUND.
+   */
+  async deleteSemesterCascade(
+    ownerId: string,
+    semesterId: string,
+    key: string,
+    baseVersion: number,
+    deletedAt: string,
+  ): Promise<{ semester: Semester; courses: Course[] }> {
+    return this.idempotent(
+      ownerId,
+      key,
+      `semester:delete:${semesterId}:${baseVersion}`,
+      { deleted_at: deletedAt },
+      async (q) => {
+        const found = await q.query<{ value: Semester }>(
+          "SELECT row_to_json(s) AS value FROM semesters s WHERE id=$1 AND owner_id=$2 FOR UPDATE",
+          [semesterId, ownerId],
+        );
+        const current = found.rows[0]?.value;
+        if (!current)
+          throw new CloudError("NOT_FOUND", 404, "Semester not found");
+        if (current.deleted_at) return { semester: current, courses: [] };
+        if (Number(current.row_version) !== baseVersion)
+          throw new CloudError(
+            "VERSION_CONFLICT",
+            409,
+            "Semester changed on another device",
+          );
+        const rows = await q.query<{ value: Course }>(
+          "SELECT row_to_json(c) AS value FROM courses c WHERE owner_id=$1 AND semester_id=$2 AND deleted_at IS NULL ORDER BY id FOR UPDATE",
+          [ownerId, semesterId],
+        );
+        const cascaded: Course[] = [];
+        for (const row of rows.rows) {
+          const course = row.value;
+          const attached = await q.query<{ value: Item }>(
+            "SELECT row_to_json(i) AS value FROM items i WHERE owner_id=$1 AND course_id=$2 AND deleted_at IS NULL ORDER BY id FOR UPDATE",
+            [ownerId, course.id],
+          );
+          const result = await this.cascadeCourseDeletion(
+            q,
+            ownerId,
+            course,
+            attached.rows.map((entry) => entry.value),
+            "DELETE_ASSOCIATED_ITEMS",
+            deletedAt,
+          );
+          cascaded.push(result.course);
+        }
+        const deleted = await singleJson<Semester>(
+          q,
+          `WITH changed AS (UPDATE semesters SET deleted_at=$3,updated_at=$3,row_version=row_version+1
+         WHERE id=$1 AND owner_id=$2 AND deleted_at IS NULL RETURNING *) SELECT row_to_json(changed) AS value FROM changed`,
+          [semesterId, ownerId, deletedAt],
         );
         if (!deleted)
-          throw new CloudError("SERVER_ERROR", 500, "Course deletion failed");
+          throw new CloudError("SERVER_ERROR", 500, "Semester deletion failed");
         await q.query(
-          "INSERT INTO change_log (owner_id,entity_type,entity_id,operation,changed_fields,entity_version) VALUES ($1,'COURSE',$2,'DELETE',$3::jsonb,$4)",
-          [ownerId, courseId, JSON.stringify(deleted), deleted.row_version],
+          "INSERT INTO change_log (owner_id,entity_type,entity_id,operation,changed_fields,entity_version) VALUES ($1,'SEMESTER',$2,'DELETE',$3::jsonb,$4)",
+          [ownerId, semesterId, JSON.stringify(deleted), deleted.row_version],
         );
-        return { course: deleted, items };
+        return { semester: deleted, courses: cascaded };
       },
     );
   }

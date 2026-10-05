@@ -40,6 +40,7 @@ it("presents courses as an index with incomplete counts and a quiet add entry", 
       onCreateCourse={async () => undefined}
       onCreateSemester={async () => undefined}
       onReplaceWeeks={async () => undefined}
+      onDeleteSemester={async () => undefined}
       courseImportAvailable={false}
       onLoadPendingImports={async () => []}
       onStartImport={async () => {
@@ -63,5 +64,41 @@ it("presents courses as an index with incomplete counts and a quiet add entry", 
   expect(markup).toContain("3 项未完成");
   expect(markup).toContain("＋ 添加课程");
   expect(markup).toContain("导入课程表");
+  expect(markup).toContain("删除学期");
   expect(markup).not.toContain('aria-label="课程名称"');
+});
+
+it("offers semester deletion only when a semester is actually selected", () => {
+  const markup = renderToStaticMarkup(
+    <CourseIndex
+      courses={[]}
+      targetSemesterId={null}
+      semester={null}
+      weeks={[]}
+      incompleteCounts={{}}
+      onOpen={() => undefined}
+      onFindCandidate={async () => null}
+      onCreateCourse={async () => undefined}
+      onCreateSemester={async () => undefined}
+      onReplaceWeeks={async () => undefined}
+      onDeleteSemester={async () => undefined}
+      courseImportAvailable={false}
+      onLoadPendingImports={async () => []}
+      onStartImport={async () => {
+        throw new Error("unused");
+      }}
+      onRetryImport={async () => {
+        throw new Error("unused");
+      }}
+      onResolveImport={async () => {
+        throw new Error("unused");
+      }}
+      onCommitImport={async () => {
+        throw new Error("unused");
+      }}
+      onImportCommitted={async () => undefined}
+      onDiscardImport={async () => undefined}
+    />,
+  );
+  expect(markup).not.toContain("删除学期");
 });

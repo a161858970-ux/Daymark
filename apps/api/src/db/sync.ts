@@ -1159,6 +1159,30 @@ export class CloudSync {
         entity_version: result.course.row_version,
       };
     }
+    if (
+      mutation.entity_type === "SEMESTER" &&
+      mutation.operation === "DELETE"
+    ) {
+      const input = z
+        .object({
+          deleted_at: isoDateTimeSchema,
+          updated_at: isoDateTimeSchema,
+        })
+        .strict()
+        .parse(fields);
+      const result = await this.items.deleteSemesterCascade(
+        ownerId,
+        mutation.entity_id,
+        mutation.mutation_id,
+        base,
+        input.deleted_at,
+      );
+      return {
+        mutation_id: mutation.mutation_id,
+        result: "ACK",
+        entity_version: result.semester.row_version,
+      };
+    }
     if (mutation.entity_type === "RAW_CAPTURE")
       return this.changeRawCapture(ownerId, mutation);
     if (

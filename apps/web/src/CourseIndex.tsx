@@ -33,6 +33,7 @@ interface Props {
     endDate: string,
   ): Promise<void>;
   onReplaceWeeks(values: WeekFields[]): Promise<void>;
+  onDeleteSemester(id: string): Promise<void>;
   /** 0 = idle; each bump reopens the import panel for a finished task. */
   openImportSignal?: number;
   courseImportAvailable: boolean;
@@ -59,6 +60,7 @@ export function CourseIndex({
   onCreateCourse,
   onCreateSemester,
   onReplaceWeeks,
+  onDeleteSemester,
   openImportSignal,
   courseImportAvailable,
   onLoadPendingImports,
@@ -77,6 +79,7 @@ export function CourseIndex({
   const [semesterEnd, setSemesterEnd] = useState("");
   const [showSemesterForm, setShowSemesterForm] = useState(false);
   const [showWeekEditor, setShowWeekEditor] = useState(false);
+  const [showSemesterDelete, setShowSemesterDelete] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,6 +126,16 @@ export function CourseIndex({
       else await createCourse(null);
     } catch (cause) {
       setError(toUserMessage(cause));
+    }
+  }
+
+  async function confirmSemesterDelete() {
+    if (!semester) return;
+    try {
+      await onDeleteSemester(semester.id);
+      setShowSemesterDelete(false);
+    } catch {
+      // App 层负责展示错误；确认块保留，允许重试。
     }
   }
 
@@ -288,6 +301,42 @@ export function CourseIndex({
         >
           {showSemesterForm ? "收起学期设置" : "＋ 创建学期"}
         </button>
+        {semester && !showSemesterDelete && (
+          <button
+            type="button"
+            className="quiet-button"
+            onClick={() => setShowSemesterDelete(true)}
+          >
+            删除学期
+          </button>
+        )}
+        {semester && showSemesterDelete && (
+          <div
+            className="course-delete-confirmation"
+            role="group"
+            aria-label="确认删除学期"
+          >
+            <p>
+              删除「{semester.name}」将同时删除其下 {courses.length}{" "}
+              门课程、课表与关联事项（无课程事项保留）。
+            </p>
+            <div className="course-delete-actions">
+              <button
+                type="button"
+                className="danger"
+                onClick={() => void confirmSemesterDelete()}
+              >
+                确认删除
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSemesterDelete(false)}
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        )}
         {showSemesterForm && (
           <form
             className="semester-create"

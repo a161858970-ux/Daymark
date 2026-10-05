@@ -511,3 +511,44 @@ it("upgrades a version 2 outbox without dropping unsent capture mutations", asyn
     (await current.outbox_mutations.get(mutation.mutation_id))?.local_sequence,
   ).toBe(1);
 });
+
+it("applies a remote Semester deletion so switchers drop it", async () => {
+  const name = `sync-semester-delete-${crypto.randomUUID()}`;
+  const db = new CourseManagerDb(name);
+  openDbs.push(db);
+  const repo = new DexieLocalRepository(db);
+  const fixed = {
+    now: () => "2026-10-05T08:00:00.000Z",
+    id: () => crypto.randomUUID(),
+  };
+  const manager = new CourseManager(repo, fixed);
+  const ownerId = await repo.ownerId();
+  const semester = await manager.createSemester(
+    "被删学期",
+    "2026-09-01",
+    "2027-01-31",
+  );
+  // The create is still in the outbox; a remote page overlapping it is
+  // (correctly) refused, so flush the queue the way a sync pass would.
+  await db.outbox_mutations.clear();
+  const change: RemoteChange = {
+    id: crypto.randomUUID(),
+    entity_type: "SEMESTER",
+    entity_id: semester.id,
+    operation: "DELETE",
+    changed_fields: {
+      deleted_at: "2026-10-05T09:00:00.000Z",
+      updated_at: "2026-10-05T09:00:00.000Z",
+    },
+    entity_version: 2,
+    server_time: "2026-10-05T09:00:01.000Z",
+  };
+  await repo.applyRemoteChanges(ownerId, [change], "cursor-semester-delete");
+  const row = await db.semesters.get(semester.id);
+  expect(row?.deleted_at).toBe("2026-10-05T09:00:00.000Z");
+  expect(row?.row_version).toBe(2);
+  expect(
+    (await manager.listSemesters()).map((entry) => entry.id),
+  ).not.toContain(semester.id);
+  expect(await repo.syncCursor()).toBe("cursor-semester-delete");
+});

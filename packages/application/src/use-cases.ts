@@ -1010,6 +1010,81 @@ export class CourseManager {
     return { course: nextCourse, items };
   }
 
+  /**
+   * A semester takes its courses with it. Local rows go first, then one
+   * COURSE DELETE per course plus a SEMESTER DELETE enter the outbox: the
+   * server cascade and peer devices catch up on the next sync pass.
+   */
+  async deleteSemester(
+    id: string,
+  ): Promise<{ semester: Semester; course_count: number }> {
+    const semester = await this.repo.getSemester(id);
+    if (!semester || semester.deleted_at) throw new Error("Semester not found");
+    const ownerId = await this.repo.ownerId();
+    const courses = (await this.repo.listCourses()).filter(
+      (course) =>
+        course.owner_id === ownerId &&
+        course.semester_id === id &&
+        course.deleted_at === null,
+    );
+    const attached = (await this.repo.listItems()).filter(
+      (item) =>
+        item.owner_id === ownerId &&
+        item.deleted_at === null &&
+        courses.some((course) => course.id === item.course_id),
+    );
+    const now = this.runtime.now();
+    const nextSemester: Semester = {
+      ...semester,
+      deleted_at: now,
+      updated_at: now,
+      row_version: semester.row_version + 1,
+    };
+    const nextCourses = courses.map((course) => ({
+      ...course,
+      deleted_at: now,
+      updated_at: now,
+      row_version: course.row_version + 1,
+    }));
+    const nextItems = attached.map((item) => ({
+      ...item,
+      deleted_at: now,
+      updated_at: now,
+      row_version: item.row_version + 1,
+    }));
+    await this.repo.transaction(async () => {
+      for (const item of nextItems) await this.repo.putItem(item);
+      for (const course of nextCourses) await this.repo.putCourse(course);
+      await this.repo.putSemester(nextSemester);
+      for (const course of courses) {
+        const owned = attached.filter((item) => item.course_id === course.id);
+        await this.repo.putOutbox(
+          this.mutation(
+            ownerId,
+            "COURSE",
+            course.id,
+            "DELETE",
+            course.row_version,
+            {
+              strategy: "DELETE_ASSOCIATED_ITEMS",
+              deleted_at: now,
+              item_versions: owned.map(({ id, row_version }) => ({
+                id,
+                row_version,
+              })),
+            },
+          ),
+        );
+      }
+      await this.repo.putOutbox(
+        this.mutation(ownerId, "SEMESTER", id, "DELETE", semester.row_version, {
+          deleted_at: now,
+          updated_at: now,
+        }),
+      );
+    });
+    return { semester: nextSemester, course_count: courses.length };
+  }
   async priorCourseCandidate(
     name: string,
     targetSemesterId: string | null,

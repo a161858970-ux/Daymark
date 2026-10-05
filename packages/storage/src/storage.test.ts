@@ -668,3 +668,71 @@ it("keeps a schedule with no clock time and rejects one-sided times", async () =
     ]),
   ).rejects.toThrow(/schedule/);
 });
+
+it("removes a Semester with its courses locally and queues the cascade for sync", async () => {
+  const { manager, repo, db } = setup();
+  const doomed = await manager.createSemester(
+    "删除测试学期",
+    "2026-09-01",
+    "2027-01-31",
+  );
+  const kept = await manager.createSemester(
+    "保留学期",
+    "2026-09-01",
+    "2027-01-31",
+  );
+  const first = await manager.createCourse("经济法", doomed.id);
+  const second = await manager.createCourse("线性代数", doomed.id);
+  const survivor = await manager.createCourse("统计学", kept.id);
+  const raw = await manager.capture("交论文", "COURSE_ITEM", first.id);
+  const removedItem = await manager.processClearCapture(raw.id);
+  const keptRaw = await manager.capture("复习", "COURSE_ITEM", survivor.id);
+  const keptItem = await manager.processClearCapture(keptRaw.id);
+  expect(removedItem).toBeTruthy();
+
+  const result = await manager.deleteSemester(doomed.id);
+  expect(result.course_count).toBe(2);
+
+  expect(
+    (await manager.listSemesters()).map((entry) => entry.id),
+  ).not.toContain(doomed.id);
+  expect((await db.semesters.get(doomed.id))?.deleted_at).not.toBeNull();
+  expect((await db.semesters.get(kept.id))?.deleted_at).toBeNull();
+  expect((await db.courses.get(first.id))?.deleted_at).not.toBeNull();
+  expect((await db.courses.get(second.id))?.deleted_at).not.toBeNull();
+  expect((await db.courses.get(survivor.id))?.deleted_at).toBeNull();
+  expect((await db.items.get(removedItem!.id))?.deleted_at).not.toBeNull();
+  expect((await db.items.get(keptItem!.id))?.deleted_at).toBeNull();
+
+  const pending = await repo.pendingMutations();
+  const semesterDelete = pending.find(
+    (mutation) =>
+      mutation.entity_type === "SEMESTER" && mutation.operation === "DELETE",
+  );
+  expect(semesterDelete?.entity_id).toBe(doomed.id);
+  expect(semesterDelete?.base_version).toBe(1);
+  expect(semesterDelete?.changed_fields).toMatchObject({
+    deleted_at: expect.any(String),
+    updated_at: expect.any(String),
+  });
+  const courseDeletes = pending.filter(
+    (mutation) =>
+      mutation.entity_type === "COURSE" && mutation.operation === "DELETE",
+  );
+  expect(courseDeletes.map((mutation) => mutation.entity_id).sort()).toEqual(
+    [first.id, second.id].sort(),
+  );
+  for (const mutation of courseDeletes) {
+    expect(mutation.changed_fields).toMatchObject({
+      strategy: "DELETE_ASSOCIATED_ITEMS",
+      deleted_at: expect.any(String),
+    });
+    expect(
+      (mutation.changed_fields as { item_versions: unknown[] }).item_versions,
+    ).toBeInstanceOf(Array);
+  }
+
+  await expect(manager.deleteSemester(doomed.id)).rejects.toThrow(
+    "Semester not found",
+  );
+});
