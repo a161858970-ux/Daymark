@@ -4,14 +4,14 @@
 
 ## 0. 供应商与端点
 
-| 项           | 值                                                                                                                                                                      |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 端点         | `${AI_BASE_URL}/chat/completions`，默认 `https://api.xiaomimimo.com/v1`                                                                                                 |
-| 模型         | `AI_MODEL`，默认 `mimo-v2.6-flash`（推理模型，会输出 `reasoning_content`）                                                                                              |
-| 密钥         | `AI_API_KEY`（兼容旧名 `MIMO_*` / `OPENAI_*`），只在 API 进程内使用                                                                                                     |
-| 输出约束     | 两处都用 `response_format: { type: "json_schema", strict: true }`                                                                                                       |
-| 限流         | 同一个 `RateLimiter`，按 authenticated owner，默认 `AI_RATE_LIMIT_PER_OWNER=20` / `AI_RATE_LIMIT_WINDOW_MS=60000`，**只在真正调 provider 前判定**（确定性路径不扣配额） |
-| 实测可用模型 | `mimo-v2.5`、`mimo-v2.5-pro`、`mimo-v2.6-flash`、`mimo-v2.6-pro`、`mimo-v2.6-pro-ultraspeed`（另有 asr/tts 系列）                                                       |
+| 项           | 值                                                                                                                                                                                                                                                                                                                                                          |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 端点         | `${AI_BASE_URL}/chat/completions`，默认 `https://api.xiaomimimo.com/v1`                                                                                                                                                                                                                                                                                     |
+| 模型         | 文本路 `AI_MODEL`，默认 `mimo-v2.5-pro`；图片批次 `AI_MODEL_IMAGE`，默认 `mimo-v2.6-flash`。分路依据（2026-10-05 同题并发实测）：`mimo-v2.5-pro` 文本 51-201 s 质量稳定但对图片输入返回 HTTP 404；`mimo-v2.6-flash` 图片路正常而长文本经常拖到超时；`mimo-v2.6-pro` 漏课、`mimo-v2.6-pro-ultraspeed` 返回垃圾 JSON。AI_MODEL 兼容旧名 `MIMO_*` / `OPENAI_*` |
+| 密钥         | `AI_API_KEY`（兼容旧名 `MIMO_*` / `OPENAI_*`），只在 API 进程内使用                                                                                                                                                                                                                                                                                         |
+| 输出约束     | 两处都用 `response_format: { type: "json_schema", strict: true }`                                                                                                                                                                                                                                                                                           |
+| 限流         | 同一个 `RateLimiter`，按 authenticated owner，默认 `AI_RATE_LIMIT_PER_OWNER=20` / `AI_RATE_LIMIT_WINDOW_MS=60000`，**只在真正调 provider 前判定**（确定性路径不扣配额）                                                                                                                                                                                     |
+| 实测可用模型 | `mimo-v2.5`、`mimo-v2.5-pro`、`mimo-v2.6-flash`、`mimo-v2.6-pro`、`mimo-v2.6-pro-ultraspeed`（另有 asr/tts 系列）                                                                                                                                                                                                                                           |
 
 ## 1. 调用点 A：捕获解释（"尝试智能整理"）
 

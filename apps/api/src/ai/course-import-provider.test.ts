@@ -144,9 +144,8 @@ it("classifies timeouts, truncation, empty and malformed responses", async () =>
     contentBase64: Buffer.from("fixture").toString("base64"),
   };
 
-  // Timeout: surfaced as TIMEOUT and retried once — the per-attempt budget
-  // is now small (300 s), so a second attempt buys a fresh provider window
-  // instead of gambling one long run.
+  // Timeout: surfaced as TIMEOUT and retried — each bite gets a fresh
+  // 240 s budget instead of gambling one long run (3 bites total).
   const timeout = recorder([
     Object.assign(new Error("The operation timed out"), {
       name: "TimeoutError",
@@ -160,7 +159,7 @@ it("classifies timeouts, truncation, empty and malformed responses", async () =>
       image,
     ),
   ).rejects.toMatchObject({ name: "ProviderError", kind: "TIMEOUT" });
-  expect(timeout.calls).toHaveLength(2);
+  expect(timeout.calls).toHaveLength(3);
 
   // Body read interrupted by the abort signal (slow model, status 200): the
   // real cause is a timeout, not a garbled gateway.
@@ -208,7 +207,7 @@ it("classifies timeouts, truncation, empty and malformed responses", async () =>
   ).rejects.toMatchObject({ name: "ProviderError", kind: "TRUNCATED" });
   expect(capped.calls).toHaveLength(1);
 
-  // Non-JSON 200 body: garbled gateway response, retried once as UNAVAILABLE.
+  // Non-JSON 200 body: garbled gateway response, retried as UNAVAILABLE.
   const garbled = recorder([
     new Response("not json", { status: 200 }),
     new Response("still not json", { status: 200 }),
@@ -218,7 +217,7 @@ it("classifies timeouts, truncation, empty and malformed responses", async () =>
       image,
     ),
   ).rejects.toMatchObject({ kind: "UNAVAILABLE" });
-  expect(garbled.calls).toHaveLength(2);
+  expect(garbled.calls).toHaveLength(3);
 
   // Output cap reached: not retried, distinct kind for a split-file message.
   const truncated = recorder([
@@ -256,7 +255,7 @@ it("classifies timeouts, truncation, empty and malformed responses", async () =>
   ).rejects.toMatchObject({ kind: "MALFORMED" });
   expect(malformed.calls).toHaveLength(1);
 
-  // Empty content is transient: retried once, then classified EMPTY.
+  // Empty content is transient: retried, then classified EMPTY.
   const empty = recorder([
     json({
       choices: [
@@ -267,25 +266,69 @@ it("classifies timeouts, truncation, empty and malformed responses", async () =>
   await expect(
     new ChatCompletionsCourseImportParser(config, empty.transport).parse(image),
   ).rejects.toMatchObject({ kind: "EMPTY" });
-  expect(empty.calls).toHaveLength(2);
-});
+  expect(empty.calls).toHaveLength(3);
+  // Three bites × growing retry delays make this the slowest unit in the
+  // suite; keep it under an explicit budget instead of the 10 s default.
+}, 30_000);
 
-it("splits rebuilt page text into page-pair batches", () => {
-  const text = [
+it("keeps normal documents whole and repeats the header when splitting", () => {
+  // Real timetables are one table cut across pages: a pair-split hands the
+  // second batch headerless cell fragments (the 18-vs-22 course wobble), so
+  // small documents must never split.
+  const small = [
     "Page 1: 时间段 | 节次 | 星期一",
     "Page 2: 第二页的课程",
     "Page 3: 第三页的课程",
     "Page 4: 第四页的课程",
   ].join("\n");
+  expect(splitTextBatches(small)).toHaveLength(1);
+  expect(splitTextBatches("Page 1: 只有一页")).toHaveLength(1);
 
-  const two = splitTextBatches(text, 2);
-  expect(two).toHaveLength(2);
-  expect(two[0]).toContain("Page 1:");
-  expect(two[0]).toContain("Page 2:");
-  expect(two[0]).not.toContain("Page 3:");
-  expect(two[1]).toContain("Page 3:");
-  expect(two[1]).toContain("Page 4:");
+  // Over the limit: pages split, every continuation carries the header row.
+  const header = "Page 1: 时间段 | 节次 | 星期一 | 星期二\n";
+  const big = [
+    header + "课".repeat(7_000),
+    "Page 2: " + "课".repeat(7_000),
+    "Page 3: " + "课".repeat(7_000),
+    "Page 4: " + "课".repeat(7_000),
+  ].join("\n");
+  const batches = splitTextBatches(big);
+  expect(batches.length).toBeGreaterThan(1);
+  expect(batches[0]).toContain("Page 1:");
+  expect(batches.at(-1)).toContain("Page 4:");
+  for (const batch of batches.slice(1))
+    expect(batch).toContain("时间段 | 节次 | 星期一");
+});
 
-  // A short timetable stays in one request.
-  expect(splitTextBatches("Page 1: 只有一页", 2)).toHaveLength(1);
+it("routes text batches to the text model and image batches to the vision model", async () => {
+  const routed = { ...config, model: "text-model", imageModel: "vision-model" };
+  const image = recorder([json(successBody)]);
+  await new ChatCompletionsCourseImportParser(routed, image.transport).parse({
+    sourceType: "IMAGE",
+    fileName: "课表.png",
+    mediaType: "image/png",
+    contentBase64: Buffer.from("fixture").toString("base64"),
+  });
+  expect(image.calls[0]).toMatchObject({ model: "vision-model" });
+
+  const text = recorder([json(successBody)]);
+  await new ChatCompletionsCourseImportParser(routed, text.transport).parse({
+    sourceType: "PDF",
+    fileName: "课程表.pdf",
+    mediaType: "application/pdf",
+    contentBase64: await fixture("text-timetable.pdf"),
+  });
+  expect(text.calls[0]).toMatchObject({ model: "text-model" });
+
+  // Without an imageModel, image batches fall back to the configured model.
+  const fallback = recorder([json(successBody)]);
+  await new ChatCompletionsCourseImportParser(config, fallback.transport).parse(
+    {
+      sourceType: "IMAGE",
+      fileName: "课表.png",
+      mediaType: "image/png",
+      contentBase64: Buffer.from("fixture").toString("base64"),
+    },
+  );
+  expect(fallback.calls[0]).toMatchObject({ model: "configured-model" });
 });

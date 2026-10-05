@@ -59,16 +59,22 @@ const apiKey =
   process.env.OPENAI_API_KEY;
 // Provider is the OpenAI-compatible MiMo endpoint; any other compatible
 // endpoint can be selected with AI_BASE_URL.
+// Text tasks (timetable text, smart-organize) default to the model measured
+// at 51-201 s with correct output, where the previous default timed out at
+// 481 s on the same input; image batches need a vision endpoint
+// (mimo-v2.5-pro answers image input with HTTP 404) so they keep the
+// multimodal default.
 const model =
   process.env.AI_MODEL ??
   process.env.MIMO_MODEL ??
   process.env.OPENAI_MODEL ??
-  "mimo-v2.6-flash";
+  "mimo-v2.5-pro";
+const imageModel = process.env.AI_MODEL_IMAGE ?? "mimo-v2.6-flash";
 const baseUrl =
   process.env.AI_BASE_URL ??
   process.env.MIMO_BASE_URL ??
   "https://api.xiaomimimo.com/v1";
-const providerConfig = apiKey ? { apiKey, model, baseUrl } : null;
+const providerConfig = apiKey ? { apiKey, model, imageModel, baseUrl } : null;
 const cloud = cloudDatabase ? new CloudCourseManager(cloudDatabase) : null;
 // Security default (configurable): AI endpoints only, per authenticated owner.
 const aiRateLimiter = new RateLimiter(rateLimitFromEnv());

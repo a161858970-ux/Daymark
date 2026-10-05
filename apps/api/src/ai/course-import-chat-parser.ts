@@ -85,33 +85,42 @@ type ContentPart =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
 
+/** Above this size a text is split; normal timetables travel whole. */
+export const TEXT_BATCH_CHAR_LIMIT = 16_000;
+
 /**
- * Splits rebuilt page text into per-batch chunks on the `Page N:` markers.
+ * Splits rebuilt page text into request chunks.
  *
- * One request that emits every course of a timetable is what blows past the
- * provider's response ceilings (a real 4-page parse exceeded 600 s while two
- * smaller batches each fit), so text pages travel in pairs and the results
- * are merged by name afterwards.
+ * A timetable is ONE table cut across page boundaries: cells wrap mid-row,
+ * and a fixed "2 pages per batch" handed later batches headerless fragments
+ * (pages 3-4 of a real 4-page export) — the model then guessed column
+ * ownership, producing missed courses (18 vs 22) and weekday drift (a
+ * Sunday appearing from nowhere). Whole documents therefore travel in one
+ * request; only genuinely large text splits, and every continuation batch
+ * carries the weekday header row so columns stay unambiguous.
  */
-export function splitTextBatches(
-  text: string,
-  pagesPerBatch: number,
-): string[] {
+export function splitTextBatches(text: string): string[] {
+  if (text.length <= TEXT_BATCH_CHAR_LIMIT) return [text];
   const pages = text.split(/(?=Page \d+:)/).filter((part) => part.trim());
-  if (pages.length <= pagesPerBatch) return [text];
+  const header = pages[0]?.match(/[^\n]*星期一[^\n]*/)?.[0]?.trim() ?? "";
   const batches: string[] = [];
-  for (let index = 0; index < pages.length; index += pagesPerBatch)
-    batches.push(pages.slice(index, index + pagesPerBatch).join("\n"));
-  return batches;
+  let current = "";
+  for (const page of pages) {
+    if (current && current.length + page.length > TEXT_BATCH_CHAR_LIMIT) {
+      batches.push(current);
+      current = header ? `Column headers: ${header}\n${page}` : page;
+      continue;
+    }
+    current += page;
+  }
+  if (current) batches.push(current);
+  return batches.length ? batches : [text];
 }
 
 const introPart: ContentPart = {
   type: "text",
   text: "Extract a course preview for user review. Do not commit anything.",
 };
-
-/** Pages per request for text-only PDFs; results are merged by course. */
-const TEXT_PAGES_PER_BATCH = 2;
 
 interface RequestBatch {
   parts: ContentPart[];
@@ -123,6 +132,8 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
     private readonly config: {
       apiKey: string;
       model: string;
+      /** Vision-capable model for image batches; falls back to `model`. */
+      imageModel?: string;
       baseUrl?: string;
       timeoutMs?: number;
       limits?: PdfPrepareLimits;
@@ -170,13 +181,12 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
     }
     const prepared = await preparePdfSource(input.contentBase64, limits);
     const imageGroups = imageBatches(prepared.images);
-    // Pure text: send page pairs, merge afterwards (see splitTextBatches).
+    // Pure text: one request for normal documents (splitTextBatches only
+    // divides genuinely large texts, and repeats the header in continuations).
     if (prepared.text && !imageGroups.length)
-      return splitTextBatches(prepared.text, TEXT_PAGES_PER_BATCH).map(
-        (chunk) => ({
-          parts: [introPart, { type: "text", text: `PDF content:\n${chunk}` }],
-        }),
-      );
+      return splitTextBatches(prepared.text).map((chunk) => ({
+        parts: [introPart, { type: "text", text: `PDF content:\n${chunk}` }],
+      }));
     const textParts: ContentPart[] = prepared.text
       ? [{ type: "text", text: `PDF content:\n${prepared.text}` }]
       : [];
@@ -193,8 +203,15 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
     includeHint: boolean,
   ): Promise<unknown> {
     const endpoint = `${(this.config.baseUrl ?? "https://api.xiaomimimo.com/v1").replace(/\/$/, "")}/chat/completions`;
+    // Text and vision go to different endpoints on this provider:
+    // mimo-v2.5-pro rejects image input with HTTP 404, while the previously
+    // configured model stalls on long text — each batch type gets the model
+    // measured to fit it.
+    const model = batch.parts.some((part) => part.type === "image_url")
+      ? (this.config.imageModel ?? this.config.model)
+      : this.config.model;
     const payload = JSON.stringify({
-      model: this.config.model,
+      model,
       messages: [
         {
           role: "system",
@@ -212,34 +229,39 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
           schema,
         },
       },
-      // No output cap: capping at 12 k cut the reasoning of a 22-meeting
-      // PDF (finish=length with empty content, misreported as an empty
-      // response); the 300 s per-attempt budget already bounds a runaway,
-      // and a real truncation is classified as TRUNCATED.
+      // No output cap: capping cut mid-reasoning (finish=length with empty
+      // content); the per-attempt time budget bounds a runaway instead, and
+      // a real truncation is classified as TRUNCATED.
     });
-    return withProviderRetry(async () => {
-      let attempt: Response;
-      try {
-        attempt = await this.transport(endpoint, {
-          method: "POST",
-          headers: {
-            authorization: ["Bearer", this.config.apiKey].join(" "),
-            "content-type": "application/json",
-          },
-          // Per-attempt budget: measured runs finish in 53-272 s but drift
-          // far beyond 600 s in a bad window, where a single long attempt
-          // gives the user one result in ten minutes. Fail fast and let
-          // withProviderRetry take a second bite instead.
-          signal: AbortSignal.timeout(this.config.timeoutMs ?? 300_000),
-          body: payload,
-        });
-      } catch (error) {
-        throw providerFailure(error);
-      }
-      const failure = await providerResponse(attempt);
-      if (failure) throw failure;
-      return await readStructuredResponse(attempt);
-    }, 2);
+    return withProviderRetry(
+      async () => {
+        let attempt: Response;
+        try {
+          attempt = await this.transport(endpoint, {
+            method: "POST",
+            headers: {
+              authorization: ["Bearer", this.config.apiKey].join(" "),
+              "content-type": "application/json",
+            },
+            // Per-attempt budget from the measurement record: every
+            // successful attempt finished within ~200 s, while failed ones
+            // died at 137 s (empty) or dragged to 300-600 s without ever
+            // completing — waiting past ~4 minutes never bought a result.
+            // 240 s × 3 bites keeps the worst case near the old budget while
+            // tripling the independent chances.
+            signal: AbortSignal.timeout(this.config.timeoutMs ?? 240_000),
+            body: payload,
+          });
+        } catch (error) {
+          throw providerFailure(error);
+        }
+        const failure = await providerResponse(attempt);
+        if (failure) throw failure;
+        return await readStructuredResponse(attempt);
+      },
+      3,
+      1_000,
+    );
   }
 }
 
