@@ -67,6 +67,12 @@ export interface PreparedPdfSource {
   pageCount: number;
   /** Page-marker text for every page that already had usable text. */
   text: string | null;
+  /**
+   * (cell, weekday) pairs read from the text pages' column grid — empty
+   * whenever the text layer was not trusted (scanned input), so downstream
+   * weekday correction only ever fires on geometry we actually rebuilt.
+   */
+  weekdayCells: WeekdayCell[];
   images: PreparedPageImage[];
   rasterizedPages: number;
 }
@@ -100,6 +106,12 @@ interface Column {
   max: number;
 }
 
+/** One page's placed rows plus the column grid they align to. */
+export interface PlacedGrid {
+  rows: PlacedText[][];
+  columns: Column[];
+}
+
 /**
  * Rebuild the table from item coordinates instead of joining every run of
  * text with a space.
@@ -115,13 +127,13 @@ interface Column {
  * column never swallows its neighbour), and every row is padded to the full
  * width so a wrapped continuation line stays under its own column.
  */
-export function layoutText(
+export function buildGrid(
   content: { items: unknown[] },
   mapPoint?: (x: number, y: number) => [number, number],
-): string {
+): PlacedGrid {
   const identity = (x: number, y: number): [number, number] => [x, y];
   const items = placedItems(content, mapPoint ?? identity);
-  if (!items.length) return "";
+  if (!items.length) return { rows: [], columns: [] };
 
   const rows: PlacedText[][] = [];
   // Viewport y grows downward: ascending y is top → bottom.
@@ -133,7 +145,15 @@ export function layoutText(
     else rows.push([item]);
   }
 
-  const columns = buildColumns(rows);
+  return { rows, columns: buildColumns(rows) };
+}
+
+export function layoutText(
+  content: { items: unknown[] },
+  mapPoint?: (x: number, y: number) => [number, number],
+): string {
+  const { rows, columns } = buildGrid(content, mapPoint);
+  if (!rows.length) return "";
   return rows.map((row) => placeRow(row, columns)).join("\n");
 }
 
@@ -203,9 +223,122 @@ function medianGap(columns: Column[]): number {
   return gaps[Math.floor(gaps.length / 2)] as number;
 }
 
-function placeRow(row: PlacedText[], columns: Column[]): string {
+/** One cell of the timetable grid with the weekday its column belongs to. */
+export interface WeekdayCell {
+  text: string;
+  weekday: number;
+}
+
+/**
+ * Weekday-labelled column positions learned from header rows and carried
+ * across pages: a table cut over several pages keeps its geometry, so a
+ * continuation page without a header can still be labelled by matching its
+ * column x positions against the learned ones.
+ */
+export interface WeekdayColumnMap {
+  columns: { x: number; weekday: number }[];
+  pitch: number | null;
+}
+
+export function emptyWeekdayColumnMap(): WeekdayColumnMap {
+  return { columns: [], pitch: null };
+}
+
+const WEEKDAY_LABELS: Record<string, number> = {
+  星期一: 1,
+  星期二: 2,
+  星期三: 3,
+  星期四: 4,
+  星期五: 5,
+  星期六: 6,
+  星期日: 7,
+  周一: 1,
+  周二: 2,
+  周三: 3,
+  周四: 4,
+  周五: 5,
+  周六: 6,
+  周日: 7,
+};
+
+/**
+ * Reads one page's grid into (cell text, weekday) pairs so the model's
+ * weekday can be checked against column position afterwards — the one fact
+ * the grid already knows for certain.
+ *
+ * A header row (星期一…) labels this page's columns; later pages without a
+ * header resolve against the learned positions within half a column pitch.
+ * Columns that resolve to nothing contribute no cells (safe: correction
+ * simply won't fire for them).
+ */
+export function collectWeekdayCells(
+  grid: PlacedGrid,
+  map: WeekdayColumnMap,
+): { map: WeekdayColumnMap; cells: WeekdayCell[] } {
+  if (!grid.rows.length || grid.columns.length < MIN_TABLE_COLUMNS)
+    return { map, cells: [] };
+
+  // Header labels on THIS page, if any.
+  const pageLabels: (number | null)[] = grid.columns.map(() => null);
+  let headerRowIndex = -1;
+  grid.rows.forEach((row, index) => {
+    let found = false;
+    rowCells(row, grid.columns).forEach((cell, position) => {
+      const label = WEEKDAY_LABELS[cell.trim()];
+      if (label !== undefined) {
+        pageLabels[position] = label;
+        found = true;
+      }
+    });
+    if (found) headerRowIndex = index;
+  });
+
+  const measuredPitch = medianGap(grid.columns);
+  const next: WeekdayColumnMap = {
+    columns: [...map.columns],
+    pitch: map.pitch ?? (Number.isFinite(measuredPitch) ? measuredPitch : null),
+  };
+  grid.columns.forEach((column, position) => {
+    const label = pageLabels[position];
+    if (label === null || label === undefined) return;
+    const known = next.columns.find(
+      (entry) =>
+        entry.weekday === label &&
+        Math.abs(entry.x - column.min) <= START_TOLERANCE,
+    );
+    if (!known) next.columns.push({ x: column.min, weekday: label });
+  });
+
+  const resolved: (number | null)[] = grid.columns.map((column, position) => {
+    const direct = pageLabels[position];
+    if (direct !== null && direct !== undefined) return direct;
+    if (!next.columns.length || next.pitch === null) return null;
+    let best: { weekday: number; distance: number } | null = null;
+    for (const known of next.columns) {
+      const distance = Math.abs(known.x - column.min);
+      if (!best || distance < best.distance)
+        best = { weekday: known.weekday, distance };
+    }
+    return best && best.distance <= next.pitch / 2 ? best.weekday : null;
+  });
+
+  const cells: WeekdayCell[] = [];
+  grid.rows.forEach((row, index) => {
+    if (index === headerRowIndex) return;
+    rowCells(row, grid.columns).forEach((text, position) => {
+      const weekday = resolved[position];
+      const value = text.trim();
+      if (weekday !== null && weekday !== undefined && value)
+        cells.push({ text: value, weekday });
+    });
+  });
+  return { map: next, cells };
+}
+
+/** The cells of one visual row, padded into their columns. */
+function rowCells(row: PlacedText[], columns: Column[]): string[] {
   const ordered = [...row].sort((a, b) => a.x - b.x);
-  if (!columns.length) return ordered.map((item) => item.str).join(" ");
+  if (!columns.length) return [ordered.map((item) => item.str).join(" ")];
 
   const filled: string[] = [];
   for (const item of ordered) {
@@ -223,7 +356,11 @@ function placeRow(row: PlacedText[], columns: Column[]): string {
       ? `${filled[index]} ${item.str}`.replace(/\s+/g, " ")
       : item.str.replace(/\s+/g, " ");
   }
-  return filled.join(" | ");
+  return filled;
+}
+
+function placeRow(row: PlacedText[], columns: Column[]): string {
+  return rowCells(row, columns).join(" | ");
 }
 
 /** Baselines this close belong to one visual line. */
@@ -231,13 +368,6 @@ const ROW_GAP = 4;
 /** Left edges this close are the same column; three of them mean a table. */
 const START_TOLERANCE = 3;
 const MIN_TABLE_COLUMNS = 3;
-
-function pageText(
-  content: { items: unknown[] },
-  mapPoint?: (x: number, y: number) => [number, number],
-): string {
-  return layoutText(content, mapPoint).trim();
-}
 
 async function rasterizePage(
   page: {
@@ -323,19 +453,30 @@ export async function preparePdfSource(
       );
 
     const pageTexts: { page: number; text: string }[] = [];
+    // Column geometry learned as pages stream by: page 1 usually carries the
+    // weekday header, continuation pages resolve against its x positions.
+    let columnMap = emptyWeekdayColumnMap();
+    const allWeekdayCells: WeekdayCell[] = [];
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
       const page = await document.getPage(pageNumber);
       // Coordinates are in PDF user space; a rotated page (rotate=90) puts
       // weekday columns on the y axis, which must be mapped to viewport
       // space before rows and columns mean anything.
       const viewport = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      const mapPoint = (x: number, y: number) =>
+        viewport.convertToViewportPoint(x, y) as [number, number];
+      const grid = buildGrid(content, mapPoint);
       pageTexts.push({
         page: pageNumber,
-        text: pageText(
-          await page.getTextContent(),
-          (x, y) => viewport.convertToViewportPoint(x, y) as [number, number],
-        ),
+        text: grid.rows
+          .map((row) => placeRow(row, grid.columns))
+          .join("\n")
+          .trim(),
       });
+      const collected = collectWeekdayCells(grid, columnMap);
+      columnMap = collected.map;
+      allWeekdayCells.push(...collected.cells);
       page.cleanup();
     }
 
@@ -401,6 +542,8 @@ export async function preparePdfSource(
     return {
       pageCount: document.numPages,
       text: textParts.length ? textParts.join("\n") : null,
+      // Thin text layers were not grid-rebuilt above trust, so no cells.
+      weekdayCells: textTrusted ? allWeekdayCells : [],
       images,
       rasterizedPages: images.length,
     };

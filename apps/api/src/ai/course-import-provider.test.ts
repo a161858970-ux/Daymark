@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import {
   ChatCompletionsCourseImportParser,
+  correctWeekdays,
   splitTextBatches,
 } from "./course-import-chat-parser.js";
 
@@ -298,6 +299,38 @@ it("keeps normal documents whole and repeats the header when splitting", () => {
   expect(batches.at(-1)).toContain("Page 4:");
   for (const batch of batches.slice(1))
     expect(batch).toContain("时间段 | 节次 | 星期一");
+});
+
+it("corrects a weekday the grid contradicts and keeps ambiguous ones", () => {
+  const cells = [
+    { text: "商业银行经营学★(1-2节)1-13周", weekday: 1 },
+    { text: "财政学概论★", weekday: 5 },
+    // Appears in two columns (single/double week meetings): ambiguous.
+    { text: "中外经济关系史★", weekday: 1 },
+    { text: "中外经济关系史★", weekday: 3 },
+  ];
+  const parsed = {
+    courses: [
+      {
+        name: "商业银行经营学★",
+        instructor: null,
+        schedules: [{ weekday: 7 }, { weekday: 1 }],
+      },
+      { name: "财政学概论★", schedules: [{ weekday: 2 }] },
+      { name: "中外经济关系史★", schedules: [{ weekday: 6 }] },
+      { name: "表里没有的课", schedules: [{ weekday: 4 }] },
+    ],
+  };
+  correctWeekdays(parsed, cells);
+  const courses = (
+    parsed as { courses: { name: string; schedules: { weekday: number }[] }[] }
+  ).courses;
+  // Unique column evidence wins over the model, schedule by schedule.
+  expect(courses[0]!.schedules.map((s) => s.weekday)).toEqual([1, 1]);
+  expect(courses[1]!.schedules[0]!.weekday).toBe(5);
+  // Ambiguous (two columns) and unknown (no cell) keep the model's answer.
+  expect(courses[2]!.schedules[0]!.weekday).toBe(6);
+  expect(courses[3]!.schedules[0]!.weekday).toBe(4);
 });
 
 it("routes text batches to the text model and image batches to the vision model", async () => {

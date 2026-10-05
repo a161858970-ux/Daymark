@@ -12,6 +12,7 @@ import {
   mergeCoursePreviews,
   preparePdfSource,
   type PdfPrepareLimits,
+  type WeekdayCell,
 } from "./pdf-source.js";
 
 const nullableString = { type: ["string", "null"] } as const;
@@ -144,19 +145,24 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
   async parse(
     input: Parameters<CourseImportParser["parse"]>[0],
   ): Promise<unknown> {
-    const batches = await this.batches(input);
+    const { batches, weekdayCells } = await this.batches(input);
     // Parallel: each batch carries a slice of the timetable, and running them
     // together keeps the wall clock at one batch's duration instead of the
     // sum of both (sequential runs doubled the exposure to response timeouts).
     const results = await Promise.all(
       batches.map((batch) => this.request(batch, input.sourceType === "PDF")),
     );
-    return results.length === 1 ? results[0] : mergeCoursePreviews(results);
+    const merged =
+      results.length === 1 ? results[0] : mergeCoursePreviews(results);
+    // The rebuilt grid already knows which column every cell sat in; the
+    // model's weekday is kept only when it agrees with that column or when
+    // the grid cannot decide (name absent or spread over several columns).
+    return weekdayCells.length ? correctWeekdays(merged, weekdayCells) : merged;
   }
 
   private async batches(
     input: Parameters<CourseImportParser["parse"]>[0],
-  ): Promise<RequestBatch[]> {
+  ): Promise<{ batches: RequestBatch[]; weekdayCells: WeekdayCell[] }> {
     const limits = this.config.limits ?? DEFAULT_PDF_LIMITS;
     if (input.sourceType === "IMAGE") {
       const payloadBytes = Math.ceil((input.contentBase64.length * 3) / 4);
@@ -165,37 +171,54 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
           "TOO_LARGE",
           "课程表图片过大，无法安全解析，请压缩后重试。",
         );
-      return [
-        {
-          parts: [
-            introPart,
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:${input.mediaType};base64,${input.contentBase64}`,
+      // The grid correction only exists for rebuilt page text; an image
+      // carries its columns visually.
+      return {
+        batches: [
+          {
+            parts: [
+              introPart,
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:${input.mediaType};base64,${input.contentBase64}`,
+                },
               },
-            },
-          ],
-        },
-      ];
+            ],
+          },
+        ],
+        weekdayCells: [],
+      };
     }
     const prepared = await preparePdfSource(input.contentBase64, limits);
     const imageGroups = imageBatches(prepared.images);
     // Pure text: one request for normal documents (splitTextBatches only
     // divides genuinely large texts, and repeats the header in continuations).
     if (prepared.text && !imageGroups.length)
-      return splitTextBatches(prepared.text).map((chunk) => ({
-        parts: [introPart, { type: "text", text: `PDF content:\n${chunk}` }],
-      }));
+      return {
+        batches: splitTextBatches(prepared.text).map(
+          (chunk) =>
+            ({
+              parts: [
+                introPart,
+                { type: "text", text: `PDF content:\n${chunk}` },
+              ],
+            }) as RequestBatch,
+        ),
+        weekdayCells: prepared.weekdayCells,
+      };
     const textParts: ContentPart[] = prepared.text
       ? [{ type: "text", text: `PDF content:\n${prepared.text}` }]
       : [];
-    return [
-      { parts: [introPart, ...textParts, ...toParts(imageGroups[0]!)] },
-      ...imageGroups.slice(1).map((group) => ({
-        parts: [introPart, ...toParts(group)],
-      })),
-    ];
+    return {
+      batches: [
+        { parts: [introPart, ...textParts, ...toParts(imageGroups[0]!)] },
+        ...imageGroups.slice(1).map((group) => ({
+          parts: [introPart, ...toParts(group)],
+        })),
+      ],
+      weekdayCells: prepared.weekdayCells,
+    };
   }
 
   private async request(
@@ -272,6 +295,54 @@ function toParts(
     type: "image_url",
     image_url: { url: `data:${image.mediaType};base64,${image.base64}` },
   }));
+}
+
+/**
+ * Checks the model's weekday against the column the course's cell actually
+ * sat in — the one fact the rebuilt grid knows for certain, and the field a
+ * headerless fragment used to poison (a Sunday appearing, the insurance
+ * pair drifting between 周三/周四).
+ *
+ * Correction fires only when the name appears in exactly one weekday column;
+ * several matches mean the course genuinely meets more than once (or the
+ * name collided), and an absent name means no grid evidence — in both cases
+ * the model keeps its answer.
+ */
+export function correctWeekdays(
+  parsed: unknown,
+  cells: WeekdayCell[],
+): unknown {
+  if (!cells.length || !parsed || typeof parsed !== "object") return parsed;
+  const courses = (parsed as { courses?: unknown }).courses;
+  if (!Array.isArray(courses)) return parsed;
+  const normalize = (value: string): string =>
+    value.replace(/[★○●◇◆☆]/g, "").replace(/\s+/g, "");
+  const normalizedCells = cells.map((cell) => ({
+    key: normalize(cell.text),
+    weekday: cell.weekday,
+  }));
+  for (const course of courses) {
+    if (!course || typeof course !== "object") continue;
+    const target = course as { name?: unknown; schedules?: unknown };
+    if (typeof target.name !== "string" || !Array.isArray(target.schedules))
+      continue;
+    const name = normalize(target.name);
+    if (!name) continue;
+    const weekdays = new Set<number>();
+    for (const cell of normalizedCells)
+      if (cell.key.includes(name)) weekdays.add(cell.weekday);
+    if (weekdays.size !== 1) continue;
+    const expected = [...weekdays][0]!;
+    for (const schedule of target.schedules) {
+      if (
+        schedule &&
+        typeof schedule === "object" &&
+        (schedule as { weekday?: unknown }).weekday !== expected
+      )
+        (schedule as { weekday: number }).weekday = expected;
+    }
+  }
+  return parsed;
 }
 
 export { CourseImportParseError };

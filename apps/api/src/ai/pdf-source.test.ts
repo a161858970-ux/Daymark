@@ -4,6 +4,9 @@ import { expect, it } from "vitest";
 import {
   CourseImportParseError,
   DEFAULT_PDF_LIMITS,
+  buildGrid,
+  collectWeekdayCells,
+  emptyWeekdayColumnMap,
   imageBatches,
   layoutText,
   mergeCoursePreviews,
@@ -189,4 +192,98 @@ it("keeps plain documents as natural lines instead of padding columns", () => {
   expect(layoutText(content)).toBe(
     ["课程简介", "本课程介绍环境经济学", "考核方式为考试"].join("\n"),
   );
+});
+
+function gridContent(items: { str: string; x: number; y: number }[]): {
+  items: unknown[];
+} {
+  return {
+    items: items.map((item) => ({
+      str: item.str,
+      transform: [1, 0, 0, 1, item.x, item.y],
+    })),
+  };
+}
+
+it("reads (cell, weekday) pairs out of a header-labelled grid", () => {
+  const grid = buildGrid(
+    gridContent([
+      { str: "刘展呈课表", x: 140, y: -10 },
+      { str: "时间段", x: 0, y: 0 },
+      { str: "节次", x: 50, y: 0 },
+      { str: "星期一", x: 100, y: 0 },
+      { str: "星期二", x: 200, y: 0 },
+      { str: "星期三", x: 300, y: 0 },
+      { str: "上午", x: 0, y: 20 },
+      { str: "1-2节", x: 50, y: 20 },
+      { str: "商业银行经营学★", x: 100, y: 20 },
+      { str: "区/场地沙河", x: 100, y: 32 },
+      { str: "教师夏聪", x: 100, y: 44 },
+      { str: "健康经济学★", x: 200, y: 20 },
+    ]),
+  );
+  const { map, cells } = collectWeekdayCells(grid, emptyWeekdayColumnMap());
+
+  // Header labels learned, non-weekday columns (时间段/节次) not.
+  expect(map.columns).toEqual([
+    { x: 100, weekday: 1 },
+    { x: 200, weekday: 2 },
+    { x: 300, weekday: 3 },
+  ]);
+  expect(cells).toContainEqual({ text: "商业银行经营学★", weekday: 1 });
+  expect(cells).toContainEqual({ text: "区/场地沙河", weekday: 1 });
+  expect(cells).toContainEqual({ text: "教师夏聪", weekday: 1 });
+  expect(cells).toContainEqual({ text: "健康经济学★", weekday: 2 });
+  // The header row itself and unlabelled columns never enter the list.
+  expect(cells.some((cell) => cell.text === "星期一")).toBe(false);
+  expect(cells.some((cell) => cell.text === "上午")).toBe(false);
+  expect(cells.some((cell) => cell.text === "1-2节")).toBe(false);
+});
+
+it("labels a headerless continuation page from learned column positions", () => {
+  const first = buildGrid(
+    gridContent([
+      { str: "时间段", x: 0, y: 0 },
+      { str: "星期一", x: 100, y: 0 },
+      { str: "星期二", x: 200, y: 0 },
+      { str: "星期三", x: 300, y: 0 },
+      { str: "上午", x: 0, y: 20 },
+      { str: "商业银行经营学★", x: 100, y: 20 },
+    ]),
+  );
+  const learned = collectWeekdayCells(first, emptyWeekdayColumnMap());
+
+  // Pages 2+ of the same table repeat the geometry but not the header.
+  const continuation = buildGrid(
+    gridContent([
+      { str: "下午", x: 0, y: 20 },
+      { str: "晚上", x: 0, y: 44 },
+      { str: "第7-8节", x: 100, y: 20 },
+      { str: "1-16周", x: 100, y: 44 },
+      { str: "健康经济学★", x: 200, y: 20 },
+      { str: "沙河主教212M", x: 200, y: 44 },
+    ]),
+  );
+  const { cells } = collectWeekdayCells(continuation, learned.map);
+
+  expect(cells).toContainEqual({ text: "健康经济学★", weekday: 2 });
+  expect(cells).toContainEqual({ text: "沙河主教212M", weekday: 2 });
+  expect(cells).toContainEqual({ text: "第7-8节", weekday: 1 });
+  // Still-unlabelled geometry (x=0) contributes nothing.
+  expect(cells.some((cell) => cell.text === "下午")).toBe(false);
+});
+
+it("exposes weekday cells for real text-layer PDFs", async () => {
+  const prepared = await preparePdfSource(
+    await fixture("uni-gb-cjk-timetable.pdf"),
+  );
+  expect(prepared.weekdayCells.length).toBeGreaterThan(0);
+  for (const cell of prepared.weekdayCells)
+    expect(cell.weekday).toBeGreaterThanOrEqual(1);
+
+  // A scanned file has no trusted grid, so no cells (correction stays off).
+  const scanned = await preparePdfSource(
+    await fixture("scanned-timetable.pdf"),
+  );
+  expect(scanned.weekdayCells).toEqual([]);
 });
