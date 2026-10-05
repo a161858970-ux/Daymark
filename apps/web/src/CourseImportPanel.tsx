@@ -1,10 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type {
   CourseImportCommitResult,
   CourseImportJob,
   CourseImportResolution,
 } from "@course-manager/contracts";
 import type { Semester } from "@course-manager/domain";
+import {
+  getCommittingJobId,
+  subscribeCourseCommit,
+} from "./courseCommitStore.js";
 import { toUserMessage } from "./errors.js";
 
 interface Props {
@@ -201,6 +205,14 @@ export function CourseImportPanel({
   // visible so the retry path shows which file is being re-sent.
   const [fileName, setFileName] = useState<string | null>(null);
   const requestRef = useRef(0);
+  // Module state, not local: leaving the page mid-commit unmounts this
+  // component, and coming back must still show the commit as running.
+  const committingJobId = useSyncExternalStore(
+    subscribeCourseCommit,
+    getCommittingJobId,
+    getCommittingJobId,
+  );
+  const committing = job !== null && committingJobId === job.id;
 
   useEffect(() => {
     if (!available || !semester) {
@@ -321,7 +333,7 @@ export function CourseImportPanel({
               <input
                 type="file"
                 accept="application/pdf,image/png,image/jpeg,image/webp"
-                disabled={loading}
+                disabled={loading || committing}
                 aria-label="选择课程表文件"
                 onChange={(event) => {
                   const input = event.currentTarget;
@@ -355,7 +367,7 @@ export function CourseImportPanel({
           {job && job.courses.length > 0 && (
             <CourseImportReview
               job={job}
-              busy={loading}
+              busy={loading || committing}
               onResolve={(resolution) => void resolve(resolution)}
               onCommit={() => void commit()}
               onDiscard={() => void discard()}

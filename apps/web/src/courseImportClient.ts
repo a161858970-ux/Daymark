@@ -7,6 +7,7 @@ import {
 } from "@course-manager/contracts";
 import { synchronizeAuthenticatedData } from "./authSync.js";
 import { beginAiTask } from "./aiTaskStore.js";
+import { beginCourseCommit, endCourseCommit } from "./courseCommitStore.js";
 
 async function responseData<T>(response: Response): Promise<T> {
   const body = (await response.json()) as {
@@ -151,15 +152,28 @@ export async function discardCourseImport(jobId: string): Promise<void> {
 export async function commitCourseImport(
   jobId: string,
 ): Promise<CourseImportCommitResult> {
-  const token = await synchronizeAuthenticatedData();
-  const result = await call<CourseImportCommitResult>(
-    token,
-    `/api/v1/course-imports/${jobId}/commit`,
-    {
-      method: "POST",
-      headers: { "idempotency-key": crypto.randomUUID() },
-    },
-  );
-  await synchronizeAuthenticatedData();
-  return result;
+  // The commit runs server-side to completion even if the user navigates
+  // away; both stores exist so the shell keeps showing progress and a
+  // returning panel keeps showing its in-flight state.
+  beginCourseCommit(jobId);
+  const endAiTask = beginAiTask("course-commit");
+  try {
+    const token = await synchronizeAuthenticatedData();
+    const result = await call<CourseImportCommitResult>(
+      token,
+      `/api/v1/course-imports/${jobId}/commit`,
+      {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+      },
+    );
+    await synchronizeAuthenticatedData();
+    endAiTask("ok");
+    return result;
+  } catch (cause) {
+    endAiTask("failed");
+    throw cause;
+  } finally {
+    endCourseCommit(jobId);
+  }
 }

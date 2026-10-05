@@ -8,12 +8,14 @@ import {
 
 const completedLabels: Record<AiTaskKind, string> = {
   "course-import": "课表识别完成，点击查看",
+  "course-commit": "课程建立完成，点击查看",
   capture: "智能整理完成，点击查看",
 };
 
 /** A failed wave still needs the click-through — the panel there shows why it failed. */
 const failedLabels: Record<AiTaskKind, string> = {
   "course-import": "课表识别失败，点击查看",
+  "course-commit": "课程建立失败，点击查看",
   capture: "智能整理失败，点击查看",
 };
 

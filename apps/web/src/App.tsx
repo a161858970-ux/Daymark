@@ -797,6 +797,9 @@ export function App() {
     if (kind === "course-import") {
       navigate("courses");
       setImportOpenSignal((value) => value + 1);
+    } else if (kind === "course-commit") {
+      // The commit's result is the courses themselves: land on the list.
+      navigate("courses");
     } else {
       navigate("overview");
       setPendingExpanded(true);

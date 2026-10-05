@@ -83,3 +83,30 @@ it("prefers the import hint when a wave mixed both kinds", () => {
     dismissCompletedAiTasks();
   }
 });
+
+it("labels the commit hint with what actually happened", () => {
+  dismissCompletedAiTasks();
+  const ok = beginAiTask("course-commit");
+  ok("ok");
+  try {
+    const done = renderToStaticMarkup(
+      <AiTaskProgress onOpen={() => undefined} />,
+    );
+    expect(done).toContain("课程建立完成，点击查看");
+    expect(done).toContain('data-kind="course-commit"');
+  } finally {
+    dismissCompletedAiTasks();
+  }
+
+  const failed = beginAiTask("course-commit");
+  failed("failed");
+  try {
+    const broken = renderToStaticMarkup(
+      <AiTaskProgress onOpen={() => undefined} />,
+    );
+    expect(broken).toContain("课程建立失败，点击查看");
+    expect(broken).not.toContain("课程建立完成");
+  } finally {
+    dismissCompletedAiTasks();
+  }
+});

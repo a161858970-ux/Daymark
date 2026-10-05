@@ -70,3 +70,17 @@ it("records which settled requests failed so the hint cannot lie", () => {
   dismissCompletedAiTasks();
   expect(getAiTaskSnapshot().failed).toEqual([]);
 });
+
+it("sorts a commit wave ahead of capture regardless of end order", () => {
+  dismissCompletedAiTasks();
+  const endCapture = beginAiTask("capture");
+  const endCommit = beginAiTask("course-commit");
+  endCapture("ok");
+  endCommit("ok");
+  expect(getAiTaskSnapshot()).toEqual({
+    active: 0,
+    completed: ["course-commit", "capture"],
+    failed: [],
+  });
+  dismissCompletedAiTasks();
+});

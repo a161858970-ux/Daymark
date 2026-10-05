@@ -7,10 +7,10 @@
  * flight; one widget in the shell reflects that, and when the wave settles
  * the finished task is remembered until the user clicks through to its page.
  */
-export type AiTaskKind = "course-import" | "capture";
+export type AiTaskKind = "course-import" | "course-commit" | "capture";
 
 /** Display/merge order for completed hints. */
-const KIND_ORDER: AiTaskKind[] = ["course-import", "capture"];
+const KIND_ORDER: AiTaskKind[] = ["course-import", "course-commit", "capture"];
 
 type Listener = () => void;
 
