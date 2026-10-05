@@ -6,6 +6,7 @@ import type {
 } from "@course-manager/contracts";
 import type { Course, Semester, SemesterWeek } from "@course-manager/domain";
 import { CourseImportPanel } from "./CourseImportPanel.js";
+import { getCommittingJobId } from "./courseCommitStore.js";
 import { DateTimeField } from "./DateTimeField.js";
 import { SemesterWeekEditor, type WeekFields } from "./SemesterWeekEditor.js";
 import { toUserMessage } from "./errors.js";
@@ -83,6 +84,13 @@ export function CourseIndex({
   useEffect(() => {
     if (openImportSignal) setShowImport(true);
   }, [openImportSignal]);
+
+  // Walking away mid-commit and coming back must land on the import panel
+  // again (with its busy state from courseCommitStore) instead of a blank
+  // course list — the commit never stopped running.
+  useEffect(() => {
+    if (getCommittingJobId()) setShowImport(true);
+  }, []);
 
   async function createCourse(inheritFromId: string | null) {
     try {
