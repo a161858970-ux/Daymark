@@ -40,12 +40,12 @@ async function loadRootEnv(): Promise<void> {
 async function requireConfig() {
   await loadRootEnv();
   const apiKey = process.env.AI_API_KEY ?? process.env.MIMO_API_KEY;
-  const model = process.env.AI_MODEL ?? "mimo-v2.5-pro";
+  const model = process.env.AI_MODEL ?? "mimo-v2.6-pro";
   const baseUrl = process.env.AI_BASE_URL ?? "https://api.xiaomimimo.com/v1";
   if (!apiKey) {
     console.error("REAL_AI_REQUIRED");
     console.error("Set AI_API_KEY in the repository-root .env (or the shell).");
-    console.error("Optional: AI_MODEL (default mimo-v2.5-pro), AI_BASE_URL.");
+    console.error("Optional: AI_MODEL (default mimo-v2.6-pro), AI_BASE_URL.");
     process.exit(2);
   }
   return { apiKey, model, baseUrl };
