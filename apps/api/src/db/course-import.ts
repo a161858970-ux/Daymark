@@ -29,6 +29,12 @@ function courseImportSourceType(
 }
 
 export interface CourseImportParser {
+  /**
+   * Identity of the prompt/schema/model generation this parser belongs to;
+   * keys the parse cache so a change re-parses instead of serving a stale
+   * answer. Absent = caching off (test doubles, custom parsers).
+   */
+  readonly fingerprint?: string;
   parse(input: {
     sourceType: CourseImportSourceType;
     fileName: string;
@@ -303,39 +309,82 @@ export class CloudCourseImportManager {
       );
 
     let parsed: ReturnType<typeof courseImportParseResultSchema.parse>;
-    const gate = this.limiter?.check(`owner:${ownerId}`);
-    if (gate && !gate.allowed)
-      throw new CloudError("RATE_LIMITED", 429, "请求过于频繁，请稍后再试。", {
-        retry_after_seconds: gate.retryAfterSeconds,
-      });
+    const sourceHash = createHash("sha256").update(bytes).digest("hex");
+    const promptVersion = this.parser.fingerprint ?? null;
+    // Same bytes + same prompt/model generation already produced an answer
+    // once (retry after a timeout, a second import of the same export):
+    // serve it without another provider call. A corrupt or missing row is a
+    // miss, never an error — caching only ever makes the path faster.
+    let cached: ReturnType<typeof courseImportParseResultSchema.parse> | null =
+      null;
+    if (promptVersion) {
+      try {
+        const row = await this.db.query<{ result: unknown }>(
+          `SELECT result FROM course_import_parse_cache
+           WHERE owner_id=$1 AND source_sha256=$2 AND prompt_version=$3`,
+          [ownerId, sourceHash, promptVersion],
+        );
+        if (row.rows[0])
+          cached = courseImportParseResultSchema.parse(row.rows[0].result);
+      } catch {
+        cached = null;
+      }
+    }
+    if (!cached) {
+      const gate = this.limiter?.check(`owner:${ownerId}`);
+      if (gate && !gate.allowed)
+        throw new CloudError(
+          "RATE_LIMITED",
+          429,
+          "请求过于频繁，请稍后再试。",
+          {
+            retry_after_seconds: gate.retryAfterSeconds,
+          },
+        );
+    }
     try {
       // A schema rejection means the model produced malformed data (one real
       // case: a schedule whose end preceded its start). One fresh model round
       // usually fixes it; only a second failure fails the job, and unreadable
       // sources or provider errors are not retried here.
-      for (let attempt = 0; ; attempt++) {
-        try {
-          const raw: unknown = await this.parser.parse({
-            sourceType: uploadedType,
-            fileName: source.file_name,
-            mediaType: source.media_type,
-            contentBase64: bytes.toString("base64"),
-          });
-          // The file was readable and the model answered, but it found no
-          // course at all: report that instead of the misleading "file not
-          // clear" copy that only fits an unreadable source.
-          const courses = (raw as { courses?: unknown } | null)?.courses;
-          if (Array.isArray(courses) && courses.length === 0)
-            throw new CourseImportParseError(
-              "NO_COURSES",
-              "未从该文件中识别出课程。请确认这是本学期的课程表且内容清晰，也可以改用清晰截图重新导入。",
-            );
-          parsed = courseImportParseResultSchema.parse(raw);
-          break;
-        } catch (error) {
-          if (error instanceof ZodError && attempt === 0) continue;
-          throw error;
+      if (cached) {
+        parsed = cached;
+      } else {
+        for (let attempt = 0; ; attempt++) {
+          try {
+            const raw: unknown = await this.parser.parse({
+              sourceType: uploadedType,
+              fileName: source.file_name,
+              mediaType: source.media_type,
+              contentBase64: bytes.toString("base64"),
+            });
+            // The file was readable and the model answered, but it found no
+            // course at all: report that instead of the misleading "file not
+            // clear" copy that only fits an unreadable source.
+            const courses = (raw as { courses?: unknown } | null)?.courses;
+            if (Array.isArray(courses) && courses.length === 0)
+              throw new CourseImportParseError(
+                "NO_COURSES",
+                "未从该文件中识别出课程。请确认这是本学期的课程表且内容清晰，也可以改用清晰截图重新导入。",
+              );
+            parsed = courseImportParseResultSchema.parse(raw);
+            break;
+          } catch (error) {
+            if (error instanceof ZodError && attempt === 0) continue;
+            throw error;
+          }
         }
+        if (promptVersion)
+          try {
+            await this.db.query(
+              `INSERT INTO course_import_parse_cache
+                 (owner_id,source_sha256,prompt_version,result)
+               VALUES($1,$2,$3,$4::jsonb) ON CONFLICT DO NOTHING`,
+              [ownerId, sourceHash, promptVersion, JSON.stringify(parsed)],
+            );
+          } catch {
+            // Best-effort: a cache hiccup must not fail a finished parse.
+          }
       }
     } catch (error) {
       const message = importFailureMessage(error);
@@ -355,7 +404,6 @@ export class CloudCourseImportManager {
       throw new CloudError("IMPORT_FAILED", 422, message, {}, { cause: error });
     }
 
-    const sourceHash = createHash("sha256").update(bytes).digest("hex");
     return this.db.transaction(async (query) => {
       const job = await findJob(query, ownerId, id, true);
       if (!job)

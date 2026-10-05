@@ -25,6 +25,7 @@ async function harness(parser: CourseImportParser, limiter?: RateLimiter) {
     "002_collection_sync.sql",
     "003_course_import.sql",
     "005_schedule_times_nullable.sql",
+    "006_course_import_parse_cache.sql",
   ]) {
     const path = fileURLToPath(
       new URL(`../../../../backend/migrations/${name}`, import.meta.url),
@@ -457,6 +458,65 @@ it("imports a periods-only timetable with null clock times end to end", async ()
       end_time: null,
       stage_label: "12-13节",
     });
+  } finally {
+    await server.close();
+    await postgres.close();
+  }
+});
+
+it("serves repeat uploads from the parse cache and re-parses per generation", async () => {
+  let calls = 0;
+  const parser: CourseImportParser = {
+    fingerprint: "gen-1",
+    parse: async () => {
+      calls += 1;
+      return parsedCourses;
+    },
+  };
+  const { postgres, academic, imports, server } = await harness(parser);
+  try {
+    const semester = await academic.createSemester(owner, randomUUID(), {
+      name: "2026 秋季学期",
+      start_date: "2026-09-01",
+      end_date: "2026-12-31",
+    });
+    const source = {
+      file_name: "课程表.png",
+      media_type: "image/png",
+      content_base64: Buffer.from("image fixture").toString("base64"),
+    };
+
+    const first = await imports.start(owner, semester.id, "IMAGE");
+    const firstReady = await imports.parseSource(owner, first.id, source);
+    expect(firstReady.status).toBe("READY");
+    expect(calls).toBe(1);
+
+    // Same bytes + same generation: the answer comes from the cache.
+    const second = await imports.start(owner, semester.id, "IMAGE");
+    const secondReady = await imports.parseSource(owner, second.id, source);
+    expect(calls).toBe(1);
+    expect(secondReady.status).toBe("READY");
+    expect(secondReady.courses).toHaveLength(firstReady.courses.length);
+
+    // A new prompt/model generation must not inherit the old answer.
+    (parser as { fingerprint?: string }).fingerprint = "gen-2";
+    const third = await imports.start(owner, semester.id, "IMAGE");
+    await imports.parseSource(owner, third.id, source);
+    expect(calls).toBe(2);
+
+    // Another owner uploading the same bytes never sees this owner's cache.
+    const otherSemester = await academic.createSemester(
+      otherOwner,
+      randomUUID(),
+      {
+        name: "2026 秋季学期",
+        start_date: "2026-09-01",
+        end_date: "2026-12-31",
+      },
+    );
+    const otherJob = await imports.start(otherOwner, otherSemester.id, "IMAGE");
+    await imports.parseSource(otherOwner, otherJob.id, source);
+    expect(calls).toBe(3);
   } finally {
     await server.close();
     await postgres.close();

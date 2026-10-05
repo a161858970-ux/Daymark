@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { CourseImportParser } from "../db/course-import.js";
 import {
   providerFailure,
@@ -129,6 +130,9 @@ interface RequestBatch {
 
 /** Chosen so a single request stays comfortably inside provider payload caps. */
 export class ChatCompletionsCourseImportParser implements CourseImportParser {
+  /** Cache key for this prompt/schema/model generation (see the interface). */
+  readonly fingerprint: string;
+
   constructor(
     private readonly config: {
       apiKey: string;
@@ -140,7 +144,20 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
       limits?: PdfPrepareLimits;
     },
     private readonly transport: typeof fetch = fetch,
-  ) {}
+  ) {
+    this.fingerprint = createHash("sha256")
+      .update(
+        JSON.stringify({
+          instructions,
+          schema,
+          model: config.model,
+          imageModel: config.imageModel ?? null,
+          batchCharLimit: TEXT_BATCH_CHAR_LIMIT,
+        }),
+      )
+      .digest("hex")
+      .slice(0, 16);
+  }
 
   async parse(
     input: Parameters<CourseImportParser["parse"]>[0],
