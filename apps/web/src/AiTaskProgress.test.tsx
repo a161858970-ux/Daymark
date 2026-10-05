@@ -25,7 +25,7 @@ it("shows an indeterminate placeholder while a task runs, never a percentage", (
     // The backend exposes no real progress value, so no number may leak out.
     expect(markup).not.toMatch(/\d+\s*%/);
   } finally {
-    end();
+    end("ok");
     dismissCompletedAiTasks();
   }
 });
@@ -33,7 +33,7 @@ it("shows an indeterminate placeholder while a task runs, never a percentage", (
 it("keeps a finished task as a clickable hint until it is opened", () => {
   dismissCompletedAiTasks();
   const end = beginAiTask("course-import");
-  end();
+  end("ok");
   try {
     const markup = renderToStaticMarkup(
       <AiTaskProgress onOpen={() => undefined} />,
@@ -48,12 +48,31 @@ it("keeps a finished task as a clickable hint until it is opened", () => {
   }
 });
 
+it("labels a failed wave as failed and still opens the page that explains it", () => {
+  dismissCompletedAiTasks();
+  const end = beginAiTask("course-import");
+  end("failed");
+  try {
+    const markup = renderToStaticMarkup(
+      <AiTaskProgress onOpen={() => undefined} />,
+    );
+    expect(markup).toContain("phase-failed");
+    expect(markup).toContain('data-phase="failed"');
+    expect(markup).toContain("课表识别失败，点击查看");
+    expect(markup).not.toContain("课表识别完成，点击查看");
+    expect(markup).toContain("<button");
+    expect(markup).toContain('data-kind="course-import"');
+  } finally {
+    dismissCompletedAiTasks();
+  }
+});
+
 it("prefers the import hint when a wave mixed both kinds", () => {
   dismissCompletedAiTasks();
   const endCapture = beginAiTask("capture");
   const endImport = beginAiTask("course-import");
-  endCapture();
-  endImport();
+  endCapture("ok");
+  endImport("ok");
   try {
     const markup = renderToStaticMarkup(
       <AiTaskProgress onOpen={() => undefined} />,

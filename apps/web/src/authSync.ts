@@ -77,14 +77,17 @@ export async function requestCaptureInterpretation(
   // even when the user switches views while the answer is still coming.
   const endAiTask = beginAiTask("capture");
   try {
-    return await runCaptureInterpretation(
+    const result = await runCaptureInterpretation(
       token,
       captureId,
       currentCourseId,
       candidateCourseIds,
     );
-  } finally {
-    endAiTask();
+    endAiTask("ok");
+    return result;
+  } catch (cause) {
+    endAiTask("failed");
+    throw cause;
   }
 }
 

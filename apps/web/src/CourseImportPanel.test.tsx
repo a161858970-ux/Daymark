@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import type { CourseImportJob } from "@course-manager/contracts";
-import { CourseImportReview } from "./CourseImportPanel.js";
+import { CourseImportReview, importFailureNote } from "./CourseImportPanel.js";
 
 const job: CourseImportJob = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -95,4 +95,22 @@ it("shows the period label instead of a clock time when the source has none", ()
   );
   expect(markup).toContain("周三 12-13节 · 第 1–16 周");
   expect(markup).not.toContain("--");
+});
+
+it("shows the stored failure reason for a failed import instead of a generic hint", () => {
+  const failed: CourseImportJob = {
+    ...job,
+    status: "FAILED",
+    error_message: "识别服务响应超时，文件已保留，请稍后再试。",
+  };
+  expect(importFailureNote(failed)).toBe(
+    "识别服务响应超时，文件已保留，请稍后再试。",
+  );
+  // Older rows without a stored message still get an accurate fallback.
+  expect(importFailureNote({ ...failed, error_message: null })).toBe(
+    "上次识别没有写入任何课程，可以重新选择更清晰的文件。",
+  );
+  // Anything that is not FAILED shows no failure note at all.
+  expect(importFailureNote(job)).toBeNull();
+  expect(importFailureNote(null)).toBeNull();
 });

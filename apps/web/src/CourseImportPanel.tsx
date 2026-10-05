@@ -157,6 +157,18 @@ export function CourseImportReview({
   );
 }
 
+/**
+ * A failed import must state its exact stored reason (timeout, unreadable
+ * file, no courses…); older rows without a message fall back to the generic
+ * hint. Nothing is written on failure, so "no courses" is always accurate.
+ */
+export function importFailureNote(job: CourseImportJob | null): string | null {
+  if (!job || job.status !== "FAILED") return null;
+  return (
+    job.error_message ?? "上次识别没有写入任何课程，可以重新选择更清晰的文件。"
+  );
+}
+
 export function CourseImportPanel({
   semester,
   available,
@@ -173,6 +185,9 @@ export function CourseImportPanel({
   const [loading, setLoading] = useState(available && Boolean(semester));
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // The native input clears itself after upload; this keeps the chosen name
+  // visible so the retry path shows which file is being re-sent.
+  const [fileName, setFileName] = useState<string | null>(null);
   const requestRef = useRef(0);
 
   useEffect(() => {
@@ -290,26 +305,39 @@ export function CourseImportPanel({
           <label className="course-import-file">
             <span>{job ? "重新选择课程表文件" : "选择课程表文件"}</span>
             <small>PDF、PNG、JPEG 或 WebP，最大 15 MB</small>
-            <input
-              type="file"
-              accept="application/pdf,image/png,image/jpeg,image/webp"
-              disabled={loading}
-              onChange={(event) => {
-                const input = event.currentTarget;
-                // Clear only after the async upload finishes: resetting the
-                // input here invalidates the File before fileBase64 reads it
-                // (token fetch runs first), which reported size 0 and made a
-                // 400 KB image fail the 15 MB guard.
-                void selectFile(input.files?.[0]).finally(() => {
-                  input.value = "";
-                });
-              }}
-            />
+            <span className="course-import-file-row">
+              <input
+                type="file"
+                accept="application/pdf,image/png,image/jpeg,image/webp"
+                disabled={loading}
+                aria-label="选择课程表文件"
+                onChange={(event) => {
+                  const input = event.currentTarget;
+                  setFileName(input.files?.[0]?.name ?? null);
+                  // Clear only after the async upload finishes: resetting the
+                  // input here invalidates the File before fileBase64 reads it
+                  // (token fetch runs first), which reported size 0 and made a
+                  // 400 KB image fail the 15 MB guard.
+                  void selectFile(input.files?.[0]).finally(() => {
+                    input.value = "";
+                  });
+                }}
+              />
+              <span
+                className={`course-import-file-button${loading ? " is-disabled" : ""}`}
+                aria-hidden="true"
+              >
+                选择文件
+              </span>
+              <span className="course-import-file-name">
+                {fileName ?? "未选择文件"}
+              </span>
+            </span>
           </label>
           {loading && <p className="course-import-progress">正在处理…</p>}
-          {job?.status === "FAILED" && (
-            <p className="course-import-note">
-              上次识别没有写入任何课程，可以重新选择更清晰的文件。
+          {importFailureNote(job) && (
+            <p className="course-import-note" role="alert">
+              {importFailureNote(job)}
             </p>
           )}
           {job && job.courses.length > 0 && (

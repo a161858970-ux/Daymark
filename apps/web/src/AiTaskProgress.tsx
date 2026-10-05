@@ -11,6 +11,12 @@ const completedLabels: Record<AiTaskKind, string> = {
   capture: "智能整理完成，点击查看",
 };
 
+/** A failed wave still needs the click-through — the panel there shows why it failed. */
+const failedLabels: Record<AiTaskKind, string> = {
+  "course-import": "课表识别失败，点击查看",
+  capture: "智能整理失败，点击查看",
+};
+
 /** Import results matter more, so when a wave mixed kinds it wins the hint. */
 function pickCompleted(completed: AiTaskKind[]): AiTaskKind {
   return completed.includes("course-import") ? "course-import" : completed[0]!;
@@ -25,7 +31,7 @@ function pickCompleted(completed: AiTaskKind[]): AiTaskKind {
  * opens the page that holds the result.
  */
 export function AiTaskProgress({ onOpen }: { onOpen(kind: AiTaskKind): void }) {
-  const { active, completed } = useSyncExternalStore(
+  const { active, completed, failed } = useSyncExternalStore(
     subscribeAiTasks,
     getAiTaskSnapshot,
     getAiTaskSnapshot,
@@ -51,18 +57,22 @@ export function AiTaskProgress({ onOpen }: { onOpen(kind: AiTaskKind): void }) {
 
   if (completed.length > 0) {
     const kind = pickCompleted(completed);
+    const didFail = failed.includes(kind);
+    const phase = didFail ? "failed" : "completed";
     return (
       <button
         type="button"
-        className="ai-task-progress phase-completed"
-        data-phase="completed"
+        className={`ai-task-progress phase-${phase}`}
+        data-phase={phase}
         data-kind={kind}
         onClick={() => {
           dismissCompletedAiTasks();
           onOpen(kind);
         }}
       >
-        <span className="ai-task-progress-label">{completedLabels[kind]}</span>
+        <span className="ai-task-progress-label">
+          {didFail ? failedLabels[kind] : completedLabels[kind]}
+        </span>
         <span className="ai-task-progress-track" aria-hidden="true">
           <span className="ai-task-progress-bar bar-one" />
         </span>

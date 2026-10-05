@@ -70,7 +70,7 @@ async function uploadSource(
   // widget must start when the upload leaves, not when the answer lands.
   const endAiTask = beginAiTask("course-import");
   try {
-    return await call<CourseImportJob>(
+    const job = await call<CourseImportJob>(
       token,
       `/api/v1/course-imports/${jobId}/source`,
       {
@@ -82,8 +82,13 @@ async function uploadSource(
         }),
       },
     );
-  } finally {
-    endAiTask();
+    endAiTask("ok");
+    return job;
+  } catch (cause) {
+    // A rejected wave still settles the counter — and must not be announced
+    // as a completed import when the panel has no result to show.
+    endAiTask("failed");
+    throw cause;
   }
 }
 

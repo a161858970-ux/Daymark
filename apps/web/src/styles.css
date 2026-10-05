@@ -1125,10 +1125,50 @@ h2 {
 .course-import-file small {
   color: var(--muted);
 }
-.course-import-file input {
+.course-import-file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin-top: 8px;
-  color: var(--ink-soft);
-  font-size: 12px;
+  min-height: 40px;
+}
+/* The native file control renders its own button and copy; keep the input
+   (focusable, label-driven) but out of sight behind our own visuals. */
+.course-import-file-row input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.course-import-file-button {
+  flex: none;
+  padding: 8px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 70%);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.course-import-file-button.is-disabled {
+  opacity: 0.55;
+}
+.course-import-file:focus-within .course-import-file-button {
+  outline: 2px solid var(--accent-strong, #31564a);
+  outline-offset: 2px;
+}
+.course-import-file-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .course-import-progress,
 .course-import-note,
@@ -2957,25 +2997,41 @@ h2 {
     transform 0.18s ease;
 }
 .phase-completed:hover,
-.phase-completed:focus-visible {
+.phase-completed:focus-visible,
+.phase-failed:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 10px 26px rgb(33 43 38 / 16%);
 }
-.phase-completed:active {
+.phase-completed:active,
+.phase-failed:active {
   transform: translateY(1px);
 }
 .phase-completed .ai-task-progress-label {
   color: var(--accent-strong, #31564a);
   font-weight: 650;
 }
-.phase-completed .bar-two {
+/* Failure reads warm, not green: the click-through opens the page that
+   explains what went wrong, not a finished result. */
+.phase-failed .ai-task-progress-label {
+  color: rgb(140 92 46);
+  font-weight: 650;
+}
+.phase-completed .bar-two,
+.phase-failed .bar-two {
   display: none;
 }
-.phase-completed .bar-one {
+.phase-completed .bar-one,
+.phase-failed .bar-one {
   animation: ai-progress-complete 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 .phase-completed .ai-task-progress-track {
   background: rgb(85 121 104 / 22%);
+}
+.phase-failed .ai-task-progress-track {
+  background: rgb(140 92 46 / 20%);
+}
+.phase-failed .ai-task-progress-bar {
+  background: rgb(140 92 46 / 80%);
 }
 @keyframes ai-progress-complete {
   from {
