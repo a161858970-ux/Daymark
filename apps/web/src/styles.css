@@ -4230,30 +4230,20 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgb(243 240 233 / 96%);
-  backdrop-filter: blur(14px);
   user-select: none;
 }
-/* Left half belongs to the dock: same skin as .main-nav, and its right
-   divider runs full height so the sidebar seam reaches the window top. */
-.window-titlebar::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: var(--nav-width);
-  background: rgb(236 233 225 / 88%);
-  backdrop-filter: blur(18px);
-  border-right: 1px solid var(--line);
-}
-/* The horizontal seam exists only above the content area. */
+/* The strip is transparent over the dock: .main-nav runs full height
+   (top 0, own padding compensates the 36px), so ONE element draws the
+   vertical seam from the window top down — two layers can never render
+   it a pixel apart. The right side is its own block with the only
+   horizontal hairline. */
 .window-titlebar::after {
   content: "";
   position: absolute;
-  left: var(--nav-width);
-  right: 0;
-  bottom: 0;
-  height: 1px;
-  background: var(--line);
+  inset: 0 0 0 var(--nav-width);
+  background: rgb(243 240 233 / 96%);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
 }
 .window-titlebar .titlebar-label {
   position: relative;
@@ -4305,7 +4295,8 @@ body.tauri-shell {
   padding-top: 36px;
 }
 .tauri-shell .main-nav {
-  top: 36px;
+  top: 0;
+  padding-top: 74px; /* 36px shell strip + the nav's own 38px */
 }
 .tauri-shell .app-shell,
 .tauri-shell .main-content {
