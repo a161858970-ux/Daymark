@@ -430,3 +430,30 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 - 手机通知复测（O-4，2026-09-30）结束后**已还原**：`main.ts` 的 `listen host` 回到 `127.0.0.1`（本轮改动随 O-4 一并提交）、Web 按默认 `vite --host 127.0.0.1` 启动。
 - 还原后核验：`127.0.0.1:3100/api/v1/health` → 200、`127.0.0.1:5173` → 200；`10.11.152.182:3100/5173` **均拒绝连接**（局域网暴露已关闭）。
 - API 由原自动重启窗口（`%TEMP%\start-cm-api.cmd`，标题 CourseManager API）承载；Web 当前由本次会话的后台进程承载，若其退出用 `pnpm --filter @course-manager/web dev` 拉起。
+
+## 18. Tauri 桌面壳与账户换绑修复（2026-10-06）
+
+### 生产环境（阶段 1，已交付，此前只在会话记录里）
+
+- API 生产地址 `https://api.daymark.top`（香港 VPS `206.187.209.142`：Ubuntu 24.04 + systemd `cm-api` + Caddy 反代 127.0.0.1:3100 + Let's Encrypt 自动续期 + ufw 22/80/443）；健康检查 `/api/v1/health`。部署方式：服务器 `/opt/daymark/course-manager` 里 `git pull` + `pnpm --filter @course-manager/api build` + `systemctl restart cm-api`。SSH 免密密钥 `~/.ssh/id_ed25519_daymark2`（先用密码登录开启 `sshd_config.d/99-daymark.conf` 的公钥开关）。
+- 域名 `daymark.top` 托管在 NameSilo 自带 DNS（`api.` 子域 A 记录指服务器）；根域/`www` 仍停放页，留作官网。Caddy 已开访问日志：`/var/log/caddy/access.log`。
+- 用户命名：中文「拾序」/ 英文「Daymark」（exe/安装器/窗口标题统一）。
+
+### 阶段 2：Tauri 2 桌面壳（本窗口）
+
+- 工具链按要求全在 E 盘：Rust 1.99（`E:\devtools\cargo`、`E:\devtools\rustup`，已 setx 持久化）、VS Build Tools（`E:\devtools\vsbuildtools`，MSVC 14.44）；cargo 走 rsproxy.cn 镜像。
+- 打包命令：`export PATH="/e/devtools/cargo/bin:$PATH" CARGO_HOME='E:\devtools\cargo' RUSTUP_HOME='E:\devtools\rustup' && pnpm exec tauri build` → 产物 `src-tauri/target/release/bundle/nsis/Daymark_0.1.0_x64-setup.exe`（约 1.53 MiB，全量 ~5 分钟）。
+- `apps/web/src/apiBase.ts` 的 `isTauri()`（探测 `window.__TAURI_INTERNALS__`）是唯一壳探测器；打包版 API 走 `https://api.daymark.top`，开发版同源相对路径（vite 代理不变）。
+- API 注册 `@fastify/cors`（反射 origin；bearer 认证无 cookie，安全），生产已部署并用 OPTIONS 预检验证（204 + `access-control-allow-origin`）。
+- **坑 1（已在 `768af7f` 修复）：壳的 CSP `connect-src` 必须含 Supabase 域**。第一版只放行 api.daymark.top，壳内手机/邮箱验证码全部失败，报的却是兜底文案「暂时无法发送…请稍后再试」——那是 CSP 拦截产生的未知错误，不指向服务端。
+- **坑 2（已在 `768af7f` 修复）：eslint 必须忽略 `src-tauri/**`**，否则 cargo target 里的生成 .js/.ts 被当源码扫出 binary/parse 错、lint 转红。
+- Google 登录在壳内暂禁（按钮灰显「桌面版暂不可用」，浏览器版照常）：Supabase 后台 Site URL 仍是开发期 `http://127.0.0.1:5173`，OAuth 回跳撞 127.0.0.1（用户截图证实）；`.env` 的 `SUPABASE_ACCESS_TOKEN` 已 401，改后台需有效 token。**阶段 4 接回**：改 Site URL/Redirect 白名单 + 壳内回跳处理。
+- 本机壳数据目录（排查/兜底清库用）：`C:\Users\LIU\AppData\Local\com.daymark.desktop\EBWebView\Default\`（IndexedDB、Local Storage 都在这里；清掉=本机恢复出厂）。
+
+### 关键 bug：新装壳先登错账号，真账号被「已关联另一账户」锁死（本窗口修复）
+
+- 现象：手机验证码账号（0 门课）先登录 → 本地写死 `sync_bound_owner_id` → 退出改登 Gmail 密码账号（22 门课在云端）→ `OwnerBindingError` → 「本机记录已关联另一账户，请使用原账户」，同步不跑、数据拉不下来。
+- 根因：`bindOwner`（`packages/storage/src/index.ts`）对「绑定过别的 owner」无条件拒绝，**没区分本机是否真有值得保护的数据**。
+- 修复：12 张绑定表**全空 → 允许改绑**（空库换绑无数据可迁移）；任一表有行 → 照旧拒绝（「真实数据永不跨账号迁移」的原验收条款不变，`owner-continuity.test.ts` 原两条保护测试继续通过）。
+- 真实库证据：22 门课全部在 Gmail 账号 owner `645027f0-7b61-480d-9b3d-9c1ad264ee45`（同一 auth.users 下 email + google 两个 identity，所以密码登录/Google 登录/原测试是同一账号）；手机号账号 `8138a7f3-410c-4740-8d54-33f9f8c13ef1` 课程 0。
+- 测试：storage 新增 1 条空库换绑用例 → 41 通过；全量 **279 passed + 1 skip**，format/lint/typecheck/build 全 0。

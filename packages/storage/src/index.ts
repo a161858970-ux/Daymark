@@ -594,9 +594,6 @@ export class DexieLocalRepository
   async bindOwner(ownerId: string): Promise<void> {
     await this.transaction(async () => {
       const bound = await this.db.settings.get("sync_bound_owner_id");
-      if (bound && bound.value !== ownerId)
-        throw new OwnerBindingError("Local data is bound to another account");
-      if (bound) return;
       const tables = [
         this.db.semesters,
         this.db.semester_weeks,
@@ -611,6 +608,26 @@ export class DexieLocalRepository
         this.db.outbox_mutations,
         this.db.sync_conflicts,
       ];
+      if (bound && bound.value !== ownerId) {
+        // A store that holds no rows carries nothing to protect: a fresh
+        // device that first signed into the wrong account (e.g. a throwaway
+        // phone OTP before the real one) may simply rebind. Anything else
+        // keeps the lock — real data never migrates across accounts.
+        let hasRows = false;
+        for (const table of tables) {
+          const count = await (
+            table as Table<{ owner_id: string }, string>
+          ).count();
+          if (count > 0) {
+            hasRows = true;
+            break;
+          }
+        }
+        if (hasRows)
+          throw new OwnerBindingError("Local data is bound to another account");
+      } else if (bound) {
+        return;
+      }
       for (const table of tables)
         await (table as Table<{ owner_id: string }, string>)
           .toCollection()

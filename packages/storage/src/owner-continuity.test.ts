@@ -17,8 +17,9 @@ import {
  *
  * The account model is "one auth.users.id, many identities". Signing in with
  * a different identity of the same account must therefore never rebind, split
- * or leak local data, while a genuinely different account must be rejected
- * before anything syncs.
+ * or leak local data, while a genuinely different account is rejected before
+ * anything syncs — unless the store is still empty, where a rebind carries
+ * nothing to migrate (fresh device that signed into the wrong account first).
  */
 
 const ownerA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -79,6 +80,22 @@ it("never migrates local data to a different account", async () => {
   expect(items.every((row) => row.owner_id === ownerA)).toBe(true);
   const courses = await db.courses.toArray();
   expect(courses.every((row) => row.owner_id === ownerA)).toBe(true);
+});
+
+it("rebinds a still-empty store that first signed into the wrong account", async () => {
+  const name = `owner-continuity-${crypto.randomUUID()}`;
+  const db = new CourseManagerDb(name);
+  openDbs.push(db);
+  const repo = new DexieLocalRepository(db);
+
+  // Fresh device: a throwaway phone-OTP account signs in first and leaves
+  // an empty binding behind — there is nothing here to protect.
+  await repo.bindOwner(ownerB);
+  // The real account arrives; the store rebinds instead of deadlocking.
+  await repo.bindOwner(ownerA);
+
+  expect((await db.settings.get("sync_bound_owner_id"))?.value).toBe(ownerA);
+  expect((await db.settings.get("local_owner_id"))?.value).toBe(ownerA);
 });
 
 it("refuses to sync another owner's data and keeps the outbox intact", async () => {
