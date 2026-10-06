@@ -415,7 +415,88 @@ export class CourseManagerDb extends Dexie {
 export class DexieLocalRepository
   implements LocalRepository, SyncRepository, ReminderRepository
 {
-  constructor(readonly db: CourseManagerDb = new CourseManagerDb()) {}
+  private readonly bootstrapDb: CourseManagerDb;
+  private activeDb: CourseManagerDb;
+  private activeOwner: string | null;
+  private readonly ownerStores = new Map<string, CourseManagerDb>();
+
+  constructor(db: CourseManagerDb = new CourseManagerDb()) {
+    this.bootstrapDb = db;
+    const saved =
+      typeof localStorage !== "undefined"
+        ? localStorage.getItem("daymark.active_owner")
+        : null;
+    this.activeOwner = saved;
+    this.activeDb = saved ? new CourseManagerDb(this.ownerDbName(saved)) : db;
+    if (saved) this.ownerStores.set(saved, this.activeDb);
+  }
+
+  get db(): CourseManagerDb {
+    return this.activeDb;
+  }
+
+  private ownerDbName(ownerId: string): string {
+    return `${this.bootstrapDb.name}::owner::${ownerId}`;
+  }
+
+  /**
+   * Point every read/write at this account's own store. Accounts never
+   * share a database, so switching is only a pointer change: the previous
+   * account's rows — outbox, conflicts and pull cursor included — stay on
+   * disk untouched and invisible. There is no lock to clear and nothing
+   * migrates between accounts; signing into another account can never
+   * block the device or hide a different account's cloud data.
+   *
+   * The shared bootstrap store hands its pre-login rows to the FIRST
+   * account exactly once (claim marker written before the copy, so even a
+   * crash can never give them to a later account), replacing the old
+   * "stamp everything onto whoever signs in first" behaviour.
+   *
+   * @returns true when the active store changed.
+   */
+  async activateOwner(ownerId: string): Promise<boolean> {
+    if (this.activeOwner === ownerId) return false;
+    let target = this.ownerStores.get(ownerId);
+    if (!target) {
+      target = new CourseManagerDb(this.ownerDbName(ownerId));
+      const claimed = await this.bootstrapDb.settings.get(
+        "bootstrap_claimed_by",
+      );
+      if (!claimed) {
+        await this.bootstrapDb.settings.put({
+          key: "bootstrap_claimed_by",
+          value: ownerId,
+        });
+        await this.copyStore(this.bootstrapDb, target);
+      }
+      this.ownerStores.set(ownerId, target);
+    }
+    this.activeDb = target;
+    this.activeOwner = ownerId;
+    if (typeof localStorage !== "undefined")
+      localStorage.setItem("daymark.active_owner", ownerId);
+    return true;
+  }
+
+  /** One-time adopt of pre-login rows; account keys are re-derived by bindOwner. */
+  private async copyStore(
+    from: CourseManagerDb,
+    to: CourseManagerDb,
+  ): Promise<void> {
+    const skip = new Set([
+      "local_owner_id",
+      "sync_bound_owner_id",
+      "bootstrap_claimed_by",
+    ]);
+    for (const table of from.tables) {
+      const rows = await table.toArray();
+      const kept =
+        table.name === "settings"
+          ? rows.filter((row: { key: string }) => !skip.has(row.key))
+          : rows;
+      if (kept.length) await to.table(table.name).bulkPut(kept);
+    }
+  }
 
   transaction<T>(work: () => Promise<T>): Promise<T> {
     return this.db.transaction(

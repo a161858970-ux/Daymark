@@ -48,6 +48,7 @@ export async function synchronizeAuthenticatedData(): Promise<string> {
   const { data, error } = await authClient.auth.getSession();
   if (error || !data.session)
     throw error ?? new Error("请先登录账户，再导入课程表。");
+  await localRepository.activateOwner(data.session.user.id);
   const token = data.session.access_token;
   const operation = createSyncWorker(async () => token).runOnce();
   activeRun = operation
@@ -341,6 +342,10 @@ export function startAuthenticatedSync(
         return;
       }
       publishStatus("SYNCING");
+      const switched = await localRepository.activateOwner(
+        data.session.user.id,
+      );
+      if (switched) onApplied();
       const transport = new HttpSyncTransport(
         async () => data.session.access_token,
       );

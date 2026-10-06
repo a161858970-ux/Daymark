@@ -98,6 +98,50 @@ it("rebinds a still-empty store that first signed into the wrong account", async
   expect((await db.settings.get("local_owner_id"))?.value).toBe(ownerA);
 });
 
+it("lets accounts switch freely: each keeps its own store, no lock", async () => {
+  if (typeof localStorage !== "undefined")
+    localStorage.removeItem("daymark.active_owner");
+  const name = `owner-scoped-${crypto.randomUUID()}`;
+  const db = new CourseManagerDb(name);
+  openDbs.push(db);
+  const repo = new DexieLocalRepository(db);
+  const fixed = {
+    now: () => "2026-10-06T08:00:00.000Z",
+    id: () => crypto.randomUUID(),
+  };
+  const manager = new CourseManager(repo, fixed);
+
+  // Rows created before any sign-in belong to the first account arriving.
+  await manager.createCourse("登录前课程");
+  expect(await repo.activateOwner(ownerA)).toBe(true);
+  await repo.bindOwner(ownerA);
+  await manager.createCourse("A的课程");
+  expect((await repo.listCourses()).map((c) => c.name)).toEqual(
+    expect.arrayContaining(["登录前课程", "A的课程"]),
+  );
+
+  // Account B signs in on the same device: its store is fresh — none of
+  // A's rows are visible, none migrate, nothing blocks the switch.
+  expect(await repo.activateOwner(ownerB)).toBe(true);
+  await repo.bindOwner(ownerB);
+  expect(await repo.listCourses()).toHaveLength(0);
+  expect(await repo.listItems()).toHaveLength(0);
+
+  // Back to A: everything intact, no unlock, no repair step.
+  expect(await repo.activateOwner(ownerA)).toBe(true);
+  expect((await repo.listCourses()).map((c) => c.name)).toEqual(
+    expect.arrayContaining(["登录前课程", "A的课程"]),
+  );
+  expect((await repo.listCourses()).every((c) => c.owner_id === ownerA)).toBe(
+    true,
+  );
+  // Re-activating the current account is a no-op.
+  expect(await repo.activateOwner(ownerA)).toBe(false);
+  // B's store still has nothing of A's.
+  await repo.activateOwner(ownerB);
+  expect(await repo.listCourses()).toHaveLength(0);
+});
+
 it("refuses to sync another owner's data and keeps the outbox intact", async () => {
   const { repo } = await seedLocalData();
   await repo.bindOwner(ownerA);

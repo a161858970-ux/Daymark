@@ -457,3 +457,28 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 - 修复：12 张绑定表**全空 → 允许改绑**（空库换绑无数据可迁移）；任一表有行 → 照旧拒绝（「真实数据永不跨账号迁移」的原验收条款不变，`owner-continuity.test.ts` 原两条保护测试继续通过）。
 - 真实库证据：22 门课全部在 Gmail 账号 owner `645027f0-7b61-480d-9b3d-9c1ad264ee45`（同一 auth.users 下 email + google 两个 identity，所以密码登录/Google 登录/原测试是同一账号）；手机号账号 `8138a7f3-410c-4740-8d54-33f9f8c13ef1` 课程 0。
 - 测试：storage 新增 1 条空库换绑用例 → 41 通过；全量 **279 passed + 1 skip**，format/lint/typecheck/build 全 0。
+
+## 19. 彻底账号解耦：每账号独立本地库（2026-10-06 晚）
+
+> 用户原话要求：登录 A 正常用 A、退出换 B 正常用 B，A 的数据不锁设备、不干扰 B，"彻底的账号登录使用解耦，互不干扰，不再锁机器锁设备"。本方案**取代 §18 的"空库换绑"补丁思路**（那个只在空库时放行，仍是锁）。
+
+### 设计（结构级，不是补丁）
+
+- **一个账号一个 IndexedDB**：`<bootstrap名>::owner::<uuid>`（真实应用即 `course-manager::owner::<auth.users.id>`）。换账号 = 换指针（`activateOwner()`），上一个账号的行、发件箱、冲突、**同步游标**原封不动留在自己的库里——看不见、不动、也不需要解锁。
+- **共享 bootstrap 库只装"登录前"的行**，由第一个到访的账号**一次性认领**（先写 `bootstrap_claimed_by` 标记再拷贝，崩溃也绝不会把行漏给第二个账号）；替代旧的"谁先登录就盖章给谁"。
+- **当前账号持久化在 localStorage `daymark.active_owner`**，构造函数同步恢复 → 启动即开对库，无空窗。
+- `bindOwner` 的抛错保留，但语义降级为**库内部不变量守卫**（同一库绑定过别人+有数据=程序 bug 才可能触发），正常换账号流程永远走不到 → 界面上的锁**彻底消失**。
+- 接线点只有两处：`authSync.run()`（getSession 后 `activateOwner`，切换了就先 `onApplied()` 刷新 UI）和 `synchronizeAuthenticatedData()`（导入路径同理）。`services.ts`/`App.tsx` 零改动（`readonly db` 参数属性换成 getter，142 处 `this.db` 全部自动指向当前库）。
+
+### 证据
+
+- 新测试 `owner-continuity.test.ts`「lets accounts switch freely」= 用户原话场景：登录前数据归 A、A 建课、切 B 全空、切回 A 数据原封不动、重复激活 no-op、B 库始终无 A 行。
+- 门控：storage **42 通过**；全量 **280 passed + 1 skipped**；format/lint/typecheck/build 全 0。
+- 用户旧卡死状态的清除路径：bootstrap 里 `sync_bound_owner_id=手机号` 的旧键在认领时被跳过不迁移，Gmail owner 首次激活进全新自有库 → `bindOwner` 正常盖章 → 拉 22 门课。
+
+### 同步 ERROR（「稍后重试 本机记录安全保留」）排查现状
+
+- 该文案 = `AuthenticatedSyncState.ERROR`（run() 抛了非 OwnerBindingError 的异常），**不是**绑定锁。
+- 已排除（外网实测）：CORS 预检经 Caddy 204+正确头 ✓、`/api/v1/sync/changes` 无 token 干净 401 ✓、health 12/12×200 稳定 ✓、CSP 已含两域 ✓、apiBase 探测经 Tauri 2.12.1 源码证实无条件注入 ✓。
+- 未排除：需服务器 Caddy 访问日志/`cm-api.log` 看它当时到底请求了什么、返回几号——**SSH 22 端口自今晚起被远端反复关闭**（banner 阶段断开，80/443 正常），待恢复或走椰子云控制台重启 sshd 后补查。
+- 已知边界（观察级，未实现防护）：导入进行中退出登录换账号，提交可能写进新账号的库——发生概率低（导入要求登录态且时长 3-4 分钟），列为待定。
