@@ -142,6 +142,64 @@ it("lets accounts switch freely: each keeps its own store, no lock", async () =>
   expect(await repo.listCourses()).toHaveLength(0);
 });
 
+it("discards a pull cursor issued to a different account", async () => {
+  const db = new CourseManagerDb(`cursor-guard-${crypto.randomUUID()}`);
+  openDbs.push(db);
+  const repo = new DexieLocalRepository(db);
+  await repo.bindOwner(ownerA);
+  const encode = (payload: object) =>
+    btoa(JSON.stringify(payload))
+      .replaceAll("+", "-")
+      .replaceAll("/", "_")
+      .replace(/=+$/, "");
+
+  // A cursor belonging to another account: the server would answer
+  // SYNC_CURSOR_INVALID forever — the client must drop it instead.
+  await db.settings.put({
+    key: "sync_pull_cursor",
+    value: encode({ v: 1, owner: ownerB, after: "0" }),
+  });
+  expect(await repo.syncCursor()).toBeNull();
+  expect(await db.settings.get("sync_pull_cursor")).toBeUndefined();
+
+  // Our own cursor stays.
+  await db.settings.put({
+    key: "sync_pull_cursor",
+    value: encode({ v: 1, owner: ownerA, after: "7" }),
+  });
+  expect(await repo.syncCursor()).not.toBeNull();
+});
+
+it("never copies shared-store account keys into the first account's store", async () => {
+  if (typeof localStorage !== "undefined")
+    localStorage.removeItem("daymark.active_owner");
+  const name = `migrate-skip-${crypto.randomUUID()}`;
+  const db = new CourseManagerDb(name);
+  openDbs.push(db);
+  const repo = new DexieLocalRepository(db);
+  const encode = (payload: object) =>
+    btoa(JSON.stringify(payload))
+      .replaceAll("+", "-")
+      .replaceAll("/", "_")
+      .replace(/=+$/, "");
+  // Shared bootstrap leftovers from an earlier account's era.
+  await db.settings.put({
+    key: "sync_pull_cursor",
+    value: encode({ v: 1, owner: ownerB, after: "0" }),
+  });
+  await db.settings.put({ key: "local_device_id", value: "device-from-phone" });
+  await db.settings.put({ key: "local_owner_id", value: ownerB });
+
+  await repo.activateOwner(ownerA);
+
+  expect(await repo.syncCursor()).toBeNull();
+  expect(await repo.db.settings.get("sync_pull_cursor")).toBeUndefined();
+  expect(await repo.db.settings.get("local_device_id")).toBeUndefined();
+  expect(await repo.db.settings.get("local_owner_id")).toBeUndefined();
+  // The rows (none here) and non-account settings still travel.
+  expect((await db.settings.get("bootstrap_claimed_by"))?.value).toBe(ownerA);
+});
+
 it("refuses to sync another owner's data and keeps the outbox intact", async () => {
   const { repo } = await seedLocalData();
   await repo.bindOwner(ownerA);

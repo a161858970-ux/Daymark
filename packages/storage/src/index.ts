@@ -483,10 +483,15 @@ export class DexieLocalRepository
     from: CourseManagerDb,
     to: CourseManagerDb,
   ): Promise<void> {
+    // Account-scoped settings never travel: a cursor or owner key issued
+    // while the shared store belonged to ANOTHER account would be rejected
+    // by the server (and poison every pull until discarded).
     const skip = new Set([
       "local_owner_id",
       "sync_bound_owner_id",
       "bootstrap_claimed_by",
+      "sync_pull_cursor",
+      "local_device_id",
     ]);
     for (const table of from.tables) {
       const rows = await table.toArray();
@@ -1217,7 +1222,27 @@ export class DexieLocalRepository
   }
 
   async syncCursor(): Promise<string | null> {
-    return (await this.db.settings.get("sync_pull_cursor"))?.value ?? null;
+    const value = (await this.db.settings.get("sync_pull_cursor"))?.value;
+    if (!value) return null;
+    // Self-heal: a cursor issued to ANOTHER account (shared-store era, or
+    // carried over by an older migration) makes the server reject every
+    // page with SYNC_CURSOR_INVALID — discard it and restart the pull.
+    const bound = (await this.db.settings.get("sync_bound_owner_id"))?.value;
+    try {
+      const json = atob(
+        value.replaceAll("-", "+").replaceAll("_", "/") +
+          "=".repeat((4 - (value.length % 4)) % 4),
+      );
+      const payload = JSON.parse(json) as { owner?: unknown };
+      // Only a cursor that clearly names another account is poison;
+      // anything else (legacy synthetic values) is left for the server.
+      if (typeof payload.owner !== "string" || payload.owner === bound)
+        return value;
+    } catch {
+      return value;
+    }
+    await this.db.settings.delete("sync_pull_cursor");
+    return null;
   }
 
   async applyRemoteChanges(

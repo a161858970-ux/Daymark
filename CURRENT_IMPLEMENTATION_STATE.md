@@ -476,6 +476,14 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 - 门控：storage **42 通过**；全量 **280 passed + 1 skipped**；format/lint/typecheck/build 全 0。
 - 用户旧卡死状态的清除路径：bootstrap 里 `sync_bound_owner_id=手机号` 的旧键在认领时被跳过不迁移，Gmail owner 首次激活进全新自有库 → `bindOwner` 正常盖章 → 拉 22 门课。
 
+### 同日晚间补钉：共享库游标中毒（本窗口第二根因，已修）
+
+- **诊断路径**（值得复用）：无法 SSH 取服务器日志 → 给壳的 WebView2 注入 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333` → CDP 连进去读 console/Network/IndexedDB/页面内 fetch 探测——**不碰账号密码拿到真实登录态下的请求现场**。脚本 `%TEMP%\cdp_probe2~4.py`（uv run --with websockets）。
+- **现象**：账号库建好、bindOwner 正常、identity 200，但 `changes?cursor=…` 每次 400 `SYNC_CURSOR_INVALID`，课程永远 0。
+- **根因**：游标解码 = `{"owner":"8138a7f3…"(手机号账号),"after":"0"}`——手机号时代的共享库游标，在 `copyStore` 迁移时**不在排除名单**，跟着搬进了 Gmail 账号的库；服务器校验 `payload.owner !== ownerId` 必拒。
+- **修复两刀**：① `copyStore` 排除名单补 `sync_pull_cursor`、`local_device_id`；② `syncCursor()` 自愈——解码出明确属于别的账号的游标即删除返回 null（解析不出的合成串放行，兼容旧单测）。**已被污染的库存装新包后自动痊愈，无需清库。**
+- **另见（观察级）**：壳到 `api.daymark.top` 的网络路径不稳——探针实测单次 41.8s、`identity` 多次 `ERR_TIMED_OUT`（疑 Clash 分流走了代理节点）；建议给 `206.187.209.142` 加 DIRECT 规则，否则同步能成但慢、偶发超时重试。
+
 ### 同步 ERROR（「稍后重试 本机记录安全保留」）排查现状
 
 - 该文案 = `AuthenticatedSyncState.ERROR`（run() 抛了非 OwnerBindingError 的异常），**不是**绑定锁。
