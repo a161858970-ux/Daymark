@@ -1,4 +1,5 @@
 import type { Item } from "@course-manager/domain";
+import { apiBase } from "./apiBase.js";
 import {
   REMINDER_POLICY_V1,
   REMINDER_QUIET_HOURS_V1,
@@ -177,7 +178,7 @@ export class WebReminderDeliveryPort implements ReminderDeliveryPort {
     if (!token) return null;
     try {
       const response = await (this.options.transport ?? fetch)(
-        `${this.options.endpoint ?? "/api/v1"}${path}`,
+        `${this.options.endpoint ?? `${apiBase()}/api/v1`}${path}`,
         {
           method: "POST",
           headers: {

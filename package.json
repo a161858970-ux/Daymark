@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@tauri-apps/cli": "^2.12.1",
     "@types/node": "^26.6.2",
     "eslint": "^10.11.0",
     "fake-indexeddb": "^6.2.5",

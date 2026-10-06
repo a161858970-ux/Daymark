@@ -9,3 +9,6 @@ test-results/
 
 # Supabase CLI local artifacts
 supabase/.temp/
+
+# Tauri build artifacts
+/src-tauri/target/

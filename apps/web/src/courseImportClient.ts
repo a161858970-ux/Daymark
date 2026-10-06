@@ -8,6 +8,7 @@ import {
 import { synchronizeAuthenticatedData } from "./authSync.js";
 import { beginAiTask } from "./aiTaskStore.js";
 import { beginCourseCommit, endCourseCommit } from "./courseCommitStore.js";
+import { apiBase } from "./apiBase.js";
 
 async function responseData<T>(response: Response): Promise<T> {
   const body = (await response.json()) as {
@@ -25,7 +26,7 @@ async function call<T>(
   options: RequestInit = {},
 ): Promise<T> {
   return responseData<T>(
-    await fetch(path, {
+    await fetch(`${apiBase()}${path}`, {
       ...options,
       headers: {
         authorization: `Bearer ${token}`,

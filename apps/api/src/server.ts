@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import cors from "@fastify/cors";
 import { z, ZodError } from "zod";
 import {
   createCourseSchema,
@@ -166,6 +167,19 @@ export function buildServer(dependencies?: ServerDependencies) {
     return reply.status(500).send({
       error: { code: "SERVER_ERROR", message: "Server error", details: {} },
     });
+  });
+  // The packaged app calls from the Tauri WebView origin, so every request
+  // is cross-origin; bearer-token auth with no cookies makes a reflected
+  // origin safe.
+  server.register(cors, {
+    origin: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Authorization",
+      "Content-Type",
+      "If-Match",
+      "Idempotency-Key",
+    ],
   });
   server.get("/api/v1/health", async () => ({
     data: { status: "ok" },

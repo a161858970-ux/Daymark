@@ -1,6 +1,7 @@
 import type { OutboxMutation } from "@course-manager/domain";
 import type { SyncConflict } from "@course-manager/domain";
 import type { ConflictResolution } from "@course-manager/contracts";
+import { apiBase } from "./apiBase.js";
 import type {
   PushResult,
   RemoteChange,
@@ -33,7 +34,7 @@ export interface ResolvedConflict {
 export class HttpSyncTransport implements SyncTransport {
   constructor(
     private readonly accessToken: () => Promise<string>,
-    private readonly baseUrl = "/api/v1",
+    private readonly baseUrl = `${apiBase()}/api/v1`,
   ) {}
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {

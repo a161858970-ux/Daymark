@@ -83,6 +83,7 @@ import {
 } from "./reminders.js";
 import { toUserMessage } from "./errors.js";
 import type { AiTaskKind } from "./aiTaskStore.js";
+import { apiBase } from "./apiBase.js";
 
 export function App() {
   const [page, setPage] = useState<PrimaryPage>("overview");
@@ -291,7 +292,7 @@ export function App() {
         const token = await currentAccessToken();
         if (!token) return;
         registered = true;
-        await fetch("/api/v1/devices", {
+        await fetch(`${apiBase()}/api/v1/devices`, {
           method: "POST",
           headers: {
             authorization: ["Bearer", token].join(" "),

@@ -10,6 +10,7 @@ import type { ActionRequiredSyncIssue } from "@course-manager/application";
 import { OwnerBindingError } from "@course-manager/storage";
 import { createSyncWorker, localRepository } from "./services.js";
 import { HttpSyncTransport, type ConflictDetail } from "./syncTransport.js";
+import { apiBase } from "./apiBase.js";
 import {
   createAuthAdapter,
   type AuthAdapter,
@@ -97,21 +98,24 @@ async function runCaptureInterpretation(
   currentCourseId: string | null,
   candidateCourseIds: string[],
 ): Promise<CaptureInterpretation> {
-  const response = await fetch("/api/v1/ai/capture-interpretations", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      raw_capture_id: captureId,
-      context: {
-        candidate_course_ids: candidateCourseIds,
-        current_course_id: currentCourseId,
-        current_semester_id: null,
+  const response = await fetch(
+    `${apiBase()}/api/v1/ai/capture-interpretations`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
       },
-    }),
-  });
+      body: JSON.stringify({
+        raw_capture_id: captureId,
+        context: {
+          candidate_course_ids: candidateCourseIds,
+          current_course_id: currentCourseId,
+          current_semester_id: null,
+        },
+      }),
+    },
+  );
   const body = (await response.json()) as {
     data?: { interpretation: CaptureInterpretation };
     error?: { message: string };
