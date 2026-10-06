@@ -6,6 +6,7 @@ import {
 } from "./phone.js";
 import type { AuthAccount, AuthIdentityView, AuthAdapter } from "./adapter.js";
 import { AuthUiError } from "./errors.js";
+import { isTauri } from "../apiBase.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -365,12 +366,12 @@ export function AccountIdentities({
           {!googleIdentity && (
             <button
               type="button"
-              disabled={busy || !online}
+              disabled={busy || !online || isTauri()}
               onClick={() =>
                 void run(() => adapter!.linkGoogle(), "正在前往 Google…")
               }
             >
-              绑定 Google
+              {isTauri() ? "绑定 Google（桌面版暂不可用）" : "绑定 Google"}
             </button>
           )}
           {unlinkButton("google", Boolean(googleIdentity))}

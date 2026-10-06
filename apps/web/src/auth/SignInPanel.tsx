@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { DEFAULT_PHONE_COUNTRY, normalizePhone } from "./phone.js";
 import type { AuthAccount, AuthAdapter } from "./adapter.js";
 import { AuthUiError } from "./errors.js";
+import { isTauri } from "../apiBase.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESEND_COUNTDOWN_MS = 60_000;
@@ -511,12 +512,12 @@ export function SignInPanel({
         <button
           type="button"
           className="google-sign-in"
-          disabled={busy || !online}
+          disabled={busy || !online || isTauri()}
           onClick={() =>
             void run(() => adapter.signInGoogle(), "正在前往 Google…")
           }
         >
-          使用 Google 登录
+          {isTauri() ? "Google 登录（桌面版暂不可用）" : "使用 Google 登录"}
         </button>
         {channelSwitch}
         {channel === "email" && (

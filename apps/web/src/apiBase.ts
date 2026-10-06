@@ -6,6 +6,11 @@
  * (dev server, tests) "" keeps requests on the same origin and the vite
  * proxy keeps working unchanged.
  */
+/** True inside the packaged Tauri shell (browser builds never match). */
+export function isTauri(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
 export function apiBase(): string {
   if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window)
     return "https://api.daymark.top";
