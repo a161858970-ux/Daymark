@@ -4232,24 +4232,48 @@ h2 {
   justify-content: space-between;
   background: rgb(243 240 233 / 96%);
   backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--line);
   user-select: none;
 }
+/* Left half belongs to the dock: same skin as .main-nav, and its right
+   divider runs full height so the sidebar seam reaches the window top. */
+.window-titlebar::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--nav-width);
+  background: rgb(236 233 225 / 88%);
+  backdrop-filter: blur(18px);
+  border-right: 1px solid var(--line);
+}
+/* The horizontal seam exists only above the content area. */
+.window-titlebar::after {
+  content: "";
+  position: absolute;
+  left: var(--nav-width);
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--line);
+}
 .window-titlebar .titlebar-label {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   padding-left: 13px;
   font-size: 12px;
   color: var(--muted);
   pointer-events: none;
 }
 .window-titlebar .titlebar-label img {
-  width: 17px;
-  height: 17px;
-  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
 }
 .window-titlebar .window-controls {
+  position: relative;
+  z-index: 1;
   display: flex;
   height: 100%;
 }
