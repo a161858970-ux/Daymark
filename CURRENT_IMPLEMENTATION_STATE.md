@@ -532,3 +532,16 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 - **开始菜单直角图标根治**：原 logo 是**不透明白底方图**，Windows 直接画成方块。用户进一步明确诉求："要 logo 卡片本身当图层，不要白方底"。最终方案：检测卡片 bbox(112,100,1142,1140)、圆角≈218 → **卡片外全部透明**的 alpha 蒙版（卡片外 alpha=0、卡片内 255、32px 缩放后角仍 0 实测），`tauri icon` 重生全套 + web 图标同步；已清 iconcache + 重启 explorer 与 StartMenuExperienceHost 硬刷开始菜单。注意 `ExtractAssociatedIcon` 读 exe 图标会丢 alpha（假阴性），验透明度以 `icons/icon.ico` 为准。
 - 过程笔误自查两处：标题栏 `inset` 写成 36px（应为0）、`pointer-events` 会废掉拖动——均已当场修正。
 - 观察级（未动）：左下角导航页脚文案与「正在同步」胶囊本就存在轻微重叠（用户首张截图即有，非本轮引入）。
+
+## 21. 阶段 3：APK 打包完成（2026-10-07 凌晨，无人值守）
+
+- **产物**：`src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk`
+  （2.74MB，release，**CN=Daymark V2 签名**，四 ABI，minSdk 24 / targetSdk 37 / versionName 0.1.0）。
+- 全过程与全部踩坑（SDK 包名 android-37.0 带小数、许可证喂 y、rust 三元组 -androideabi、
+  **符号链接权限墙与 cargo-mobile2 补丁**、pnpm 垫片、build.gradle.kts 被截断恢复）**见
+  `docs/ANDROID_APK_BUILD.md`**（唯一详录，此处不重复）。
+- 关键环境事实：**本机账号 violet 是标准用户（无管理员组、EnableLUA=1）——一切需要提权的路径都不可行**，
+  打包方案已按此约束设计为零提权。
+- 私有工具链：打过补丁的 `cargo-tauri.exe`（E:\devtools\tauri-cli-src\...\target\release\）、
+  `E:\devtools\bin\pnpm.cmd` 垫片、补丁库 `E:\devtools\cargo-mobile2-0.22.5`。
+- 遗留清单沿用 §20 第 1-8 项；APK 真机安装测试待用户醒后执行（adb 或直接传包）。
