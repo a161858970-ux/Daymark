@@ -84,6 +84,7 @@ import {
 import { toUserMessage } from "./errors.js";
 import type { AiTaskKind } from "./aiTaskStore.js";
 import { apiBase } from "./apiBase.js";
+import WindowTitleBar from "./WindowTitleBar.js";
 
 export function App() {
   const [page, setPage] = useState<PrimaryPage>("overview");
@@ -829,6 +830,7 @@ export function App() {
 
   return (
     <div className="app-shell">
+      <WindowTitleBar />
       <AccountControl
         online={online}
         status={syncStatus}

@@ -4218,3 +4218,103 @@ h2 {
   font-weight: 620;
   color: var(--ink);
 }
+
+/* ————— Packaged-shell chrome: OS frame removed (tauri.conf decorations
+   false), this app-owned strip is the title bar. body.tauri-shell is set
+   at runtime by WindowTitleBar — browser builds get none of this. ————— */
+.window-titlebar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 36px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgb(243 240 233 / 96%);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+  user-select: none;
+}
+.window-titlebar .titlebar-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-left: 13px;
+  font-size: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.window-titlebar .titlebar-label img {
+  width: 17px;
+  height: 17px;
+  border-radius: 4px;
+}
+.window-titlebar .window-controls {
+  display: flex;
+  height: 100%;
+}
+.window-titlebar .window-controls button {
+  width: 46px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  display: grid;
+  place-items: center;
+  transition:
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease;
+}
+.window-titlebar .window-controls button:hover {
+  background: var(--surface-muted);
+}
+.window-titlebar .window-controls .window-control-close:hover {
+  background: var(--danger);
+  color: #fff;
+}
+.window-titlebar .window-controls button svg {
+  width: 11px;
+  height: 11px;
+}
+body.tauri-shell {
+  padding-top: 36px;
+}
+.tauri-shell .main-nav {
+  top: 36px;
+}
+.tauri-shell .app-shell,
+.tauri-shell .main-content {
+  min-height: calc(100dvh - 36px);
+}
+.tauri-shell .detail-panel {
+  top: 36px;
+}
+
+/* ————— Global scrollbar: the platform default was the one raw element
+   left in the chrome; slim, canvas-colored, thumb only on hover. ————— */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c6c9bf transparent;
+}
+*::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: #c6c9bf;
+  border: 3px solid transparent;
+  border-radius: 99px;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #a3a99e;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}

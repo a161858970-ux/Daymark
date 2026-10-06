@@ -490,3 +490,37 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 - 已排除（外网实测）：CORS 预检经 Caddy 204+正确头 ✓、`/api/v1/sync/changes` 无 token 干净 401 ✓、health 12/12×200 稳定 ✓、CSP 已含两域 ✓、apiBase 探测经 Tauri 2.12.1 源码证实无条件注入 ✓。
 - 未排除：需服务器 Caddy 访问日志/`cm-api.log` 看它当时到底请求了什么、返回几号——**SSH 22 端口自今晚起被远端反复关闭**（banner 阶段断开，80/443 正常），待恢复或走椰子云控制台重启 sshd 后补查。
 - 已知边界（观察级，未实现防护）：导入进行中退出登录换账号，提交可能写进新账号的库——发生概率低（导入要求登录态且时长 3-4 分钟），列为待定。
+
+## 20. 桌面壳视觉接管与用户 Logo（2026-10-07）
+
+### 换图标
+
+- 用户自制 logo `D:\Chrome download\daymark logo.png`（1254² 圆角方、米白底、墨绿曲线+橙日+绿丘）→ 复制为 `src-tauri/app-icon.png` → `pnpm exec tauri icon` 重生全套（Windows `icon.ico`、各尺寸 PNG、**安卓 mipmap 启动图**——阶段 3 直接复用）。
+- 同一枚图复制 `apps/web/public/daymark-icon.png`：标题栏左上角 + `index.html` favicon（标题同步改「拾序 Daymark」）。
+
+### 自绘标题栏（接管系统顶栏）
+
+- `tauri.conf.json` 窗口加 `"decorations": false`（白色系统顶栏消失）。
+- 新组件 `apps/web/src/WindowTitleBar.tsx`（仅壳内渲染，浏览器版不出现）：左侧 图标+「拾序 Daymark」，右侧 最小化/最大化/关闭 三个自绘 SVG 按钮；条带拖动（`startDragging`，`event.detail > 1` 时让位给双击最大化）、双击最大化。挂 `body.tauri-shell` 驱动布局下移 36px（`.main-nav` top、`.detail-panel` top、`.app-shell/.main-content` min-height 改 `calc(100dvh - 36px)` 防永久滚动条）。
+- capabilities 新增 5 条：`core:window:allow-{minimize,toggle-maximize,close,start-dragging,is-maximized}`。
+- 样式用主题变量（canvas 底+line 描边、hover 用 surface-muted、关闭键 hover danger 红）。
+
+### 全局滚动条
+
+- `styles.css` 末尾全局接管：Chromium `::-webkit-scrollbar` 12px、圆角 thumb、透明轨道、hover 加深；Firefox `scrollbar-width: thin` + `scrollbar-color`。原有元素级规则（datetime 轮等）特异性更高不受影响。
+
+### 验证（真实执行）
+
+- CDP 截图 + 视觉核对 4 项：标题栏在最顶、配色融洽、滚动条已是细圆角样式、logo 图案正确、无布局破损。
+- CDP 实测按钮链：点最大化 `is_maximized` False→True→False ✓；最小化生效 ✓（测试脚本恢复窗口时撞 ACL `allow-unminimize` 未配——仅测试需要，正式应用不会自minimize，重启即恢复）。
+- 门控 **282 passed + 1 skipped**、format/format:check/lint/typecheck/build 全 0。
+
+### 遗留清单（当前全部，按此跟踪）
+
+1. **Google 登录**（壳内灰显禁用）→ 阶段 4：Supabase 后台 Site URL/回跳白名单 + 有效 `SUPABASE_ACCESS_TOKEN`（现 401）。
+2. **Clash 分流**（可选）：`IP-CIDR,206.187.209.142,DIRECT,no-resolve`，改善壳→API 的间歇性慢/超时。
+3. **服务器 SSH 22 不稳**：API 80/443 正常；要上服务器而 SSH 不通时从椰子云控制台重启。
+4. **导入中途退出换账号**：提交可能写进新账号库（观察级待定，发生条件苛刻）。
+5. **O-4 手机通知**（待定，旧项）。
+6. **窗口拖拽/四边缩放**：无边框窗口的系统 hit-test 需用户真手实测（按钮链已程序验证）。
+7. **阶段 3 APK**：下一步（安卓启动图已由 tauri icon 生成好）。
