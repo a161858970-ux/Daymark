@@ -101,7 +101,7 @@
 - **T-RM-009 — PASS — automated local（R-01 v1）**：occurrence 结束后使用独立的低频 continuation rule。
 - **T-RM-010 — PASS — automated local（R-01 v1）**：start-time rule 只生成一次事件。
 
-这些结果由 `packages/application/src/reminders.test.ts`、`packages/application/src/reminderPolicy.test.ts`、`packages/storage/src/reminders.test.ts` 和 Item acceptance 提供。R-01 已固化为产品 v1 policy（`r01-v1`），v1 数值本身也有专门验收。
+这些结果由 `packages/application/src/reminders.test.ts`、`packages/application/src/reminderPolicy.test.ts`、`packages/storage/src/reminders.test.ts` 和 Item acceptance 提供。R-01 已固化为产品 policy（`r01-v2`；2026-10-07 拍板 due 补 lead 0 到点档，此前 `r01-v1`），数值本身也有专门验收。
 
 **交付链路补充（2026-09-26）**：`POST /api/v1/devices`、`POST /api/v1/notifications/claim`、`POST /api/v1/notifications/{id}/delivered`、`POST /api/v1/notifications/cancel` 与 `004_reminder_delivery.sql` 已通过 PGlite 自动测试（注册、跨设备 lease 互斥、完成后的 STALE 取消、按 key 取消与 owner 隔离、401）。Web 侧 `ReminderScheduler` 验证到期交付、consume 不改 Item 状态、完成后停止后续提醒；通知权限缺失时回退应用内提示。真实设备通知与后台执行仍为外部 release gap。
 

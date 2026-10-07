@@ -80,10 +80,10 @@ function harness(
 }
 
 it("uses the product R-01 policy by default and on a bad override", () => {
-  expect(loadReminderPolicy(null).version).toBe("r01-v1");
-  expect(loadReminderPolicy("{not json").version).toBe("r01-v1");
+  expect(loadReminderPolicy(null).version).toBe("r01-v2");
+  expect(loadReminderPolicy("{not json").version).toBe("r01-v2");
   expect(loadReminderPolicy(JSON.stringify({ version: "v1" })).version).toBe(
-    "r01-v1",
+    "r01-v2",
   );
   const override = loadReminderPolicy(
     JSON.stringify({

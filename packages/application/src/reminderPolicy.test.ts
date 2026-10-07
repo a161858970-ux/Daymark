@@ -55,14 +55,14 @@ function item(fields: Partial<Item> = {}): Item {
 const keys = (events: { rule_key: string }[]) =>
   new Set(events.map((event) => event.rule_key));
 
-describe("R-01 product reminder policy v1", () => {
-  it("keeps the fixed v1 numbers", () => {
-    expect(POLICY.version).toBe("r01-v1");
+describe("R-01 product reminder policy (r01-v2)", () => {
+  it("keeps the fixed policy numbers", () => {
+    expect(POLICY.version).toBe("r01-v2");
     expect(POLICY.dedup_window_ms).toBe(60 * minute);
     expect(REMINDER_QUIET_HOURS_V1).toEqual({ start: "23:00", end: "08:00" });
 
     const normal = POLICY.levels.NORMAL;
-    expect(normal.due_leads_ms).toEqual([24 * hour, 2 * hour]);
+    expect(normal.due_leads_ms).toEqual([24 * hour, 2 * hour, 0]);
     expect(normal.due_same_day_interval_ms).toBe(6 * hour);
     expect(normal.occurrence_leads_ms).toEqual([30 * minute]);
     expect(normal.overdue_interval_ms).toBe(24 * hour);
@@ -76,6 +76,7 @@ describe("R-01 product reminder policy v1", () => {
       4 * hour,
       1 * hour,
       15 * minute,
+      0,
     ]);
     expect(high.due_same_day_interval_ms).toBe(3 * hour);
     expect(high.occurrence_leads_ms).toEqual([60 * minute, 15 * minute]);
@@ -272,7 +273,7 @@ describe("R-01 product reminder policy v1", () => {
       POLICY,
       window,
     );
-    expect(reminderIsCurrent(event!, item({ due_at: due }), "r01-v1")).toBe(
+    expect(reminderIsCurrent(event!, item({ due_at: due }), "r01-v2")).toBe(
       true,
     );
     // Time change invalidates the snapshot.
@@ -280,7 +281,7 @@ describe("R-01 product reminder policy v1", () => {
       reminderIsCurrent(
         event!,
         item({ due_at: "2026-10-06T02:00:00.000Z" }),
-        "r01-v1",
+        "r01-v2",
       ),
     ).toBe(false);
     // Completion invalidates the snapshot.
@@ -288,7 +289,7 @@ describe("R-01 product reminder policy v1", () => {
       reminderIsCurrent(
         event!,
         item({ due_at: due, status: "COMPLETE" }),
-        "r01-v1",
+        "r01-v2",
       ),
     ).toBe(false);
     // Policy change invalidates the key.

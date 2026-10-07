@@ -4,18 +4,21 @@ const minute = 60_000;
 const hour = 60 * minute;
 
 /**
- * R-01 — product reminder policy v1.
+ * R-01 — product reminder policy.
  *
- * Fixed by product decision; these are no longer placeholder numbers. The
- * object stays data-only so a later policy pass bumps `version` instead of
- * changing engine code, and every derived logical key carries the version.
+ * v2 (2026-10-07 product decision): a due-time fires exactly at the deadline
+ * too (`due_leads` gains a 0 lead), so "only a deadline, no start time"
+ * items get an at-the-moment reminder like start_at items already did via
+ * `start:once`. The object stays data-only: a later policy pass bumps
+ * `version` instead of changing engine code, and every derived logical key
+ * carries the version.
  */
 export const REMINDER_POLICY_V1: ReminderPolicy = {
-  version: "r01-v1",
+  version: "r01-v2",
   levels: {
     NORMAL: {
-      // due: 24h and 2h before
-      due_leads_ms: [24 * hour, 2 * hour],
+      // due: 24h and 2h before, plus exactly at the deadline (lead 0, v2)
+      due_leads_ms: [24 * hour, 2 * hour, 0],
       // same-day cadence: every 6h while still on the due's local day
       due_same_day_interval_ms: 6 * hour,
       // occurrence: 30min before
@@ -29,8 +32,8 @@ export const REMINDER_POLICY_V1: ReminderPolicy = {
       max_per_local_day: 3,
     },
     HIGH: {
-      // due: 24h, 4h, 1h and 15min before
-      due_leads_ms: [24 * hour, 4 * hour, 1 * hour, 15 * minute],
+      // due: 24h, 4h, 1h and 15min before, plus exactly at the deadline (v2)
+      due_leads_ms: [24 * hour, 4 * hour, 1 * hour, 15 * minute, 0],
       // same-day cadence: every 3h
       due_same_day_interval_ms: 3 * hour,
       // occurrence: 1h and 15min before

@@ -101,7 +101,7 @@ Phase 6 的自动证据包括：
 
 1. ~~**EXTERNAL CONFIGURATION REQUIRED**：真实 PostgreSQL 连接与 Supabase 项目/测试用户/token 缺失，无法产出真实基础设施证据。~~ **已就位（2026-09-27 起）**：`.env` 提供真实连接、四份 migration 已应用、`real-postgres.integration.test` 1 passed、`verify:live-api` 通过；A3 所需可丢弃库也已用一次性便携实例满足。
 2. ~~**ENVIRONMENT VERIFICATION REQUIRED**~~ **已完成（2026-09-29）**：两个独立 profile 同步 C 段 14/14、物理 Windows D 段 8/8、物理手机 E 段 8/8 均 `VERIFIED REAL`（A–K 生命周期的手机侧长时重试仍未做长时间挂机验收，见 `docs/FINAL_RELEASE_VALIDATION.md`）。
-3. **R-01 已解决**：提醒数值固化为产品 v1 policy（`packages/application/src/reminderPolicy.ts`，version `r01-v1`），安静时段 23:00–08:00，`VITE_REMINDER_POLICY` 仅作覆盖。**实机状态**：Windows 平台通知 + 点击进详情已在 D 段 `VERIFIED REAL`；手机端已验原生权限流程、拒绝后应用内回退、切后台提醒（E6/E7）。**未做（可选补验，非 runbook gate）**：手机端点「允许」后的真系统通知展示、长周期 lease 挂机验收。
+3. **R-01 已解决**：提醒数值固化为产品 policy（`packages/application/src/reminderPolicy.ts`，version `r01-v2`；2026-10-07 拍板补 due lead 0 到点档，r01-v1 历史），安静时段 23:00–08:00，`VITE_REMINDER_POLICY` 仅作覆盖。**实机状态**：Windows 平台通知 + 点击进详情已在 D 段 `VERIFIED REAL`；手机端已验原生权限流程、拒绝后应用内回退、切后台提醒（E6/E7）。**未做（可选补验，非 runbook gate）**：手机端点「允许」后的真系统通知展示、长周期 lease 挂机验收。
 4. **真实 AI smoke 已完成**：`pnpm verify:ai` → `PASS interpretation 28240ms`；`pnpm verify:ai --with-import` → `PASS import 37633ms courses=3`（MiMo `mimo-v2.6-flash`，扫描 PDF 走栅格化路径）。剩余：完整自然语言时间理解继续走保守确认路径，生产稳定性需持续观察。
 5. ~~**PHYSICAL ACCESSIBILITY VERIFICATION REQUIRED**~~ **已完成（2026-09-29）**：F1/F2 NVDA（09-28）、F3/F4 手机 TalkBack、E8 系统字号放大、E4 软键盘遮挡全部 `VERIFIED REAL`。
 
@@ -182,7 +182,7 @@ Phase 6 的自动证据包括：
 - **扫描版 PDF fallback**：`preparePdfSource()` 按页判断文本层，无可信文本的页栅格化为受控 JPEG（≤1600px / q72，总图 ≤6MB，≤8 页，单请求 ≤4 图分批），结果按课程名合并；超页数/超扫描页/超 payload 给出中文产品文案，job 保持可恢复。详见 `docs/ADR-006-scanned-pdf-import.md`。
 - **Provider 边界**：`ProviderError` 分类（AUTH/RATE_LIMITED/TIMEOUT/UNAVAILABLE/INVALID_REQUEST/MALFORMED）+ 仅瞬时错误重试一次；导入 300s、解释 90s 超时；解释与导入共用 strict `json_schema`。
 - **失败文案**：`importFailureMessage()` 与 Web `toUserMessage()` 把工程消息映射为产品语言，UI 不再出现 mutation/row_version/outbox/SQL/状态码。
-- **R-01 固化**：`REMINDER_POLICY_V1`（version `r01-v1`）——NORMAL due 24h/2h、same-day 6h、上限 3/天、逾期 24h、occurrence 前 30min、occurrence 后 24h 且每日一次；HIGH due 24h/4h/1h/15min、same-day 3h、上限 5/天、逾期 6h、occurrence 前 1h/15min、occurrence 后 8h 再每 12h；start 恰好一次；dedup 60min；quiet hours 23:00–08:00。引擎支持 same-day cadence、per-level daily budget、occurrence-after initial offset；“提醒我”默认 HIGH（`reminderLevelForCapture`）。
+- **R-01 固化**：`REMINDER_POLICY_V1`（version `r01-v2`，2026-10-07 起 due 含 lead 0 到点档；此前 `r01-v1`）——NORMAL due 24h/2h/0、same-day 6h、上限 3/天、逾期 24h、occurrence 前 30min、occurrence 后 24h 且每日一次；HIGH due 24h/4h/1h/15min、same-day 3h、上限 5/天、逾期 6h、occurrence 前 1h/15min、occurrence 后 8h 再每 12h；start 恰好一次；dedup 60min；quiet hours 23:00–08:00。引擎支持 same-day cadence、per-level daily budget、occurrence-after initial offset；“提醒我”默认 HIGH（`reminderLevelForCapture`）。
 - **安静时段同时约束交付**：`ReminderScheduler.tick()` 在 `window.nextAllowedTime(now) > now` 时只做 reconcile 不发送，夜间到点的提醒顺延到 08:00 之后，而不是在安静时段打断（浏览器实测 23:21 本地时间 0 条发送）。
 - **真实 provider smoke 入口**：`pnpm verify:ai [--with-import]`，无密钥时输出 `REAL_AI_REQUIRED` 并以退出码 2 结束，绝不伪造 PASS。
 

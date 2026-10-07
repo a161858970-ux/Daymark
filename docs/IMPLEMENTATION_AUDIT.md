@@ -12,7 +12,7 @@
 
 - Phase 0 已完整读取 README、00–21 与产品基线，共 24 份 Markdown，并建立 Product/Object/Interaction/State/Data Flow/Architecture/Test Map；结果在根目录 `IMPLEMENTATION_CONTEXT.md`。
 - `21_SPEC_AUDIT.md` 的 pre-development gate 为 PASS，未解决 P0 为 0。
-- R-01 Numeric Reminder Policy 曾是唯一的产品参数 gate，已于 2026-09-26 按产品指令固化为 v1（`packages/application/src/reminderPolicy.ts`，version `r01-v1`）；`VITE_REMINDER_POLICY` 仅作实验/测试覆盖，引擎默认使用产品 v1。
+- R-01 Numeric Reminder Policy 曾是唯一的产品参数 gate，已于 2026-09-26 按产品指令固化（`packages/application/src/reminderPolicy.ts`，version 原 `r01-v1`，2026-10-07 产品拍板升 `r01-v2`：due 补 lead 0「到截止点」档）；`VITE_REMINDER_POLICY` 仅作实验/测试覆盖，引擎默认使用产品 v1。
 - 本轮没有改变 Capture First、RawCapture provenance、Course-oriented、Calendar 只投影 Item、二态 Item、删除 Undo、AI 不把猜测当事实等产品不变量。
 
 ## 2. Phase 1 — Project Foundation

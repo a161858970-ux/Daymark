@@ -59,6 +59,13 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
   const frameRef = useRef(0);
   const targetRef = useRef(0);
   const lastValueRef = useRef(value);
+  // Touch phases: while a finger (or its momentum) owns the viewport we must
+  // never write scrollTop — Android's compositor scrolls natively and
+  // main-thread writes fight it into visible stutter (the "一抽一抽" bug on
+  // phones; unreachable on desktop, where the wheel handler owns all motion).
+  const touchingRef = useRef(false);
+  const nativeScrollRef = useRef(false);
+  const settleTimerRef = useRef(0);
   const [centerIndex, setCenterIndex] = useState(() =>
     centerIndexFor(value, count),
   );
@@ -124,6 +131,23 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
     targetRef.current = viewport ? viewport.scrollTop : targetRef.current;
   }
 
+  /** Reconcile once the finger and its momentum are done: land on a row. */
+  function settleNative() {
+    window.clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = 0;
+    if (!nativeScrollRef.current) return;
+    nativeScrollRef.current = false;
+    if (frameRef.current) return; // a wheel glide took over meanwhile
+    land();
+  }
+
+  /** Keep the settle pending while scroll events are still arriving. */
+  function armNativeSettle() {
+    if (!nativeScrollRef.current) return;
+    window.clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = window.setTimeout(settleNative, 140);
+  }
+
   // Land on the value on mount (no animation); this runs once per opening.
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -154,13 +178,33 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
       const base = Math.round(targetRef.current / ITEM_HEIGHT) + steps;
       glide(base);
     };
-    // A finger drag belongs to the browser (native scroll + snap).
-    const onTouchStart = () => cancelGlide();
+    // A finger drag belongs to the browser (native scroll + snap): mark the
+    // native phase and never write scrollTop while it lasts (mid-gesture
+    // main-thread writes fight Android's compositor → visible stutter).
+    const onTouchStart = () => {
+      cancelGlide();
+      touchingRef.current = true;
+      nativeScrollRef.current = true;
+      window.clearTimeout(settleTimerRef.current);
+    };
+    const onTouchEnd = () => {
+      touchingRef.current = false;
+      // Momentum may still emit scroll events; each one re-arms this timer.
+      armNativeSettle();
+    };
+    const onScrollEnd = () => settleNative();
     viewport.addEventListener("wheel", onWheel, { passive: false });
     viewport.addEventListener("touchstart", onTouchStart, { passive: true });
+    viewport.addEventListener("touchend", onTouchEnd, { passive: true });
+    viewport.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    viewport.addEventListener("scrollend", onScrollEnd);
     return () => {
       viewport.removeEventListener("wheel", onWheel);
       viewport.removeEventListener("touchstart", onTouchStart);
+      viewport.removeEventListener("touchend", onTouchEnd);
+      viewport.removeEventListener("touchcancel", onTouchEnd);
+      viewport.removeEventListener("scrollend", onScrollEnd);
+      window.clearTimeout(settleTimerRef.current);
       if (frameRef.current) window.cancelAnimationFrame(frameRef.current);
     };
   }, []);
@@ -192,6 +236,15 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
         if (frameRef.current) {
           // Glide running: follow what is passing the centre, never jump.
           applyIndex(row);
+          return;
+        }
+        if (nativeScrollRef.current) {
+          // Finger/momentum owns the viewport: give live value feedback from
+          // the centre row but never snap the scroll mid-gesture — the exact
+          // row lands once the phase settles (settleNative → land()).
+          targetRef.current = row * ITEM_HEIGHT;
+          applyIndex(row);
+          if (!touchingRef.current) armNativeSettle();
           return;
         }
         let index = row;

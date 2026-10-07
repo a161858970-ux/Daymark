@@ -17,7 +17,8 @@ export const reminderPolicySource = (): string | null =>
   (import.meta.env.VITE_REMINDER_POLICY as string | undefined) ?? null;
 
 /**
- * R-01 is fixed as product policy v1, so the engine runs with it by default.
+ * R-01 is fixed as product policy (currently r01-v2), so the engine runs
+ * with it by default.
  * `VITE_REMINDER_POLICY` stays an override for experiments and tests, and a
  * malformed override falls back to the product policy instead of silently
  * disabling reminders.

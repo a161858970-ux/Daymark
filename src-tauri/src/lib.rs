@@ -64,6 +64,8 @@ pub fn run() {
                     })
                     .build(app)?;
             }
+            #[cfg(mobile)]
+            let _ = &app;
             Ok(())
         })
         .on_window_event(|window, event| {
