@@ -87,9 +87,10 @@
    `usesCleartextTraffic="false"`（debug 为 true，故开发者模式从不复现）。修复 =
    `src/main/res/xml/network_security_config.xml` 只对 `tauri.localhost` 放行明文 + 清单
    `android:networkSecurityConfig` 挂载；全局仍禁明文。
-5. **`gen/` 整目录被 gitignore**：MainActivity 的 mobile_entry_point 宏在 `src/` 不受影响，但
-   上面的清单挂载、图标 res 覆盖、values-v35、本条 NSC 都只存在于本地——重跑
-   `tauri android init` 会全部丢失，需按本文件各坑逐条重放。
+5. **`gen/android` 是被跟踪的代码**（`.gitignore` 明注 "the Android project is code"，
+   只忽略 `gen/schemas/`）：MainActivity 宏、清单挂载、图标 res、values-v35、NSC 均已入库。
+   风险不在丢仓库而在**重跑 `tauri android init` 会用模板覆盖这些跟踪文件**——覆盖后按
+   本文件各坑逐条重放并提交。
 6. 验证配方：`llvm-nm -D --defined-only <so> | grep Java_`（入口）+ `apksigner verify --print-certs`
    （签名）+ zip 抽 `res/*.png` 肉眼核图标（release 开了资源混淆，路径会变成 res/as.png 之类，
    按 resources.arsc 仍含 `ic_launcher` 名判断资源未丢）。
