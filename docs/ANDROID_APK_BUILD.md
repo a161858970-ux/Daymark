@@ -63,3 +63,17 @@
 - gradle BuildTask 内部确实再走一次 `pnpm tauri android android-studio-script`——**pnpm.cmd 垫片派上用场**，
   日志证实它路由到了补丁版（`cargo_mobile2::android::jnilibs` 的 copy 降级路径被触发）。
 - 装机测试：`adb install -r <apk>` 或直接传手机点装（需开"允许未知来源"）。
+
+### 真机首测两坑（2026-10-07，已修 `de1c922`）
+
+1. **点开即闪退**：`llvm-nm -D` 显示 .so 动态导出 **0** —— 手写 lib.rs 缺官方模板的
+   `#[cfg_attr(mobile, tauri::mobile_entry_point)]`，JNI 入口没编进去，MainActivity 找不到原生方法
+   必秒崩。补宏后实测 **24 个 `Java_*` 导出**；同时包体从病态 2.88MB 恢复到健康 19.78MB
+   （308KB 的 .so 本来就不该装下整个 tauri——体积异常本身就是未编入完整代码的信号）。
+2. **图标是模板默认双圆图**：`tauri android init` 不拷图标，工程 mipmap 全是模板货。修复 =
+   `src-tauri/icons/android` **全量**（17 文件）覆盖工程 res；注意自适应图标
+   `mipmap-anydpi-v26/ic_launcher.xml` 引用 `color/ic_launcher_background`，**必须连 `values/` 一起拷**，
+   只拷 mipmap 会在 `processResources` 报 resource linking failed。
+3. 验证配方：`llvm-nm -D --defined-only <so> | grep Java_`（入口）+ `apksigner verify --print-certs`
+   （签名）+ zip 抽 `res/*.png` 肉眼核图标（release 开了资源混淆，路径会变成 res/as.png 之类，
+   按 resources.arsc 仍含 `ic_launcher` 名判断资源未丢）。
