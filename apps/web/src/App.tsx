@@ -73,7 +73,6 @@ import {
 } from "./TransientNotice.js";
 import { motionDuration } from "./motion.js";
 import {
-  BrowserNotificationAdapter,
   ReminderScheduler,
   WebReminderDeliveryPort,
   createAppReminderWindow,
@@ -81,6 +80,7 @@ import {
   loadReminderRuntimeConfig,
   localDeviceId,
 } from "./reminders.js";
+import { createNotificationAdapter } from "./shellNotifications.js";
 import { toUserMessage } from "./errors.js";
 import type { AiTaskKind } from "./aiTaskStore.js";
 import { apiBase } from "./apiBase.js";
@@ -271,17 +271,17 @@ export function App() {
     const policy = loadReminderPolicy();
     const runtime = loadReminderRuntimeConfig();
     let scheduler: ReminderScheduler | null = null;
-    const adapter = new BrowserNotificationAdapter(
-      (item, logicalKey) => {
+    const adapter = createNotificationAdapter({
+      openItem: (item, logicalKey) => {
         void scheduler?.consume(logicalKey);
         openItemRef.current(item);
       },
-      (title) =>
+      notice: (title) =>
         showFeedback({
           message: `提醒：${title}`,
           duration: motionDuration.feedback,
         }),
-    );
+    });
     adapter.armPermissionRequest();
     let registered = false;
     const delivery = new WebReminderDeliveryPort(adapter, {

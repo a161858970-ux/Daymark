@@ -145,7 +145,7 @@ export class BrowserNotificationAdapter implements NotificationAdapter {
   }
 }
 
-function itemReminderSummary(item: Item): string {
+export function itemReminderSummary(item: Item): string {
   const time = item.due_at ?? item.occurrence_start_at ?? item.start_at;
   return time ? new Date(time).toLocaleString() : "";
 }
