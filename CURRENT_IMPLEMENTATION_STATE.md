@@ -559,3 +559,11 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 
 - **拍板结果**：C1 系统托盘 **做**（常驻+关窗最小化+托盘菜单）；C2 时间"无时间"出口 **维持现状**（记为已知行为）；C3 O-4 安卓通知 **做**（查根因并实现）；B2 裸按钮审计 **删除**（用户在真实使用中发现后再说）；C4 Clash 规则待用户理解后再定；C5 无边框窗口拖拽/四边缩放手感 = 用户 30 秒实测项。
 - **执行序**：A1 文档对账 → A2 服务器模型钉查（**进行中**：SSH 22 持续 banner 失败 3/3，服务器 .env 疑似从模板抄了 `AI_MODEL=mimo-v2.6-flash`（文本路 724s 超时）——仓库侧 `.env.example` 已钉正为 pro；服务器侧待 SSH 恢复自修，或用户走椰子云 web 控制台粘贴幂等命令 `sed -i 's/^AI_MODEL=.*/AI_MODEL=mimo-v2.6-pro/' /opt/daymark/course-manager/.env && systemctl restart cm-api` → A3 SSH 探测 → C1 托盘（桌面）→ B1 安卓返回手势（浮层逐层关，根页面回后台）→ B3+C3 通知（点击回前台+根因）→ 门控+双端重打 → 用户集中验收 → A4 Release 最终刷新 → 收工。
+
+### §23 附：通知"无事发生"诊断（2026-10-07 23:15，代码实读定案）
+
+- **非链路故障**：插件通道实测 `notify-ok`（CDP 直发桌面 toast）；tick 循环在壳内照常（App.tsx interval+visibilitychange）；桌面托盘、手机返回手势同批用户验收通过。
+- **闸 1（事件未生成）**：R-01 无"到点"档——普通=到期前 24h/2h、高=24h/4h/1h/15min；用户"临近时间建事项等开始时刻"→ 全部提前量已过点，`deriveReminderSchedule` 的 `adjusted < from → return` 直接丢弃（过期提前量不补发）。
+- **闸 2（静默时段）**：`REMINDER_QUIET_HOURS_V1` 23:00–08:00（当时 23:15 实测在窗内）；tick 层 `nextAllowedTime(now) > now → return 0`。
+- **验收纠正**：提醒靠应用内调度（无 FCM/OS 定时闹钟）——**应用被杀则无提醒**，上轮清单"杀掉应用"作废，正确姿势=切后台保活。
+- **待拍板**：R-01 是否加"到点档"（lead=0，推荐加，仍受每日 3 条+静默约束）。有效复测=白天高优先级事项 +16 分钟（15min 档）。
