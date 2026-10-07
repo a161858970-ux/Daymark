@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- wry serves the app UI over http://tauri.localhost (custom protocol).
+         Android 9+ blocks cleartext by default, which also killed the OAuth
+         return hop (net::ERR_CLEARTEXT_NOT_PERMITTED) even though the
+         tokens had already arrived in the URL fragment. Permit cleartext
+         for this asset host ONLY; everything else stays https-only. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">tauri.localhost</domain>
+    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>
