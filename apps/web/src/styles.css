@@ -3332,7 +3332,7 @@ h2 {
     min-height: 70px;
   }
   .account-control {
-    top: 18px;
+    top: calc(env(safe-area-inset-top, 0px) + 18px);
     right: clamp(18px, 5vw, 28px);
     bottom: auto;
     left: auto;
@@ -4226,6 +4226,25 @@ h2 {
   margin: 14px 0 2px;
   font-weight: 620;
   color: var(--ink);
+}
+
+/* "添加关联" shares the field look — this row previously rendered the
+   WebView's native button face on both desktop and Android. */
+.association-add {
+  min-height: 44px;
+  padding: 10px 17px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  color: var(--accent-strong);
+  font-weight: 500;
+  transition:
+    background var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
+}
+.association-add:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--line-strong);
 }
 
 /* ————— Packaged-shell chrome: OS frame removed (tauri.conf decorations

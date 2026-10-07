@@ -180,6 +180,7 @@ export function ItemDetailView({
               ]}
             />
             <button
+              className="association-add"
               type="button"
               disabled={!associationId}
               onClick={() => {
