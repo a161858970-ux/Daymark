@@ -70,6 +70,8 @@ class FakeAuthClient {
   googleSubOwners = new Map<string, string>();
 
   oauthUrls: string[] = [];
+  oauthParams: Record<string, unknown>[] = [];
+  linkParams: Record<string, unknown>[] = [];
 
   forced = new Map<string, FakeError>();
 
@@ -371,6 +373,7 @@ class FakeAuthClient {
   async signInWithOAuth(params: Record<string, unknown>) {
     const forced = this.authError("signInWithOAuth");
     if (forced) return { data: {}, error: forced };
+    this.oauthParams.push(params);
     this.oauthUrls.push(
       `https://accounts.example/oauth/${String(params.provider)}`,
     );
@@ -410,6 +413,7 @@ class FakeAuthClient {
   async linkIdentity(params: Record<string, unknown>) {
     const forced = this.authError("linkIdentity");
     if (forced) return { data: {}, error: forced };
+    this.linkParams.push(params);
     if (!this.session)
       return {
         data: {},
@@ -626,6 +630,14 @@ describe("Auth Identity", () => {
     const { fake, adapter } = setup();
     await adapter.signInGoogle();
     expect(fake.oauthUrls).toEqual(["https://accounts.example/oauth/google"]);
+    // The round trip must come back to THIS app, not the project Site URL.
+    expect(fake.oauthParams.at(-1)).toMatchObject({
+      provider: "google",
+      options: {
+        // Same degradation as appOrigin(): no window in this env.
+        redirectTo: typeof window === "undefined" ? "" : window.location.origin,
+      },
+    });
     // The redirect itself never creates local state; returning from it does.
     expect(await adapter.getAccount()).toBeNull();
     const user = fake.finishGoogleOAuth({ email: EMAIL });
@@ -717,6 +729,13 @@ describe("Auth Identity", () => {
     await adapter.signInEmailPassword(EMAIL, "pw");
     const before = (await adapter.getAccount())!.userId;
     await adapter.linkGoogle();
+    expect(fake.linkParams.at(-1)).toMatchObject({
+      provider: "google",
+      options: {
+        // Same degradation as appOrigin(): no window in this env.
+        redirectTo: typeof window === "undefined" ? "" : window.location.origin,
+      },
+    });
     expect((await adapter.getAccount())!.userId).toBe(before);
     expect(
       (await adapter.listIdentities()).map((value) => value.provider),

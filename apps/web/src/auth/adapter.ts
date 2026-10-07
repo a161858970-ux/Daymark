@@ -420,7 +420,10 @@ export function createAuthAdapter(client: AuthClientLike): AuthAdapter {
         () =>
           client.signInWithOAuth({
             provider: "google",
-            options: { emailRedirectTo: appOrigin() },
+            // signInWithOAuth honours `redirectTo` (emailRedirectTo is for
+            // magic-link mails and was silently ignored here, so the shell
+            // would bounce to the project Site URL instead of the app).
+            options: { redirectTo: appOrigin() },
           }),
         "SIGN_IN",
       );
@@ -432,7 +435,7 @@ export function createAuthAdapter(client: AuthClientLike): AuthAdapter {
         () =>
           client.linkIdentity({
             provider: "google",
-            options: { emailRedirectTo: appOrigin() },
+            options: { redirectTo: appOrigin() },
           }),
         "LINK_IDENTITY",
       );
