@@ -214,7 +214,7 @@ Phase 6 的自动证据包括：
 
 - **POST-RELEASE TECHNICAL DEBT**：`apps/web/src/App.tsx` 体量大，暂不重构（未发现 correctness bug 或 state race）。
 - **POST-RELEASE PERFORMANCE OPTIMIZATION**：进一步按路由懒加载与依赖裁剪（本轮只做了零行为变化的 vendor 分包）。
-- 规格 `16_API_CONTRACT.md` §22 要求的 AI 端点 rate limit 尚未实现（单用户本地部署，风险低），留到发布前安全复核。
+- ~~规格 `16_API_CONTRACT.md` §22 要求的 AI 端点 rate limit 尚未实现~~ **已实现并有测试**（`apps/api/src/rateLimit.ts` + `rateLimit.test.ts`，`main.ts` 接线 `aiRateLimiter`，默认 20 calls/owner/min，环境变量 `AI_RATE_LIMIT_PER_OWNER/WINDOW_MS` 可调）——发布前复核闭环（2026-10-07）。
 - AI 端点 quiet-hour / 通知权限的系统级设置 UI 尚未提供（当前 quiet hours 为产品默认值，通知权限走浏览器手势申请）。
 
 ## 10. Final Release Gate Preparation（2026-09-26）
@@ -423,7 +423,7 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 
 1. ~~**文案误导**~~ **已修（`b763063`）**：模型返回 0 门课时给「未从该文件中识别出课程。请确认这是本学期的课程表且内容清晰，也可以改用清晰截图重新导入。」（新 `NO_COURSES`），与"文件读不出"的 `NO_CONTENT` 文案分流；
 2. ~~**可诊断性**~~ **已修（本轮）**：`ProviderError`/`CloudError` 都带 `cause`，`interpretation.ts` 原本的裸 `catch {` 改为 `catch (error)` 并挂 cause，`server.setErrorHandler` 把工程原因写 stderr（进 `%TEMP%\cm-api.log`）、意外 500 也记一行；**响应体仍只含产品文案**，`interpretation.test.ts` 与 `provider-errors.test.ts` 双向断言（日志含原始原因 / 响应不含）。仍见一次偶发 `UNAVAILABLE`（fetch 层，可重试），归因留观；
-3. **耗时（待定）**：大课表结构化解析 213 s，逼近 300 s 上限，重试有超时风险。
+3. ~~**耗时（待定）**：大课表结构化解析 213 s~~ **已解决（2026-10-05）**：整册单批 + 模型分路后实测 33–70 s（同 §16 条目，依据 `docs/AI_USAGE_MAP.md`）。
 
 ### 本窗口服务状态
 
@@ -517,13 +517,13 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 
 ### 遗留清单（当前全部，按此跟踪）
 
-1. **Google 登录**（壳内灰显禁用）→ 阶段 4：Supabase 后台 Site URL/回跳白名单 + 有效 `SUPABASE_ACCESS_TOKEN`（现 401）。
+1. ~~**Google 登录**（壳内灰显禁用）~~ **已闭环（2026-10-07）**：回跳键名修正（`emailRedirectTo`→`redirectTo`）+ 解除 `isTauri()` 禁用闸 + Supabase 回跳白名单加 `http://tauri.localhost`（用户后台操作）+ Android 明文拦截 NSC 域名级放行；**双端真实登录通过**（桌面完整流程+手机全链路）。提交 `e7f7fe7`/`9411e9c`。
 2. **Clash 分流**（可选）：`IP-CIDR,206.187.209.142,DIRECT,no-resolve`，改善壳→API 的间歇性慢/超时。
 3. **服务器 SSH 22 不稳**：API 80/443 正常；要上服务器而 SSH 不通时从椰子云控制台重启。
 4. **导入中途退出换账号**：提交可能写进新账号库（观察级待定，发生条件苛刻）。
 5. **O-4 手机通知**（待定，旧项）。
 6. **窗口拖拽/四边缩放**：无边框窗口的系统 hit-test 需用户真手实测（按钮链已程序验证）。
-7. **阶段 3 APK**：下一步（安卓启动图已由 tauri icon 生成好）。
+7. ~~**阶段 3 APK**~~ **已完成并真机验收（2026-10-07）**：v0.1.0 双产物已发布。
 8. **系统托盘（用户提问待拍板）**：当前关窗=退出程序，所以不在右下角托盘区；要做是一块明确功能（托盘常驻图标+关窗最小化到托盘+托盘菜单），建议 APK 后作为可选项拍板。
 9. **安卓系统返回手势（用户点名，记为待办）**：TauriActivity 模板 `handleBackNavigation=false`，当前行为未在真机验证。建议方案：返回优先关闭详情面板/弹层/搜索，根页面返回=最小化到后台（或退出，需拍板）；实现需 web 侧 popstate 拦截或壳侧回调，**必须配真机迭代**。
 10. **全局裸按钮审计（观察级待办）**：盘点出 56 个无 class 的 `<button>`，多数有父级规则罩着，但「添加关联」证明存在漏网（exe/APK 都裸渲染）。已修该个例；系统性解决需逐屏视觉核对，或引入零特异性 `:where(button)` 基础样式——后者可能波及已验收的桌面按钮，故保守搁置待拍板。
@@ -554,3 +554,8 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 - **发版门控**：format:check/lint/typecheck/build 全 0 + 全量 282 passed + 1 skipped。
 - **`.prettierignore`**：加 `src-tauri/gen/android/app/build/`——安卓构建产物每次都会把 `format:check` 打成 1（发版时发现，已根治）。
 - **收工计划（用户拍板顺序）**：A 发版 ✅ → **B 阶段 4 Google 登录接回**（需 Supabase 后台 Site URL/回跳白名单 + 壳内回调机制）→ **C 遗留清单清尾**（#9 返回手势、#10 裸按钮审计、托盘拍板、Clash DIRECT、O-4 通知待定等）→ 全部收工。
+
+## 23. C 遗留清尾计划（2026-10-07，用户拍板后定稿）
+
+- **拍板结果**：C1 系统托盘 **做**（常驻+关窗最小化+托盘菜单）；C2 时间"无时间"出口 **维持现状**（记为已知行为）；C3 O-4 安卓通知 **做**（查根因并实现）；B2 裸按钮审计 **删除**（用户在真实使用中发现后再说）；C4 Clash 规则待用户理解后再定；C5 无边框窗口拖拽/四边缩放手感 = 用户 30 秒实测项。
+- **执行序**：A1 文档对账 → A2 服务器模型钉查（**进行中**：SSH 22 持续 banner 失败 3/3，服务器 .env 疑似从模板抄了 `AI_MODEL=mimo-v2.6-flash`（文本路 724s 超时）——仓库侧 `.env.example` 已钉正为 pro；服务器侧待 SSH 恢复自修，或用户走椰子云 web 控制台粘贴幂等命令 `sed -i 's/^AI_MODEL=.*/AI_MODEL=mimo-v2.6-pro/' /opt/daymark/course-manager/.env && systemctl restart cm-api` → A3 SSH 探测 → C1 托盘（桌面）→ B1 安卓返回手势（浮层逐层关，根页面回后台）→ B3+C3 通知（点击回前台+根因）→ 门控+双端重打 → 用户集中验收 → A4 Release 最终刷新 → 收工。
