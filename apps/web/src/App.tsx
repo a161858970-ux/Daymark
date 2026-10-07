@@ -343,6 +343,34 @@ export function App() {
       .catch((cause: unknown) => setError(toUserMessage(cause)));
     void openActionRequiredIssues().then(setSyncIssues);
   }, []);
+
+  // Scrollbars only light up on the element that is actually scrolling
+  // (class removed again after a short idle), so an opened detail panel
+  // never shows two rails at once.
+  useEffect(() => {
+    let timer = 0;
+    const onScroll = (event: Event) => {
+      const raw = event.target;
+      const target =
+        raw === document ? document.documentElement : (raw as Element | null);
+      if (!target || !(target instanceof Element)) return;
+      window.clearTimeout(timer);
+      for (const el of document.querySelectorAll(".is-scrolling"))
+        el.classList.remove("is-scrolling");
+      target.classList.add("is-scrolling");
+      timer = window.setTimeout(() => {
+        target.classList.remove("is-scrolling");
+      }, 700);
+    };
+    document.addEventListener("scroll", onScroll, {
+      passive: true,
+      capture: true,
+    });
+    return () => {
+      document.removeEventListener("scroll", onScroll, { capture: true });
+      window.clearTimeout(timer);
+    };
+  }, []);
   useEffect(
     () =>
       startAuthenticatedSync(

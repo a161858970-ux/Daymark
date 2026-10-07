@@ -4228,25 +4228,6 @@ h2 {
   color: var(--ink);
 }
 
-/* "添加关联" shares the field look — this row previously rendered the
-   WebView's native button face on both desktop and Android. */
-.association-add {
-  min-height: 44px;
-  padding: 10px 17px;
-  background: var(--surface-raised);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-small);
-  color: var(--accent-strong);
-  font-weight: 500;
-  transition:
-    background var(--motion-fast) ease,
-    border-color var(--motion-fast) ease;
-}
-.association-add:hover:not(:disabled) {
-  background: var(--accent-soft);
-  border-color: var(--line-strong);
-}
-
 /* ————— Packaged-shell chrome: OS frame removed (tauri.conf decorations
    false), this app-owned strip is the title bar. body.tauri-shell is set
    at runtime by WindowTitleBar — browser builds get none of this. ————— */
@@ -4336,9 +4317,13 @@ body.tauri-shell {
 
 /* ————— Global scrollbar: the platform default was the one raw element
    left in the chrome; slim, canvas-colored, thumb only on hover. ————— */
+/* Scrollbars rest hidden and light up only while their element actually
+   scrolls (App.tsx marks it .is-scrolling for ~700ms) or while the thumb
+   itself is hovered. Opening the detail panel therefore never shows two
+   rails at once: the idle list hides its thumb. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #c6c9bf transparent;
+  scrollbar-color: transparent transparent;
 }
 *::-webkit-scrollbar {
   width: 12px;
@@ -4352,12 +4337,29 @@ body.tauri-shell {
   border: 3px solid transparent;
   border-radius: 99px;
   background-clip: content-box;
+  opacity: 0;
+  transition: opacity 220ms ease;
 }
 *::-webkit-scrollbar-thumb:hover {
   background: #a3a99e;
   border: 3px solid transparent;
   background-clip: content-box;
+  opacity: 1;
 }
 *::-webkit-scrollbar-corner {
   background: transparent;
+}
+.is-scrolling::-webkit-scrollbar-thumb {
+  opacity: 1;
+}
+.is-scrolling {
+  scrollbar-color: #c6c9bf transparent;
+}
+/* The detail panel carries little content; a second permanent rail next
+   to the page's looked broken — remove it, wheel/touch still scroll. */
+.detail-panel {
+  scrollbar-width: none;
+}
+.detail-panel::-webkit-scrollbar {
+  display: none;
 }
