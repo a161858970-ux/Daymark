@@ -1,4 +1,4 @@
-# AI 使用面（事实核查，2026-09-30）
+# AI 使用面（事实核查，2026-09-30；**2026-10-07 供应商切换 DeepSeek，见文末 §变更**）
 
 > 本文按**实际代码与实测**整理，不依据设计文档推断。结论：全项目只有**两个**真实 AI 调用点，全部在 `apps/api`，全部走同一个 OpenAI 兼容端点。
 
@@ -53,4 +53,15 @@
 - **遗留观察项**：
   1. ~~空结果文案误导~~ **已修**（`b763063`）：模型返回 0 门课 → 新 `NO_COURSES` 文案「未从该文件中识别出课程…」，与"文件读不出"（`NO_CONTENT`）分流，测试改为精确断言；
   2. ~~`providerFailure()` 丢弃底层异常~~ **已修**：`ProviderError`/`CloudError` 均携带 `cause`，`interpretation.ts` 的裸 `catch` 改为 `catch (error)`，`server.setErrorHandler` 把工程原因写 stderr（落 `%TEMP%\cm-api.log`）、意外 500 也记一行；**响应体仍是产品文案**（测试双向断言：日志含原因、响应不含）；
-  3. 大课表结构化解析耗时 213 s，逼近 300 s 上限，重试可能超时（**待定**，观察）。
+  3. ~~大课表结构化解析耗时 213 s，逼近 300 s 上限~~ **已解决（2026-10-05）**：整册单批 + 模型分路后实测 33–70 s；2026-10-07 起改走 deepseek-flash（见文末变更节）。
+
+## 变更（2026-10-07）：课表识别与 AI 解释切 DeepSeek V4.1-Flash
+
+- **触发（真实事故）**：内测新用户（`523280e1…`，21:36 注册）21:56 提交真实 PDF 课表导入，`course_import_jobs` 记录 **21:56:33 → 22:08:37 FAILED，错误「识别服务响应超时」**——耗时精确等于 `240 s × 3 次重试 + 2 s 间隔 ≈ 12:02`，三次尝试全部被供应商挂起超时（服务器 `notification_deliveries` 类比通道无当日记录、任务 preview 全空，排除我方解析与文件问题）。
+- **切换**：`AI_BASE_URL=https://api.deepseek.com`、`AI_MODEL=deepseek-flash`、`AI_MODEL_IMAGE=deepseek-flash`（= DeepSeek-V4.1-Flash，2026-09-10 发布；原生图片输入；峰时 $0.30/$1.20 每百万 token；非思考档首 token 极快）。
+- **适配层 `apps/api/src/ai/providerCompat.ts`（按 base URL 自动分流）**：
+  - DeepSeek Chat 端点只有 `response_format: json_object`（`json_schema` 是 Responses API 能力）→ 结构改由**提示词内嵌 JSON Schema 指令**保证（官方警示：json_object 模式不指示会空转到 token 上限，故指令注入是硬要求）；
+  - `thinking: {"type": "disabled"}` 关思考档（用户拍板"关低思考挡位"）；
+  - 非 DeepSeek（MiMo 默认）payload **逐字节保持原样**（json_schema 严格档），默认路径测试原封不动。
+- **切回/再切**：纯环境变量（`AI_BASE_URL/AI_MODEL/AI_MODEL_IMAGE/AI_API_KEY`），代码无需改动。
+- **调用点不变**：仍然只有两个（`interpretation.ts` 的解释、`course-import-chat-parser.ts` 的导入），限流 20/owner/min 不变。

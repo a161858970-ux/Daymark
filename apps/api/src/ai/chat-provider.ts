@@ -1,4 +1,5 @@
 import type { InterpretationProvider } from "./interpretation.js";
+import { providerCompatFor } from "./providerCompat.js";
 
 /** Provider failures are classified once and mapped to product-level errors. */
 export type ProviderErrorKind =
@@ -202,23 +203,27 @@ export class ChatCompletionsInterpretationProvider implements InterpretationProv
     input: Parameters<InterpretationProvider["interpret"]>[0],
   ): Promise<unknown> {
     const endpoint = `${(this.config.baseUrl ?? "https://api.xiaomimimo.com/v1").replace(/\/$/, "")}/chat/completions`;
+    const compat = providerCompatFor(this.config.baseUrl);
+    const systemContent = [
+      interpretationInstructions,
+      compat.jsonInstruction("course_capture_interpretation", schema),
+    ]
+      .filter((part) => part.length > 0)
+      .join("\n");
     const payload = JSON.stringify({
       model: this.config.model,
       messages: [
         {
           role: "system",
-          content: interpretationInstructions,
+          content: systemContent,
         },
         { role: "user", content: JSON.stringify(input) },
       ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "course_capture_interpretation",
-          strict: true,
-          schema,
-        },
-      },
+      response_format: compat.responseFormat(
+        "course_capture_interpretation",
+        schema,
+      ),
+      ...compat.extraBody(),
     });
     return withProviderRetry(async () => {
       let attempt: Response;

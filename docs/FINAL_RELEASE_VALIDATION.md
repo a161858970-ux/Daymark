@@ -179,14 +179,15 @@ pnpm --filter @course-manager/web dev -- --host 0.0.0.0
 
 ---
 
-## H. v0.1.0 发布记录（2026-10-07）
+## H. v0.1.0 发布记录（2026-10-07；深夜终版刷新）
 
-- **Release**：https://github.com/a161858970-ux/course-manager/releases/tag/v0.1.0（正式版，非 draft/非 prerelease；tag `v0.1.0` 已推送）
-- **产物**（服务端回读验证，字节数与本地一致）：
-  - `Daymark_0.1.0_x64-setup.exe` 1,666,817 B — https://github.com/a161858970-ux/course-manager/releases/download/v0.1.0/Daymark_0.1.0_x64-setup.exe（SHA-256 前 16 位 `c12dac5b1c9828b6`）
-  - `Daymark_0.1.0_android.apk` 19,781,047 B — https://github.com/a161858970-ux/course-manager/releases/download/v0.1.0/Daymark_0.1.0_android.apk（SHA-256 前 16 位 `245480ddb2c6d52a`，universal 四 ABI、CN=Daymark V2 签名）
-- **发版门控**（发版时刻全绿）：`format:check` / `lint` / `typecheck` / `build` 全 0；全量测试 **282 passed + 1 skipped**（domain 11、application 19、storage 44、web 134、api 74+1）。
-- **门控加固**：`.prettierignore` 新增 `src-tauri/gen/android/app/build/`（安卓构建产物曾把 format:check 打成 1）。
-- **实机验收（用户口述记录）**：Windows —— 数据同步/双端登录/账号切换/标题栏/logo/滚动条通过；Android —— 三轮返修后全通过（刘海让位、底部导航归位、点按无蓝块、同步胶囊避让状态栏、滚动条静息隐藏、详情无轨、添加关联=quiet-button）。
-- **服务端**：`https://api.daymark.top`（Caddy + cm-api systemd，CORS 已上线，健康 12/12）。
-- **未随包**（记入遗留）：Google 登录接回（阶段 4）、手机系统返回手势（#9）、全局裸按钮审计（#10）。
+- **Release**：https://github.com/a161858970-ux/course-manager/releases/tag/v0.1.0（正式版，非 draft/非 prerelease）
+- **终版产物**（2026-10-07 深夜重新上传，服务端回读字节数与本地一致）：
+  - `Daymark_0.1.0_x64-setup.exe` 1,703,854 B — https://github.com/a161858970-ux/course-manager/releases/download/v0.1.0/Daymark_0.1.0_x64-setup.exe（SHA-256 前 16 位 `bb65f83936ab882b`）
+  - `Daymark_0.1.0_android.apk` 19,799,191 B — https://github.com/a161858970-ux/course-manager/releases/download/v0.1.0/Daymark_0.1.0_android.apk（SHA-256 前 16 位 `c6b7e949f70e256a`，universal 四 ABI、CN=Daymark V2 签名）
+- **终版包含**（相对首发布增量）：系统托盘（关窗入托盘+菜单）、安卓返回手势（浮层逐层关/根页面回后台）、壳内系统通知适配器、时间滚轮触屏修复、R-01 `r01-v2` 截止到点档、Google 登录接回（回跳键名修正+白名单+安卓明文 NSC）、移动端三轮视觉返修。
+- **发版门控**（终版时刻全绿）：`format:check` / `lint` / `typecheck` / `build` 全 0；全量测试 **295 passed + 1 skipped**（domain 11、application 19、storage 44、web 141、api 80+1）。
+- **门控加固**：`.prettierignore` 加 `src-tauri/gen/android/app/build/`（安卓构建产物曾把 format:check 打成 1）。
+- **实机验收（用户口述记录）**：Windows —— 数据同步/双端登录/账号切换/标题栏/logo/滚动条/**托盘（关窗入托盘、菜单退出）** 通过；Android —— 三轮返修全通过（刘海/底部导航/点按高亮/同步胶囊/滚动条/添加关联）+ **返回手势逐层关**通过 + **时间滚轮触屏**通过 + **Google 登录全链路**通过。
+- **服务端**：`https://api.daymark.top`（Caddy + cm-api，CORS 已上线，health 12/12）。
+- **待收尾（非阻断）**：通知明早静默窗外复测（静默顺延证据已入状态文档 §23 附）；C4 Clash 分流待用户拍板；无边框窗口拖拽手感待用户 30 秒实测；DeepSeek 切换待密钥填入与服务器部署（§24）。

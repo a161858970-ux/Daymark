@@ -6,6 +6,7 @@ import {
   readStructuredResponse,
   withProviderRetry,
 } from "./chat-provider.js";
+import { providerCompatFor } from "./providerCompat.js";
 import {
   CourseImportParseError,
   DEFAULT_PDF_LIMITS,
@@ -250,25 +251,26 @@ export class ChatCompletionsCourseImportParser implements CourseImportParser {
     const model = batch.parts.some((part) => part.type === "image_url")
       ? (this.config.imageModel ?? this.config.model)
       : this.config.model;
+    const compat = providerCompatFor(this.config.baseUrl);
+    const systemContent = [
+      includeHint
+        ? `${instructions} Pages may be supplied as page text or as page images.`
+        : instructions,
+      compat.jsonInstruction("course_timetable_import", schema),
+    ]
+      .filter((part) => part.length > 0)
+      .join("\n");
     const payload = JSON.stringify({
       model,
       messages: [
         {
           role: "system",
-          content: includeHint
-            ? `${instructions} Pages may be supplied as page text or as page images.`
-            : instructions,
+          content: systemContent,
         },
         { role: "user", content: batch.parts },
       ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "course_timetable_import",
-          strict: true,
-          schema,
-        },
-      },
+      response_format: compat.responseFormat("course_timetable_import", schema),
+      ...compat.extraBody(),
       // No output cap: capping cut mid-reasoning (finish=length with empty
       // content); the per-attempt time budget bounds a runaway instead, and
       // a real truncation is classified as TRUNCATED.
