@@ -176,3 +176,17 @@ pnpm --filter @course-manager/web dev -- --host 0.0.0.0
 2. 只有真实执行才能写 `VERIFIED REAL`；PGlite/双 Dexie 结果最高只能写 `VERIFIED SIMULATED`；本机测试与浏览器核对写 `VERIFIED LOCAL`。
 3. 任一项 FAIL → 记录缺陷并回到工程 lane，不得改文档措辞掩盖。
 4. 本 runbook 本身不产生任何 `VERIFIED` 标记。
+
+---
+
+## H. v0.1.0 发布记录（2026-10-07）
+
+- **Release**：https://github.com/a161858970-ux/course-manager/releases/tag/v0.1.0（正式版，非 draft/非 prerelease；tag `v0.1.0` 已推送）
+- **产物**（服务端回读验证，字节数与本地一致）：
+  - `Daymark_0.1.0_x64-setup.exe` 1,666,817 B — https://github.com/a161858970-ux/course-manager/releases/download/v0.1.0/Daymark_0.1.0_x64-setup.exe（SHA-256 前 16 位 `c12dac5b1c9828b6`）
+  - `Daymark_0.1.0_android.apk` 19,781,047 B — https://github.com/a161858970-ux/course-manager/releases/download/v0.1.0/Daymark_0.1.0_android.apk（SHA-256 前 16 位 `245480ddb2c6d52a`，universal 四 ABI、CN=Daymark V2 签名）
+- **发版门控**（发版时刻全绿）：`format:check` / `lint` / `typecheck` / `build` 全 0；全量测试 **282 passed + 1 skipped**（domain 11、application 19、storage 44、web 134、api 74+1）。
+- **门控加固**：`.prettierignore` 新增 `src-tauri/gen/android/app/build/`（安卓构建产物曾把 format:check 打成 1）。
+- **实机验收（用户口述记录）**：Windows —— 数据同步/双端登录/账号切换/标题栏/logo/滚动条通过；Android —— 三轮返修后全通过（刘海让位、底部导航归位、点按无蓝块、同步胶囊避让状态栏、滚动条静息隐藏、详情无轨、添加关联=quiet-button）。
+- **服务端**：`https://api.daymark.top`（Caddy + cm-api systemd，CORS 已上线，健康 12/12）。
+- **未随包**（记入遗留）：Google 登录接回（阶段 4）、手机系统返回手势（#9）、全局裸按钮审计（#10）。

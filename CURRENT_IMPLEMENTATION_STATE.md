@@ -547,3 +547,10 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 - 私有工具链：打过补丁的 `cargo-tauri.exe`（E:\devtools\tauri-cli-src\...\target\release\）、
   `E:\devtools\bin\pnpm.cmd` 垫片、补丁库 `E:\devtools\cargo-mobile2-0.22.5`。
 - 遗留清单沿用 §20 第 1-8 项；APK 真机安装测试待用户醒后执行（adb 或直接传包）。
+
+## 22. 正式发布 v0.1.0（2026-10-07，A→B→C 收工计划的 A 步）
+
+- **GitHub Release**：https://github.com/a161858970-ux/course-manager/releases/tag/v0.1.0（tag `v0.1.0` 已推；资产 exe 1.67MB + universal APK 19.78MB，服务端回读字节数与本地一致，SHA-256 前 16 位记录在 docs/FINAL_RELEASE_VALIDATION.md §H）。
+- **发版门控**：format:check/lint/typecheck/build 全 0 + 全量 282 passed + 1 skipped。
+- **`.prettierignore`**：加 `src-tauri/gen/android/app/build/`——安卓构建产物每次都会把 `format:check` 打成 1（发版时发现，已根治）。
+- **收工计划（用户拍板顺序）**：A 发版 ✅ → **B 阶段 4 Google 登录接回**（需 Supabase 后台 Site URL/回跳白名单 + 壳内回调机制）→ **C 遗留清单清尾**（#9 返回手势、#10 裸按钮审计、托盘拍板、Clash DIRECT、O-4 通知待定等）→ 全部收工。
