@@ -1,0 +1,8 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Android 15+ enforces edge-to-edge for targetSdk 35+; this app wants
+         its content laid out below the system status/navigation bars (the
+         phone chrome keeps its own space), so opt out explicitly. -->
+    <style name="Theme.daymark" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
+    </style>
+</resources>

@@ -74,6 +74,14 @@
    `src-tauri/icons/android` **全量**（17 文件）覆盖工程 res；注意自适应图标
    `mipmap-anydpi-v26/ic_launcher.xml` 引用 `color/ic_launcher_background`，**必须连 `values/` 一起拷**，
    只拷 mipmap 会在 `processResources` 报 resource linking failed。
-3. 验证配方：`llvm-nm -D --defined-only <so> | grep Java_`（入口）+ `apksigner verify --print-certs`
+3. **桌面壳泄漏进手机端**（真机第二轮反馈）：`isTauri()` 在安卓壳同样为真，Windows 标题栏与
+   `.tauri-shell` 规则（`top:0/padding-top:74px` 特异性 0-2-0，**压过了移动端媒体查询的底部导航**）
+   全部泄漏 → 顶部出现 Win 控制条、底部标签栏被拽到顶。修复：`isAndroid()`（wry UA 含 Android）
+   作为第二道门槛，标题栏与 body.tauri-shell 仅桌面生效——安卓恢复为纯响应式视图（即当初浏览器
+   窄窗验收通过的那套）。另：`MainActivity.kt` 模板自带 `enableEdgeToEdge()` + targetSdk37 在
+   Android15+ 强制边缘到边缘 → 顶进刘海；修复 = 去掉调用 + `values-v35/themes.xml` 加
+   `windowOptOutEdgeToEdgeEnforcement`。安卓点按的蓝色高亮块 = `-webkit-tap-highlight-color`
+   （styles.css 此前从未写过此规则），全局置 transparent。
+4. 验证配方：`llvm-nm -D --defined-only <so> | grep Java_`（入口）+ `apksigner verify --print-certs`
    （签名）+ zip 抽 `res/*.png` 肉眼核图标（release 开了资源混淆，路径会变成 res/as.png 之类，
    按 resources.arsc 仍含 `ic_launcher` 名判断资源未丢）。

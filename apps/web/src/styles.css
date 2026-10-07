@@ -73,6 +73,15 @@ select {
   padding: 10px 13px;
   color: inherit;
 }
+/* Android WebView paints a blue block over anything you tap; keep the
+   designed hover/press states instead (browser builds never showed it
+   because they were tested with a mouse). */
+*,
+*::before,
+*::after {
+  -webkit-tap-highlight-color: transparent;
+}
+
 button {
   cursor: pointer;
 }

@@ -11,6 +11,13 @@ export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+/** True on the Android shell (wry's WebView always says so in its UA). */
+export function isAndroid(): boolean {
+  return (
+    typeof navigator !== "undefined" && /android/i.test(navigator.userAgent)
+  );
+}
+
 export function apiBase(): string {
   if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window)
     return "https://api.daymark.top";

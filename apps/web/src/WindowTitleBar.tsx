@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { isTauri } from "./apiBase.js";
+import { isAndroid, isTauri } from "./apiBase.js";
 
 /**
  * Packaged-shell chrome. The OS window frame is removed
@@ -10,7 +10,7 @@ import { isTauri } from "./apiBase.js";
  * browser build it renders nothing at all.
  */
 export default function WindowTitleBar() {
-  const [enabled] = useState(isTauri);
+  const [enabled] = useState(() => isTauri() && !isAndroid());
   useEffect(() => {
     if (!enabled) return;
     document.body.classList.add("tauri-shell");
