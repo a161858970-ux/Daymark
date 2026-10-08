@@ -1,5 +1,6 @@
 import type { Item } from "@daymark/domain";
 import type { ReminderEvent } from "@daymark/application";
+import { invoke } from "@tauri-apps/api/core";
 import {
   active,
   cancel as cancelByIds,
@@ -50,6 +51,14 @@ export class ShellNotificationAdapter implements NotificationAdapter {
     // event simply never fires there).
     void onAction((notification) => {
       const extra = (notification as { extra?: Record<string, unknown> }).extra;
+      // Update notifications: tapping "已就绪，点按安装" opens the system
+      // installer for the package the background download just finished.
+      const kind = extra?.kind;
+      if (kind === "update_install") {
+        void invoke("android_install_update").catch(() => undefined);
+        return;
+      }
+      if (kind === "update_failed") return;
       const itemId = extra?.item_id;
       const logicalKey = extra?.logical_key;
       if (typeof itemId !== "string" || typeof logicalKey !== "string") return;

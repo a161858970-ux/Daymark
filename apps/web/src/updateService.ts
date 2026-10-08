@@ -1,6 +1,6 @@
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { invoke } from "@tauri-apps/api/core";
-import { cacheDir, join } from "@tauri-apps/api/path";
+import { sendNotification } from "@tauri-apps/plugin-notification";
 import { isAndroid, isTauri } from "./apiBase.js";
 
 /**
@@ -89,11 +89,16 @@ export async function installUpdate(info: UpdateInfo): Promise<void> {
     return;
   }
   if (info.androidUrl) {
-    const dest = await join(await cacheDir(), "daymark-update.apk");
-    await invoke("android_install_apk", {
+    // Android: hand the download to the SYSTEM DownloadManager — progress
+    // shows in the notification shade, the download survives the app
+    // being backgrounded, and the update card can close immediately so
+    // the user keeps working. Completion posts a tappable notification
+    // ("下载完成，点按安装") which routes to the system installer.
+    const started = await invoke<{ id: string }>("android_start_update", {
       url: info.androidUrl,
-      destPath: dest,
+      fileName: UPDATE_APK_NAME,
     });
+    void watchUpdateDownload(started.id);
     return;
   }
   throw new Error("没有可安装的更新");
@@ -102,4 +107,47 @@ export async function installUpdate(info: UpdateInfo): Promise<void> {
 /** Release the desktop plugin handle when the user declines. */
 export function releaseUpdate(info: UpdateInfo | null): void {
   void info?.plugin?.close().catch(() => undefined);
+}
+
+/** Canonical cache file name — must match DaymarkSettingsPlugin's default
+ *  so the "download complete" notification tap finds the package even
+ *  after the app process restarted. */
+const UPDATE_APK_NAME = "daymark-update.apk";
+
+/** Watch the system download in the background; ~10 min budget (1.5 s cadence). */
+async function watchUpdateDownload(id: string): Promise<void> {
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      const state = await invoke<{ status: string }>("android_query_update", {
+        id,
+      });
+      if (state.status === "done") {
+        await announceUpdateReady();
+        return;
+      }
+      if (state.status === "failed") {
+        await sendNotification({
+          title: "拾序更新",
+          body: "新版本下载失败，请打开应用重试。",
+          extra: { kind: "update_failed" },
+        });
+        return;
+      }
+    } catch {
+      // transient IPC error — keep polling
+    }
+  }
+}
+
+async function announceUpdateReady(): Promise<void> {
+  try {
+    await sendNotification({
+      title: "拾序更新已就绪",
+      body: "新版本已下载完成，点按安装。",
+      extra: { kind: "update_install" },
+    });
+  } catch {
+    // permission missing → DownloadManager's own "下载完成" notice is the fallback
+  }
 }

@@ -22,6 +22,69 @@ fn show_main_window(app: &tauri::AppHandle) {
     }
 }
 
+/// Hand the update download to the system DownloadManager (progress in
+/// the notification shade; the app stays usable meanwhile).
+#[tauri::command]
+fn android_start_update(
+    app: tauri::AppHandle,
+    url: String,
+    file_name: String,
+) -> Result<serde_json::Value, String> {
+    #[cfg(target_os = "android")]
+    {
+        let mobile = app.state::<crate::daymark_mobile::DaymarkMobile<tauri::Wry>>();
+        mobile
+            .0
+            .run_mobile_plugin(
+                "startUpdateDownload",
+                serde_json::json!({ "url": url, "fileName": file_name }),
+            )
+            .map_err(|e| format!("创建下载失败: {e}"))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (&app, url, file_name);
+        Err("后台下载仅安卓提供".to_string())
+    }
+}
+
+/// Poll the download: {status: running|done|failed}.
+#[tauri::command]
+fn android_query_update(app: tauri::AppHandle, id: String) -> Result<serde_json::Value, String> {
+    #[cfg(target_os = "android")]
+    {
+        let mobile = app.state::<crate::daymark_mobile::DaymarkMobile<tauri::Wry>>();
+        mobile
+            .0
+            .run_mobile_plugin("queryUpdateDownload", serde_json::json!({ "id": id }))
+            .map_err(|e| format!("查询下载失败: {e}"))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (&app, id);
+        Err("后台下载仅安卓提供".to_string())
+    }
+}
+
+/// Open the system installer for the already-downloaded update package
+/// (invoked from the "download complete" notification tap).
+#[tauri::command]
+fn android_install_update(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        let mobile = app.state::<crate::daymark_mobile::DaymarkMobile<tauri::Wry>>();
+        mobile
+            .0
+            .run_mobile_plugin::<()>("openUpdateInstaller", ())
+            .map_err(|e| format!("调起安装器失败: {e}"))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = &app;
+        Err("仅安卓提供".to_string())
+    }
+}
+
 /// Android-only APK hot-update: the official updater plugin's mobile
 /// `install_inner` is a no-op (verified in tauri-plugin-updater 2.13.2
 /// source), so the shell downloads the APK into the app cache (path handed
@@ -118,6 +181,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             android_install_apk,
             android_open_settings,
+            android_start_update,
+            android_query_update,
+            android_install_update,
         ])
         .setup(|app| {
             #[cfg(not(mobile))]
