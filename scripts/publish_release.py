@@ -77,6 +77,7 @@ def github_token() -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--notes", default="")
+    parser.add_argument("--body", default="", help="Release 正文（白话版，留空则不动）")
     args = parser.parse_args()
 
     for path in (EXE, APK):
@@ -175,6 +176,16 @@ def main() -> int:
     # --- 4) Verify ------------------------------------------------------
     status, final = api(f"https://api.github.com/repos/a161858970-ux/daymark/releases/tags/{TAG}")
     names = [a["name"] for a in final["assets"]] if isinstance(final, dict) else []
+    if args.body:
+        status, _ = api(
+            f"https://api.github.com/repos/a161858970-ux/daymark/releases/{rel['id']}",
+            data=json.dumps({"body": args.body}).encode(),
+            method="PATCH",
+            content_type="application/json",
+        )
+        if status not in (200, 201):
+            die(f"更新 Release 正文失败: {status}")
+        print("[4/4] Release 正文已更新（白话版）")
     print(f"[4/4] 回读资产: {names}")
     print(f"完成。清单: {BASE}/latest.json  版本 {version}")
     return 0
