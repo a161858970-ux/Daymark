@@ -96,6 +96,19 @@ class DaymarkSettingsPlugin(private val activity: Activity) : Plugin(activity) {
    */
   private fun fireInstaller(file: File): String? {
     if (!file.exists()) return "安装包不存在: ${file.path}"
+    // Never hand a truncated/garbage file to the system installer — it
+    // would only produce the opaque "packageinfo is null (33)".
+    if (file.length() < MIN_APK_BYTES) {
+      return "安装包不完整（${file.length()} 字节），请重新下载"
+    }
+    file.inputStream().use { stream ->
+      val magic = ByteArray(4)
+      if (stream.read(magic).let { it == 4 } &&
+        !(magic[0] == 'P'.code.toByte() && magic[1] == 'K'.code.toByte())
+      ) {
+        return "安装包内容异常，请重新下载"
+      }
+    }
     return try {
       val uri = FileProvider.getUriForFile(
         activity,
@@ -154,7 +167,7 @@ class DaymarkSettingsPlugin(private val activity: Activity) : Plugin(activity) {
         setMimeType("application/vnd.android.package.archive")
         setTitle("拾序更新")
         setDescription("正在下载新版本…")
-        setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
         setDestinationInExternalFilesDir(activity, UPDATE_DIR_TYPE, args.fileName)
       }
       val id = dm.enqueue(request)
@@ -190,6 +203,14 @@ class DaymarkSettingsPlugin(private val activity: Activity) : Plugin(activity) {
             else -> "running"
           },
         )
+        // Integrity: DM's own record vs the bytes actually on disk — a
+        // truncated package must read as failed, never as "ready".
+        val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_BYTES_DOWNLOADED))
+        val fetched = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+        val fileName = lastUpdateFileName ?: DEFAULT_UPDATE_FILE_NAME
+        val onDisk = updateFile(fileName).length()
+        out.put("expectedBytes", total)
+        out.put("fileBytes", if (onDisk > 0) onDisk else fetched)
       }
       cursor?.close()
       invoke.resolveObject(out)
@@ -220,6 +241,7 @@ class DaymarkSettingsPlugin(private val activity: Activity) : Plugin(activity) {
   companion object {
     private const val DEFAULT_UPDATE_FILE_NAME = "daymark-update.apk"
     private const val UPDATE_DIR_TYPE = "update"
+    private const val MIN_APK_BYTES = 5_000_000L
     private var lastUpdateFileName: String? = null
   }
 }

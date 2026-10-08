@@ -1,6 +1,5 @@
 import type { Item } from "@daymark/domain";
 import type { ReminderEvent } from "@daymark/application";
-import { invoke } from "@tauri-apps/api/core";
 import {
   active,
   cancel as cancelByIds,
@@ -16,6 +15,7 @@ import {
   type NotificationAdapter,
 } from "./reminders.js";
 import { isAndroid, isTauri } from "./apiBase.js";
+import { openReadyUpdate } from "./updateService.js";
 
 /**
  * Shell implementation of the NotificationAdapter port (reminders.ts line
@@ -55,7 +55,7 @@ export class ShellNotificationAdapter implements NotificationAdapter {
       // installer for the package the background download just finished.
       const kind = extra?.kind;
       if (kind === "update_install") {
-        void invoke("android_install_update").catch(() => undefined);
+        void openReadyUpdate();
         return;
       }
       if (kind === "update_failed") return;

@@ -90,9 +90,10 @@ import {
 } from "./updateService.js";
 import { UpdateDialog } from "./UpdateDialog.js";
 import { FirstLaunchGuide } from "./FirstLaunchGuide.js";
+import { openReadyUpdate, UPDATE_READY_KEY } from "./updateService.js";
 import { toUserMessage } from "./errors.js";
 import type { AiTaskKind } from "./aiTaskStore.js";
-import { apiBase, isTauri } from "./apiBase.js";
+import { apiBase, isAndroid, isTauri } from "./apiBase.js";
 import WindowTitleBar from "./WindowTitleBar.js";
 
 export function App() {
@@ -153,6 +154,7 @@ export function App() {
   const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(
     null,
   );
+  const [updateReady, setUpdateReady] = useState(false);
   const [syncIssues, setSyncIssues] = useState<ActionRequiredSyncIssue[]>([]);
   // Bumped by the account panel's 查看并处理 so the repair panel opens itself.
   const [repairOpenSignal, setRepairOpenSignal] = useState(0);
@@ -289,6 +291,21 @@ export function App() {
     return () => {
       alive = false;
     };
+  }, []);
+
+  // A finished update download (Android): surface an in-app dialog on the
+  // event (foreground completion) or on next launch (the marker survives a
+  // failed/dismissed notification tap — a finished download is never lost).
+  useEffect(() => {
+    if (!isAndroid()) return;
+    try {
+      if (localStorage.getItem(UPDATE_READY_KEY)) setUpdateReady(true);
+    } catch {
+      // storage unavailable
+    }
+    const onReady = () => setUpdateReady(true);
+    window.addEventListener("daymark-update-ready", onReady);
+    return () => window.removeEventListener("daymark-update-ready", onReady);
   }, []);
 
   useEffect(() => {
@@ -923,6 +940,26 @@ export function App() {
       ) : null}
       {/* First-launch permission guide — Android only, renders null elsewhere. */}
       <FirstLaunchGuide />
+      {updateReady ? (
+        <div className="update-dialog" role="dialog" aria-label="更新已下载">
+          <p className="update-dialog-title">新版本已下载完成</p>
+          <p className="update-dialog-notes">点“立即安装”进入系统安装页。</p>
+          <div className="update-dialog-actions">
+            <button type="button" onClick={() => setUpdateReady(false)}>
+              稍后
+            </button>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                void openReadyUpdate().finally(() => setUpdateReady(false));
+              }}
+            >
+              立即安装
+            </button>
+          </div>
+        </div>
+      ) : null}
       <AccountControl
         online={online}
         status={syncStatus}

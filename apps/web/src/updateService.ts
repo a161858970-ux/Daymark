@@ -132,19 +132,27 @@ async function watchUpdateDownload(id: string): Promise<void> {
   for (let attempt = 0; attempt < 400; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     try {
-      const state = await invoke<{ status: string }>("android_query_update", {
-        id,
-      });
+      const state = await invoke<{
+        status: string;
+        expectedBytes?: number;
+        fileBytes?: number;
+      }>("android_query_update", { id });
       if (state.status === "done") {
+        // Truncated download must never be announced as ready.
+        if (
+          typeof state.expectedBytes === "number" &&
+          typeof state.fileBytes === "number" &&
+          state.expectedBytes > 0 &&
+          state.fileBytes < state.expectedBytes
+        ) {
+          await announceUpdateFailed();
+          return;
+        }
         await announceUpdateReady();
         return;
       }
       if (state.status === "failed") {
-        await sendNotification({
-          title: "拾序更新",
-          body: "新版本下载失败，请打开应用重试。",
-          extra: { kind: "update_failed" },
-        });
+        await announceUpdateFailed();
         return;
       }
     } catch {
@@ -153,7 +161,36 @@ async function watchUpdateDownload(id: string): Promise<void> {
   }
 }
 
+async function announceUpdateFailed(): Promise<void> {
+  try {
+    await sendNotification({
+      title: "拾序更新",
+      body: "新版本下载不完整或失败，请打开应用重试。",
+      extra: { kind: "update_failed" },
+    });
+  } catch {
+    // best effort
+  }
+}
+
+/** Marker key: set while a finished update package waits to be installed. */
+export const UPDATE_READY_KEY = "daymark.update-ready";
+
 async function announceUpdateReady(): Promise<void> {
+  // Durable marker: however the notification ends up (tap failing, user
+  // dismissing), the next foreground/launch surfaces an in-app dialog so a
+  // finished download can never become unreachable.
+  try {
+    localStorage.setItem(UPDATE_READY_KEY, UPDATE_APK_NAME);
+  } catch {
+    // storage unavailable — the notification path still works
+  }
+  const foreground =
+    typeof document !== "undefined" && document.visibilityState === "visible";
+  if (foreground) {
+    window.dispatchEvent(new CustomEvent("daymark-update-ready"));
+    return;
+  }
   try {
     await sendNotification({
       title: "拾序更新已就绪",
@@ -161,6 +198,32 @@ async function announceUpdateReady(): Promise<void> {
       extra: { kind: "update_install" },
     });
   } catch {
-    // permission missing → DownloadManager's own "下载完成" notice is the fallback
+    // notification denied → in-app dialog appears on next open
+  }
+}
+
+/**
+ * Fire the installer for the ready package and clear the marker. Errors
+ * surface as an error notification instead of dying silently (the old
+ * `.catch(() => undefined)` hid real failures).
+ */
+export async function openReadyUpdate(): Promise<void> {
+  try {
+    await invoke("android_install_update");
+    try {
+      localStorage.removeItem(UPDATE_READY_KEY);
+    } catch {
+      // ignore
+    }
+  } catch (cause) {
+    try {
+      await sendNotification({
+        title: "拾序更新",
+        body: `安装页启动失败：${cause instanceof Error ? cause.message : String(cause)}`,
+        extra: { kind: "update_failed" },
+      });
+    } catch {
+      // ignore
+    }
   }
 }

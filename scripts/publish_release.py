@@ -39,6 +39,9 @@ EXE = (
 APK = os.path.join(ROOT, "src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk")
 KEY = r"E:\devtools\tauri-keys\daymark.key"
 BASE = "https://api.daymark.top/update"
+GITHUB_APK_URL = (
+    "https://github.com/violetsnowl/Daymark/releases/download/v0.1.0/app-universal-release.apk"
+)
 TAG = "v0.1.0"
 SSH_HOST, SSH_USER = "206.187.209.142", "root"
 SSH_KEY = os.path.expanduser(r"~\.ssh\id_ed25519_daymark2")
@@ -103,9 +106,13 @@ def main() -> int:
             },
             # Same universal APK; several keys so every arch matches our JS
             # lookup (aarch64 first) and any future native lookup.
-            "android-aarch64": {"signature": apk_sig, "url": f"{BASE}/{apk_name}"},
-            "android-armv7": {"signature": apk_sig, "url": f"{BASE}/{apk_name}"},
-            "android-x86_64": {"signature": apk_sig, "url": f"{BASE}/{apk_name}"},
+            # Android downloads ride the GitHub release CDN: the VPS uplink
+            # is a few hundred KB/s (measured 39 KB/s once) while GitHub
+            # assets served the phone fine for manual installs. The server
+            # copy above stays as a mirror.
+            "android-aarch64": {"signature": apk_sig, "url": GITHUB_APK_URL},
+            "android-armv7": {"signature": apk_sig, "url": GITHUB_APK_URL},
+            "android-x86_64": {"signature": apk_sig, "url": GITHUB_APK_URL},
         },
     }
     manifest_path = os.path.join(os.environ.get("TMPDIR", "."), "latest.json")
