@@ -46,8 +46,10 @@ class DaymarkSettingsPlugin(private val activity: Activity) : Plugin(activity) {
       )
       // Alarms & reminders special-access page for this package.
       "exact_alarm" -> Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-        putExtra(Settings.EXTRA_PACKAGE_NAME, pkg)
-      )
+        // Literal string: the EXTRA_PACKAGE_NAME constant is missing from
+        // this compileSdk's android.jar, the value is stable AOSP API.
+        putExtra("android.provider.extra.PACKAGE_NAME", pkg)
+      }
       // App details — where MIUI keeps 自启动 + 省电策略 switches.
       "app_details" -> Intent(
         Settings.ACTION_APPLICATION_DETAILS_SETTINGS,

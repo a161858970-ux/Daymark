@@ -12,6 +12,8 @@ use tauri::plugin::PluginHandle;
 use tauri::plugin::TauriPlugin;
 use tauri::Runtime;
 #[cfg(target_os = "android")]
+use tauri::Manager;
+#[cfg(target_os = "android")]
 use tauri::AppHandle;
 
 #[cfg(target_os = "android")]
@@ -36,7 +38,8 @@ pub fn plugin<R: Runtime>() -> TauriPlugin<R> {
         .setup(|app, api| {
             #[cfg(target_os = "android")]
             {
-                let mobile = init(app.handle(), api)?;
+                // setup hands us &AppHandle directly — no .handle() hop.
+                let mobile = init(app, api)?;
                 app.manage(mobile);
             }
             #[cfg(not(target_os = "android"))]

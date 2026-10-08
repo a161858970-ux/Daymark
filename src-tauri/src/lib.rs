@@ -10,8 +10,7 @@ mod daymark_mobile;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 #[cfg(not(mobile))]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-#[cfg(not(mobile))]
-use tauri::Manager;
+use tauri::Manager; // used by tray (desktop) AND mobile plugin state
 
 /// What both the tray's "打开主界面" item and a tray left-click do.
 #[cfg(not(mobile))]
