@@ -95,6 +95,18 @@ async fn android_install_apk(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Single instance: a second launch must surface the FIRST window
+// (including tray-hidden state), never spawn a parallel process — two
+// writers on the same local IndexedDB would corrupt state. Registered
+// first so the lock exists before anything else initialises.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            use tauri::Manager;
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+        }))
         .plugin(tauri_plugin_notification::init())
         // pubkey/endpoints come from tauri.conf (plugins.updater) via Config.
         .plugin(tauri_plugin_updater::Builder::new().build())
