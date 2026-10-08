@@ -4,6 +4,8 @@
 //! (2026-10-07 decision: tray resident + close-to-tray + menu), and the tray
 //! menu is the only place that really quits the app. Android has no tray.
 
+mod daymark_mobile;
+
 #[cfg(not(mobile))]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 #[cfg(not(mobile))]
@@ -30,63 +32,31 @@ fn show_main_window(app: &tauri::AppHandle) {
 /// named permission lives on (no OEM API exposes these in-process; each
 /// target is a plain `am start` against a standard Settings action).
 #[tauri::command]
-fn android_open_settings(kind: String) -> Result<(), String> {
+fn android_open_settings(app: tauri::AppHandle, kind: String) -> Result<(), String> {
     #[cfg(target_os = "android")]
     {
-        const PKG: &str = "com.daymark.desktop";
-        let mut command = std::process::Command::new("am");
-        command.arg("start");
-        match kind.as_str() {
-            // System dialog: "let this app ignore battery optimisations?"
-            "battery" => {
-                command.args([
-                    "-a",
-                    "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
-                    "-d",
-                    &format!("package:{PKG}"),
-                ]);
-            }
-            // Alarms & reminders special-access page for this package.
-            "exact_alarm" => {
-                command.args([
-                    "-a",
-                    "android.settings.REQUEST_SCHEDULE_EXACT_ALARM",
-                    "--es",
-                    "android.provider.extra.PACKAGE_NAME",
-                    PKG,
-                ]);
-            }
-            // App details — where MIUI keeps 自启动 + 省电策略 switches.
-            "app_details" => {
-                command.args([
-                    "-a",
-                    "android.settings.APPLICATION_DETAILS_SETTINGS",
-                    "-d",
-                    &format!("package:{PKG}"),
-                ]);
-            }
-            _ => return Err("未知设置项".to_string()),
-        }
-        let output = command
-            .output()
-            .map_err(|e| format!("无法打开设置: {e}"))?;
-        if !output.status.success() {
-            return Err(format!(
-                "打开设置失败: {}",
-                String::from_utf8_lossy(&output.stderr).trim()
-            ));
-        }
+        // Android 14+ blocks `am start` from app processes — the Kotlin
+        // plugin fires the real Settings Intent from the Activity.
+        let mobile = app.state::<crate::daymark_mobile::DaymarkMobile<tauri::Wry>>();
+        mobile
+            .0
+            .run_mobile_plugin::<()>("openSettings", serde_json::json!({ "kind": kind }))
+            .map_err(|e| format!("打开设置失败: {e}"))?;
         Ok(())
     }
     #[cfg(not(target_os = "android"))]
     {
-        let _ = kind;
+        let _ = (&app, kind);
         Err("该设置仅安卓提供".to_string())
     }
 }
 
 #[tauri::command]
-async fn android_install_apk(url: String, dest_path: String) -> Result<(), String> {
+async fn android_install_apk(
+    app: tauri::AppHandle,
+    url: String,
+    dest_path: String,
+) -> Result<(), String> {
     #[cfg(target_os = "android")]
     {
         let resp = reqwest::get(&url)
@@ -104,38 +74,21 @@ async fn android_install_apk(url: String, dest_path: String) -> Result<(), Strin
             let _ = std::fs::create_dir_all(parent);
         }
         std::fs::write(dest, &bytes).map_err(|e| format!("写入缓存失败: {e}"))?;
-        let name = dest
-            .file_name()
-            .and_then(|n| n.to_str())
-            .ok_or_else(|| "非法文件名".to_string())?;
-        // file_paths.xml maps cache root under the name `my_cache_images`.
-        let uri = format!(
-            "content://com.daymark.desktop.fileprovider/my_cache_images/{name}"
-        );
-        let out = std::process::Command::new("am")
-            .args([
-                "start",
-                "-a",
-                "android.intent.action.VIEW",
-                "-d",
-                &uri,
-                "-t",
-                "application/vnd.android.package.archive",
-                "--grant-read-uri-permission",
-            ])
-            .output()
+        // Android 14+ blocks `am start` from app processes — hand the
+        // file to the Kotlin plugin, which fires the installer Intent.
+        let mobile = app.state::<crate::daymark_mobile::DaymarkMobile<tauri::Wry>>();
+        mobile
+            .0
+            .run_mobile_plugin::<()>(
+                "openApkInstaller",
+                serde_json::json!({ "destPath": dest_path }),
+            )
             .map_err(|e| format!("调起安装器失败: {e}"))?;
-        if !out.status.success() {
-            return Err(format!(
-                "安装器启动失败: {}",
-                String::from_utf8_lossy(&out.stderr).trim()
-            ));
-        }
         Ok(())
     }
     #[cfg(not(target_os = "android"))]
     {
-        let _ = (url, dest_path);
+        let _ = (&app, url, dest_path);
         Err("APK 更新仅在安卓版提供".to_string())
     }
 }
@@ -146,6 +99,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         // pubkey/endpoints come from tauri.conf (plugins.updater) via Config.
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(daymark_mobile::plugin())
         .invoke_handler(tauri::generate_handler![
             android_install_apk,
             android_open_settings,
