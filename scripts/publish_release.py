@@ -87,7 +87,10 @@ def main() -> int:
     version = conf["version"]
     exe_sig, apk_sig = sign_file(EXE), sign_file(APK)
     pub_date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    exe_name, apk_name = os.path.basename(EXE), os.path.basename(APK)
+    # File-side naming is always ASCII (user rule: 拾序 for product UI,
+    # daymark for files) — GitHub strips non-ASCII asset names, and the
+    # manifest URL must match the stored asset exactly.
+    exe_name, apk_name = f"daymark_{version}_x64-setup.exe", os.path.basename(APK)
 
     manifest = {
         "version": version,
@@ -118,8 +121,8 @@ def main() -> int:
                    look_for_keys=False, allow_agent=False)
     client.exec_command("mkdir -p /opt/daymark/update")
     sftp = client.open_sftp()
-    for path in (EXE, APK):
-        sftp.put(path, f"/opt/daymark/update/{os.path.basename(path)}")
+    sftp.put(EXE, f"/opt/daymark/update/{exe_name}")
+    sftp.put(APK, f"/opt/daymark/update/{apk_name}")
     sftp.put(manifest_path, "/opt/daymark/update/latest.json")
     sftp.close()
     client.close()
@@ -133,6 +136,7 @@ def main() -> int:
 
     # --- 3) Replace release assets ------------------------------------
     token = github_token()
+    import urllib.parse
     import urllib.request
 
     def api(url: str, data: bytes | None = None, method: str | None = None,
@@ -164,9 +168,10 @@ def main() -> int:
              f"https://api.github.com/repos/a161858970-ux/daymark/releases/assets/{asset['id']}"],
             check=False, capture_output=True, timeout=60)
     upload_url = rel["upload_url"].split("{")[0]
-    for path in (EXE, APK):
-        name = os.path.basename(path)
-        status, resp = api(f"{upload_url}?name={name}", data=open(path, "rb").read(),
+    for path, name in ((EXE, exe_name), (APK, apk_name)):
+        # Chinese product names (拾序_…) must be percent-encoded for the URL.
+        status, resp = api(f"{upload_url}?name={urllib.parse.quote(name)}",
+                           data=open(path, "rb").read(),
                            method="POST", content_type="application/octet-stream")
         size = resp.get("size") if isinstance(resp, dict) else None
         if status not in (200, 201):
