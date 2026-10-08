@@ -1,12 +1,19 @@
 # Implementation Audit
 
-**更新日期**：2026-09-24
+**更新日期**：2026-10-09（口径对齐；本文主体仍是 2026-09 开发期审计原文）
 
 **审计范围**：Specification 00–21；Phase 1–8；release gates
 
-**当前结论**：**PHASE 6 ENGINEERING IMPLEMENTATION: COMPLETE**；**PHASE 7A–7H: PASS LOCALLY**；**PHASE 8 LOCAL ACCEPTANCE: PASS WITH EXTERNAL RELEASE GATES**。真实基础设施、真实 AI provider、平台通知与物理设备验收没有执行，不计为 PASS。
+**当前结论（现行口径，覆盖下文历史小节中的 BLOCKED/未执行表述）**：
 
-本审计把“代码存在”“本机执行通过”“模拟基础设施通过”和“真实外部基础设施通过”分开记录。旧审计中的 26/35/44/48 项测试及同步缺口描述是历史快照，已由本文替换。
+- **PHASE 6 ENGINEERING IMPLEMENTATION: COMPLETE**
+- **PHASE 7A–7H: PASS LOCALLY**
+- **PHASE 8 LOCAL ACCEPTANCE: PASS**
+- **RELEASE INFRASTRUCTURE VERIFICATION: COMPLETE**（A–F 外部 lane 全部 `VERIFIED REAL`，见 `docs/FINAL_RELEASE_VALIDATION.md`；旧结论「BLOCKED BY EXTERNAL CONFIGURATION」**已废止**）
+- **真实 AI provider smoke：PASS**（DeepSeek 现役；早期 MiMo smoke 亦曾 PASS，见 `docs/AI_USAGE_MAP.md`）
+- **项目阶段**：发布后维护更新（2026-10-08 起）。现行待办与未闭合项只看 [`docs/POST_RELEASE_BUGS.md`](POST_RELEASE_BUGS.md) 与根目录 [`AGENTS.md`](../AGENTS.md)；门控基线 **304+1**。
+
+本审计把“代码存在”“本机执行通过”“模拟基础设施通过”和“真实外部基础设施通过”分开记录。下文各 Phase 小节中的 `BLOCKED` / `NOT RUN` / 测试数字（26/35/44/48/134/144 等）是**该阶段当时快照**，不得当作现行状态；现行状态见 `CURRENT_IMPLEMENTATION_STATE.md` 文首「事实基准」与 §25–§26。
 
 ## 1. Specification gate
 
@@ -168,21 +175,19 @@
 - ACTION_REQUIRED tests覆盖当前内容重交、new idempotency identity、过期 Undo 安全放弃和 provenance。
 - fake IndexedDB 从真实 v5 schema 打开到 v6：核对 SemesterWeek/CourseSchedule 数据不丢失、旧 row mutation 被单 collection command 取代、未来 worker 只上传整组；另有不可还原删除的隔离测试，证明不会产生半组上传或静默丢弃。
 
-### 7.4 Verified in real infrastructure
+### 7.4 Verified in real infrastructure（历史快照，2026-09-24 时点）
 
-**None.** 当前没有真实 PostgreSQL/Supabase 凭据；没有把 skipped test 或 PGlite 结果写成真实验证。
+**None（当时）.** 当时没有真实 PostgreSQL/Supabase 凭据；没有把 skipped test 或 PGlite 结果写成真实验证。**其后（2026-09-27～29）真实基础设施已全部验收**，见 `docs/FINAL_RELEASE_VALIDATION.md`。
 
-### 7.5 Not implemented / not closed
+### 7.5 Not implemented / not closed（历史快照）
 
-- 真实 Supabase login 和 authenticated browser sync。
-- 外部 PostgreSQL migration/integration run。
-- 两个浏览器 profile/物理设备的断网、后台、重启和长时间 retry 生命周期。
-- Reminder 云端 delivery/lease 属于 Phase 5/发布缺口，不由通用 entity sync 代替。
+下列各项**其后均已闭合**（真实 Supabase login、外部 PostgreSQL migration/integration、双 profile 与物理设备矩阵、Reminder 云端 delivery/lease）；若仍有缺口，以 `docs/POST_RELEASE_BUGS.md` 为准。
 
-### 7.6 Blocked by external configuration
+### 7.6 Blocked by external configuration（历史快照，已解除）
 
-- 当前机器没有 `docker`、`psql`、`DATABASE_URL`、`REAL_DATABASE_URL`、Supabase 项目 URL、测试账号或 access token。
-- 需要可丢弃 PostgreSQL database、Supabase project/test user 和两个独立浏览器 profile 才能继续真实验收。
+- 当时机器没有 `docker`、`psql`、`DATABASE_URL`、`REAL_DATABASE_URL`、Supabase 项目 URL、测试账号或 access token。
+- 当时需要可丢弃 PostgreSQL database、Supabase project/test user 和两个独立浏览器 profile 才能继续真实验收。
+- **现状**：上述外部配置与验收已于 2026-09-27～29 就位并完成；`BLOCKED BY EXTERNAL CONFIGURATION` **不再适用**。
 
 ### 7.7 Phase 6 result
 
@@ -190,9 +195,9 @@
 
 > **PHASE 6 ENGINEERING IMPLEMENTATION: COMPLETE**
 
-真实 PostgreSQL、Supabase authentication 与两个独立浏览器/物理设备的生命周期仍没有执行证据，状态保持：
+（历史横幅「RELEASE INFRASTRUCTURE VERIFICATION: BLOCKED BY EXTERNAL CONFIGURATION」**已废止**；外部 lane A–F 全绿后状态为：）
 
-> **RELEASE INFRASTRUCTURE VERIFICATION: BLOCKED BY EXTERNAL CONFIGURATION**
+> **RELEASE INFRASTRUCTURE VERIFICATION: COMPLETE**
 
 ## 8. Phase 7A–7H — Visual / Responsive / Motion
 
@@ -298,7 +303,7 @@
 
 ## 13. Next gate
 
-R-01 与真实 AI provider smoke 已完成。剩余 release lanes：拿到外部配置后按 `REAL_POSTGRES_VERIFICATION.md` 完成真实 PostgreSQL、Supabase、双浏览器验收；再在物理 Mobile/Windows、屏幕阅读器、系统缩放和软键盘环境执行剩余矩阵（含系统通知与后台执行）。每条外部证据完成后单独更新本审计，不用模拟结果替代。
+R-01 与真实 AI provider smoke 已完成。**历史文（当时）**：剩余 release lanes 为外部配置后的 PostgreSQL / Supabase / 双浏览器与物理矩阵。**现状**：该清单已于 2026-09-27～29 全部 `VERIFIED REAL`（`docs/FINAL_RELEASE_VALIDATION.md` A–F）；此后正式发布并进入发布后维护。
 
 ## 14. Release Candidate Hardening（2026-09-26）
 
@@ -321,7 +326,7 @@ R-01 与真实 AI provider smoke 已完成。剩余 release lanes：拿到外部
 
 - `pnpm verify:ai --with-import`：`PASS interpretation 28240ms`、`PASS import 37633ms courses=3`（真实 MiMo mimo-v2.6-flash，strict json_schema，2 页扫描 fixture 走栅格化路径）。
 
-### BLOCKED BY EXTERNAL CONFIGURATION
+### BLOCKED BY EXTERNAL CONFIGURATION（历史快照）
 
 - `REAL_DATABASE_URL`、Supabase 项目/测试账号/token、两个独立 browser profile。
 
@@ -353,16 +358,18 @@ R-01 与真实 AI provider smoke 已完成。剩余 release lanes：拿到外部
 
 - `pnpm verify:ai` 与 `pnpm verify:ai --with-import` 均 PASS（MiMo `mimo-v2.6-flash`）。
 
-### BLOCKED — EXTERNAL CONFIGURATION
+### BLOCKED — EXTERNAL CONFIGURATION（历史快照，已解除）
 
-- 真实 PostgreSQL（`REAL_DATABASE_URL`）、Supabase 项目/测试账号/token、两个独立 browser profile。
+- 当时缺：真实 PostgreSQL（`REAL_DATABASE_URL`）、Supabase 项目/测试账号/token、两个独立 browser profile。**其后已全部就位并 `VERIFIED REAL`。**
 
-### NOT RUN — PHYSICAL
+### NOT RUN — PHYSICAL（历史快照，已完成）
 
-- 物理 Windows / 手机的系统通知与后台执行、屏幕阅读器、系统缩放、移动软键盘。
+- 当时未跑：物理 Windows / 手机的系统通知与后台执行、屏幕阅读器、系统缩放、移动软键盘。**其后 D/E/F 段已全部 `VERIFIED REAL`。**
 
 ### RELEASE BLOCKER
 
-- 无新的 P0；production release 仍被上述外部与实机项阻塞。
+- 当时：无新的 P0，production release 仍被上述外部与实机项阻塞。**其后阻塞项已清零并完成正式发布与热更新迭代**；现行问题见 `docs/POST_RELEASE_BUGS.md`。
 
 > **FINAL RELEASE GATE PREPARATION: COMPLETE**
+
+> **EXTERNAL RELEASE LANES: COMPLETE（2026-09-29）** — 详见 `docs/FINAL_RELEASE_VALIDATION.md`。

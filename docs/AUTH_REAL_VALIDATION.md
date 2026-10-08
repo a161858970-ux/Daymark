@@ -3,6 +3,8 @@
 > 状态基线：`apps/web/src/auth/*` 实现完成，自动测试全部通过（fake provider）。
 > 本文件是**真实 Supabase 环境**验收的执行清单与证据表。
 > 结果列只允许：`SIMULATED` / `VERIFIED REAL` / `BLOCKED BY EXTERNAL CONFIGURATION`。
+>
+> **口径对齐（2026-10-09）**：外部配置与主链路真实登录 **已就位**——Email OTP（163 SMTP）、Phone OTP（阿里云 PNVS × Supabase Send SMS Hook，2026-09-28）、Google OAuth（2026-09-27）均 `VERIFIED REAL`。表内仍为 SIMULATED / 待执行 的行表示**该具体步骤未单独留证**，不是环境仍 BLOCKED；现行阶段与门控见根目录 `AGENTS.md`。
 
 ## 0. 冻结的账户模型
 
@@ -54,10 +56,10 @@ ONE HUMAN
    - SMTP：配置真实邮件服务（**已配置**：163 邮箱 `smtp.163.com:465`，Username=完整邮箱地址，密码=客户端授权码，2026-09-27）
 2. **Authentication → Providers → Phone**
    - Enable Phone provider：ON
-   - SMS Provider（Twilio / MessageBird / Vonage 等）或 Send SMS Hook：当前**未配置** → 运行时状态 `SMS_PROVIDER_NOT_CONFIGURED`（明确外部状态，不阻塞其余 Auth 实现）
+   - SMS Provider：**已配置**（2026-09-28 起）——Supabase **Send SMS Hook** → Edge Function `send-sms` → 阿里云 PNVS；未配置环境才会出现运行时 `SMS_PROVIDER_NOT_CONFIGURED`
    - OTP：默认 60s 重发间隔、1h 过期
 3. **Authentication → Providers → Google**
-   - Google OAuth Client ID / Secret
+   - Google OAuth Client ID / Secret：**已配置**（2026-09-27 `VERIFIED REAL`）
    - Authorized redirect URI：`https://<PROJECT-REF>.supabase.co/auth/v1/callback`
 4. **Authentication → Settings**
    - **Enable Manual Linking：ON**（否则 `linkIdentity()` 返回 422）
@@ -84,7 +86,7 @@ ONE HUMAN
 | 5   | 未登录                            | Google OAuth 登录                             | 回跳后建立/复用同一 user                                                                                                                                                                    | Google 登录用 gmail 回跳，进入**同一用户**（`auth.identities` 同时有 email+google），3 条数据可见             | **VERIFIED REAL** 2026-09-27                                | 用户实操 + 服务端 identities 查询                                  |
 | 6   | 已登录（邮箱）                    | Account → 绑定 Google（`linkIdentity`）       | 新增 google identity，user 不变                                                                                                                                                             | 待执行                                                                                                        | SIMULATED（需 Dashboard 开启 Manual Linking）               | `adapter.test.ts` 7.                                               |
 | 7   | 已登录                            | 绑定邮箱 + 验证                               | 出现 verified email identity                                                                                                                                                                | 待执行                                                                                                        | SIMULATED                                                   | `adapter.test.ts` 8.                                               |
-| 8   | 已登录                            | 绑定手机号 + 验证                             | 出现 verified phone identity                                                                                                                                                                | 待执行                                                                                                        | BLOCKED BY EXTERNAL CONFIGURATION（SMS）                    | `adapter.test.ts` 9.（SIMULATED）                                  |
+| 8   | 已登录                            | 绑定手机号 + 验证                             | 出现 verified phone identity                                                                                                                                                                | SMS 通道已通（登录侧 `VERIFIED REAL`）；**将手机号绑到既有邮箱账号**仍未单独实测                              | SIMULATED（通道可用；该步待留证）                           | `adapter.test.ts` 9.（SIMULATED）                                  |
 | 9   | 邮箱登录 → 切换手机号/Google 登录 | 依次用多种方式登录                            | 邮箱+密码、邮箱验证码、Google 三条路径真实通过且 owner 全程 `645027f0-…` 未变；**手机号验证码亦真实通过**（按设计为独立 `auth.users`，不合并、不迁移，owner `8138a7f3`）                    | **VERIFIED REAL**（邮箱两种 + Google + 手机号）                                                               | `adapter.test.ts` 16-19.；服务端 owner 数与 identities 查询 | `adapter.test.ts` 16-19.；服务端仅 1 个 owner                      |
 | 10  | 已登录                            | 退出账户 → 重新登录                           | 会话恢复，owner 相同                                                                                                                                                                        | 退出后用验证码重新登录，会话恢复、owner 相同、本机数据继续同步                                                | **VERIFIED REAL** 2026-09-27                                | 用户实操 + 服务端 `change_log` 10:09 的 ITEM UPDATE                |
 | 11  | 任意登录方式                      | 检查 `local_owner_id` / `sync_bound_owner_id` | 与 `auth.users.id` 一致且不因 provider 变化                                                                                                                                                 | 换登录方式（密码 → 验证码）后本机 3 条数据仍属同一 owner 且继续同步，未发生重绑或迁移                         | **VERIFIED REAL** 2026-09-27                                | `owner-continuity.test.ts` + 服务端单一 owner                      |
@@ -105,8 +107,8 @@ ONE HUMAN
 ## 5. 已知限制
 
 1. **密码状态**：Supabase Auth 客户端 API 不暴露「是否已设置密码」，`密码 [已设置/未设置]` 是本设备提示（localStorage + 内存兜底），不是服务端权威值。文档与 UI 均标注为本机判断。
-2. **Google / 邮件 / 短信** 三项真实登录依赖外部配置，未配置前对应行保持 `BLOCKED BY EXTERNAL CONFIGURATION`，不得标记为失败。
-3. 本阶段**未发送任何真实短信 / 邮件 / OAuth 请求**，全部为 fake provider 自动测试。
+2. **Google / 邮件 / 短信** 三项真实登录**均已配置并完成主路径 `VERIFIED REAL`**；仅个别绑定步骤（如手机号绑到既有邮箱账号）仍待单独留证，标记为 SIMULATED/待执行，**不再使用** `BLOCKED BY EXTERNAL CONFIGURATION`（除非将来环境再次回退为未配置）。
+3. 自动测试层仍全部为 fake provider；真实短信/邮件/OAuth 请求已在 2026-09-27～28 验收中发生（见 §3 与 §6）。
 
 ## 6. 执行记录（2026-09-27，真实环境）
 

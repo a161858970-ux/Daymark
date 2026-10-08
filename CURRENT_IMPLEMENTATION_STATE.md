@@ -1,14 +1,18 @@
 # Current Implementation State
 
-**复核日期**：2026-09-26（换机后在新机器复验）
+> **口径说明（2026-10-09 对齐）**：文首「事实基准」是唯一现行口径，**覆盖下文一切历史快照**。§1–§7 保留开发期定稿原文供追溯，其中的「当前」「仍缺」「BLOCKED」只反映当时；§8 起是按日期的史实流水。与本文冲突时，以 **文首事实基准 + [`AGENTS.md`](AGENTS.md) + §25–§26** 为准。待修 bug 见 [`docs/POST_RELEASE_BUGS.md`](docs/POST_RELEASE_BUGS.md)。
 
-**功能/验收基线**：`1dcdf18 Record Phase 8 acceptance audit`
+## 事实基准（现行，2026-10-08 收官后）
 
-**换机复验（2026-09-26，Windows 11 / Node v24.19.0 / pnpm 11.25.0）**：`pnpm install --frozen-lockfile`、`pnpm test`、`pnpm build`、`pnpm lint`、`pnpm format:check`、`git diff --check` 全部通过。当时快照为 97 passed + 1 skipped，随后进入 Release Candidate Hardening，最新 gate 见 §2 与 §9。真实 PostgreSQL 测试仍按预期 skipped（缺 `REAL_DATABASE_URL`），未计为 PASS。
+- **项目**：拾序 Daymark——面向学生的课程事务应用（Windows Tauri 2 + 安卓 APK + 云端 API；本地优先、登录后云同步）。代码/文件侧 `daymark`。
+- **当前阶段**：**发布后维护更新阶段**（2026-10-08 开发阶段收官）。工作模式 = 发现/修复 bug → 小步发版 → 记档，不再有开发期大待办。
+- **产品/发布**：GitHub `violetsnowl/Daymark`；0.1.0 期间单 release 覆盖 + 应用内 semver 爬升（现役 **0.1.11**）；发版与热更新见 [`docs/HOT_UPDATE_RELEASE.md`](docs/HOT_UPDATE_RELEASE.md)。
+- **门控基线（收官时）**：`pnpm format:check` / `lint` / `typecheck` / `test` 全 0（**304+1**：web150、api80+1、storage44、domain11、application19）+ `src-tauri` 下 `cargo check` 0 警告。
+- **外部 lane**：A–F 已全部 `VERIFIED REAL`（见 [`docs/FINAL_RELEASE_VALIDATION.md`](docs/FINAL_RELEASE_VALIDATION.md)）；**不再存在**「RELEASE INFRASTRUCTURE VERIFICATION: BLOCKED BY EXTERNAL CONFIGURATION」状态。
+- **数据安全红线**：Dexie 库名 `"course-manager"` 与 `course_manager_device_id` 是本机/设备持久化键，**改名工程永不得触碰**。
+- **证据分层**：PGlite/fake IndexedDB 证据与真实 PostgreSQL/Supabase 证据始终严格分开；「skipped」不算真实 PASS。
 
-**当前阶段**：Phase 6 工程实现与 Phase 7A–7H 已封存；Phase 8 本地 acceptance/hardening 已逐项执行。真实基础设施、真实 AI provider、平台通知和物理设备验证仍是独立发布 gate。
-
-本文以当前代码、实际执行的测试和当前机器可用环境为准。PGlite/fake IndexedDB 证据与真实 PostgreSQL/Supabase 证据严格分开。
+**历史节点（仅作时间锚，勿当现行结论）**：功能/验收基线曾记 `1dcdf18`；2026-09-26 换机复验 97+1；RC Hardening 136+1；Final Release Gate Prep 144+1；2026-09-29 结项 217/216+1；收官交接 `3863348`（门控 304+1）。
 
 ## 1. 当前已实现并可运行
 
@@ -37,7 +41,7 @@
 
 ## 2. 已有自动测试证据
 
-当前完整套件在 Final Release Gate Preparation 最终 gate 重新执行：**144 项通过，1 项真实 PostgreSQL 测试因缺少 URL 跳过**。
+> **历史快照（Final Release Gate Preparation，2026-09-26）**：当时完整套件为 **144 项通过，1 项真实 PostgreSQL 测试因缺少 URL 跳过**。**现行门控基线见文首事实基准（304+1）**，以 §26 与 `AGENTS.md` 为准，勿把本节数字当当前覆盖。
 
 - domain：11 passed；
 - application：17 passed；
@@ -63,6 +67,8 @@ Phase 6 的自动证据包括：
 
 ## 3. 代码存在，但尚无真实环境验收
 
+> **历史快照（约 2026-09-26 视角）**：本节标题与首行状态已过时——真实 PostgreSQL / Supabase / 双 profile / 物理设备矩阵 **已于 2026-09-27～29 完成**（见 §11–§16 与 `docs/FINAL_RELEASE_VALIDATION.md`）。保留原文供追溯；下列条目中「仍未执行」的表述以当时为准。现行待办只看 `docs/POST_RELEASE_BUGS.md`。
+
 - 正式 `pg` 连接、迁移器、开发 seed 和隔离 schema 集成测试已准备；2026-09-27 起 `.env` 已提供真实连接：`001`–`004` 四份 migration 已应用到真实 Supabase Postgres，`real-postgres.integration.test.ts` **1 passed（不再是 skipped）**。
 - Supabase JWT/JWKS 验证、浏览器 Auth 登录/会话监听、受保护 API 和只读 live smoke script 已准备；`.env` 已有项目 URL 与 publishable key（JWKS 可达、认证业务路由已注册），但 SMTP / SMS Provider / Google OAuth 未配置、无测试账号与 access token，真实登录链路仍未执行。
 - 双设备测试使用两个独立 Dexie 数据库与正式 worker/HTTP route，但数据库仍是同进程 PGlite，认证仍是固定测试 owner；不是两个物理设备或真实网络生命周期验收。
@@ -70,6 +76,8 @@ Phase 6 的自动证据包括：
 - Reminder claim/deliver/cancel port、本地计划与数据库表存在；没有真实 Windows/Mobile 通知、后台执行、云端 lease API 或时区切换验收。
 
 ## 4. 当前真正未实现或未闭合
+
+> **历史快照（开发期 Phase 8 视角）**：本节「当前」指 2026-09-28 前后。其中外部验收、实机矩阵、`.exe` 通知与打包相关缺口，**此后均已闭合或转入产品决策/发布后观察项**（通知点击不回前台已在桌面壳阶段解决；手机端未做项见 §6 注）。**现行未闭合事项一律以 `docs/POST_RELEASE_BUGS.md` 为准**，本节不再承担待办清单职责。
 
 ### Phase 6 / 外部验收
 
@@ -93,11 +101,13 @@ Phase 6 的自动证据包括：
 - “ACTION_REQUIRED 只能重跑整轮同步”已过时：现有逐 mutation 检查、重交/明确放弃和 provenance。
 - “ItemAssociation 只有类型和表”已过时：本地 use case、REST、sync create/delete/pull 和测试已闭合。
 - “Course/CourseInformation 正式写 API 缺失”已过时：当前接口已补齐。
-- 26/35/44/48/64/66/72/75/82/87/88/92/96/97/112 等数字是历史阶段快照，不能代表当前覆盖；当前 gate（2026-09-29 实测）：`format:check` / `lint` / `typecheck` / `build` / `test` 全绿 —— 提供 `REAL_DATABASE_URL` 时 **217 passed（0 skip）**，不提供时 216 passed + 1 externally gated skip（即真实 PostgreSQL 集成测试）。
+- 26/35/44/48/64/66/72/75/82/87/88/92/96/97/112/136/144/184/194/217 等数字均为历史阶段快照，不能代表当前覆盖。**现行门控基线见文首事实基准（304+1）**；本节曾写过的「2026-09-29 当前 gate 217/216+1」也只是当日快照。
 
 `docs/IMPLEMENTATION_AUDIT.md` 已按 Implemented、Verified locally、Verified simulated、Verified real、Not implemented、Blocked、Release blocker 重新整理。
 
 ## 6. Phase 8 状态与剩余 release gate
+
+> **历史快照（Phase 8 / 发布前收官）**：下列 gate 项的「已就位 / 已完成」结论仍有效；**「真实外部基础设施仍未验证 / BLOCKED」横幅已废止**。外部 lane A–F 全绿后项目转入发布后维护（§26）。手机端可选补验（非 runbook gate）与发布后问题见 `docs/POST_RELEASE_BUGS.md`。
 
 1. ~~**EXTERNAL CONFIGURATION REQUIRED**：真实 PostgreSQL 连接与 Supabase 项目/测试用户/token 缺失，无法产出真实基础设施证据。~~ **已就位（2026-09-27 起）**：`.env` 提供真实连接、四份 migration 已应用、`real-postgres.integration.test` 1 passed、`verify:live-api` 通过；A3 所需可丢弃库也已用一次性便携实例满足。
 2. ~~**ENVIRONMENT VERIFICATION REQUIRED**~~ **已完成（2026-09-29）**：两个独立 profile 同步 C 段 14/14、物理 Windows D 段 8/8、物理手机 E 段 8/8 均 `VERIFIED REAL`（A–K 生命周期的手机侧长时重试仍未做长时间挂机验收，见 `docs/FINAL_RELEASE_VALIDATION.md`）。
@@ -105,7 +115,7 @@ Phase 6 的自动证据包括：
 4. **真实 AI smoke 已完成**：`pnpm verify:ai` → `PASS interpretation 28240ms`；`pnpm verify:ai --with-import` → `PASS import 37633ms courses=3`（MiMo `mimo-v2.6-flash`，扫描 PDF 走栅格化路径）。剩余：完整自然语言时间理解继续走保守确认路径，生产稳定性需持续观察。
 5. ~~**PHYSICAL ACCESSIBILITY VERIFICATION REQUIRED**~~ **已完成（2026-09-29）**：F1/F2 NVDA（09-28）、F3/F4 手机 TalkBack、E8 系统字号放大、E4 软键盘遮挡全部 `VERIFIED REAL`。
 
-旧逐成员 collection outbox 的可重复 fake IndexedDB v5 → v6 演练已经完成；当前没有未闭合的 Phase 6 本地工程 blocker。
+旧逐成员 collection outbox 的可重复 fake IndexedDB v5 → v6 演练已经完成；当时没有未闭合的 Phase 6 本地工程 blocker。
 
 > **PHASE 6 ENGINEERING IMPLEMENTATION: COMPLETE**
 
@@ -113,23 +123,23 @@ Phase 6 的自动证据包括：
 
 > **PHASE 8 LOCAL ACCEPTANCE: PASS WITH EXTERNAL RELEASE GATES**
 
-真实外部基础设施仍未验证：
+外部 lane 随后全部完成（A–F `VERIFIED REAL`，见 `docs/FINAL_RELEASE_VALIDATION.md`）：
 
-> **RELEASE INFRASTRUCTURE VERIFICATION: BLOCKED BY EXTERNAL CONFIGURATION**
+> **RELEASE INFRASTRUCTURE VERIFICATION: COMPLETE（2026-09-29 清零；旧横幅「BLOCKED BY EXTERNAL CONFIGURATION」已废止）**
 
 ## 7. 新 agent 接手入口
 
 ### 先读什么
 
-1. 本文件，确认当前真实状态和 release gates。
-2. `docs/ACCEPTANCE_TRACEABILITY.md`，查看 `19_TEST_ACCEPTANCE_SPEC.md` 的 71/71 ID 映射。
-3. `docs/IMPLEMENTATION_AUDIT.md`，查看 Phase 1–8 的实现边界和证据等级。
-4. 进入 sync 工作前读 `docs/ADR-003-sync-core.md`、`docs/ADR-004-conflict-resolution.md`、`docs/ADR-005-collection-replacement-sync.md` 与 `docs/SYNC_ENTITY_MATRIX.md`。
-5. 进入真实环境验收前按 `docs/REAL_POSTGRES_VERIFICATION.md` 执行，不用 PGlite 结果替代真实证据。
+1. 根目录 [`AGENTS.md`](AGENTS.md) 与本文**文首事实基准**，确认现行阶段与硬性约定。
+2. [`docs/POST_RELEASE_BUGS.md`](docs/POST_RELEASE_BUGS.md)——现行待修 PR-00x / 遗留 L-0x（开发期「下一步」已清零，勿再从本节找待办）。
+3. [`docs/HOT_UPDATE_RELEASE.md`](docs/HOT_UPDATE_RELEASE.md)——发版与热更新（跨 agent 必读）。
+4. `docs/ACCEPTANCE_TRACEABILITY.md`（71/71 ID 映射）、`docs/IMPLEMENTATION_AUDIT.md`（Phase 1–8 证据等级）。
+5. 进入 sync 工作前读 `docs/ADR-003`…`005` 与 `docs/SYNC_ENTITY_MATRIX.md`；真实库操作仍按 `docs/REAL_POSTGRES_VERIFICATION.md`，不用 PGlite 结果替代真实证据。
 
-### 下一步
+### 下一步（历史；已清零）
 
-**外部 lane 已完成（A 4/4、B 5/5、C 14/14、D 8/8、E 8/8、F 4/4）**，见 §13/§14/§16 与 `docs/FINAL_RELEASE_VALIDATION.md`。剩余按优先级：
+**外部 lane 已完成（A 4/4、B 5/5、C 14/14、D 8/8、E 8/8、F 4/4）**，见 §13/§14/§16 与 `docs/FINAL_RELEASE_VALIDATION.md`。下列清单是 2026-09-29 开工序，**已全部闭合**；现行工作看 `docs/POST_RELEASE_BUGS.md`：
 
 1. ~~**E 段 8 项 + F3/F4（同一块硬骨头，需手机）**~~ **已于 2026-09-29 全部 `VERIFIED REAL`**：E 8/8、F 4/4，证据见 `docs/FINAL_RELEASE_VALIDATION.md`（E/F 表 + E 段备注；观察级 O-1 浏览器回收标签、O-2 返回手势、O-3 时间语义出口均在备注内）。
 2. ~~**A3 正向 seed**：需可丢弃 PostgreSQL（本机实例或 docker）；负向守卫已 `VERIFIED REAL`。~~ **已于 2026-09-29 完成**：用便携版 PostgreSQL 16.6（解压即用、无安装/无服务）跑通迁移 + 正向 seed + 幂等复验 + 库内核验，验收后整目录删除、无残留；见 `docs/FINAL_RELEASE_VALIDATION.md` A3 行。
@@ -197,7 +207,7 @@ Phase 6 的自动证据包括：
 
 - `pnpm verify:ai --with-import`：`PASS interpretation 28240ms`（MiMo mimo-v2.6-flash，strict json_schema）、`PASS import 37633ms courses=3`（2 页扫描 fixture 全程栅格化路径）。
 
-### BLOCKED BY EXTERNAL CONFIGURATION
+### BLOCKED BY EXTERNAL CONFIGURATION（历史快照）
 
 - 真实 PostgreSQL（`REAL_DATABASE_URL`）与 Supabase 项目/测试账号/token。
 - 两个独立 browser profile / 物理设备的同步与通知生命周期。
@@ -276,7 +286,7 @@ Phase 6 的自动证据包括：
 
 - **Email OTP VERIFIED REAL（2026-09-27）**：用户在 Dashboard 配置 163 SMTP（`smtp.163.com:465`，Username 必须是完整邮箱地址，否则 `500 unexpected_failure`）并把 `Magic link or OTP` 模板改为 `{{ .Token }}` 后，发送验证码 → 输码 → 登录 → 同步全链路通过；退出后改用验证码重新登录，owner 仍为 `645027f0-…`，本机 3 条数据继续同步、未重绑。
 
-### BLOCKED BY EXTERNAL CONFIGURATION
+### BLOCKED BY EXTERNAL CONFIGURATION（历史快照）
 
 - Phone OTP：SMS Provider 未配置 → `SMS_PROVIDER_NOT_CONFIGURED`。
 - Phone OTP：SMS Provider 未配置 → 运行时 `SMS_PROVIDER_NOT_CONFIGURED`。
