@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { expect, it } from "vitest";
 import { buildServer } from "../server.js";
-import { CloudCourseManager, type CloudDatabase } from "../db/cloud.js";
+import { CloudDaymark, type CloudDatabase } from "../db/cloud.js";
 import { RateLimiter } from "../rateLimit.js";
 import {
   CaptureInterpretationService,
@@ -49,7 +49,7 @@ async function harness(limit: number) {
         work({ query: async (sql, params) => tx.query(sql, params) }),
       ),
   };
-  const cloud = new CloudCourseManager(port);
+  const cloud = new CloudDaymark(port);
   let providerCalls = 0;
   const provider: InterpretationProvider = {
     interpret: async () => {

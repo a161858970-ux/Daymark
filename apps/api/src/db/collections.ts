@@ -4,8 +4,8 @@ import {
   dateOnlySchema,
   isoDateTimeSchema,
   uuidSchema,
-} from "@course-manager/contracts";
-import type { CourseSchedule, SemesterWeek } from "@course-manager/domain";
+} from "@daymark/contracts";
+import type { CourseSchedule, SemesterWeek } from "@daymark/domain";
 import { CloudError, type CloudDatabase, type QueryPort } from "./cloud.js";
 
 export type CollectionSyncType =

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
-import { uuidSchema } from "@course-manager/contracts";
+import { uuidSchema } from "@daymark/contracts";
 
 if (process.env.ALLOW_DEVELOPMENT_SEED !== "1")
   throw new Error(

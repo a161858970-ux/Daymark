@@ -1,4 +1,4 @@
-import type { Item } from "@course-manager/domain";
+import type { Item } from "@daymark/domain";
 
 export interface ReminderCadence {
   due_leads_ms: number[];

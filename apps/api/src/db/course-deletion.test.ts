@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { expect, it } from "vitest";
 import { buildServer } from "../server.js";
-import { CloudCourseManager, type CloudDatabase } from "./cloud.js";
+import { CloudDaymark, type CloudDatabase } from "./cloud.js";
 import { CloudSync } from "./sync.js";
 
 const firstOwner = "11111111-1111-4111-8111-111111111111";
@@ -33,7 +33,7 @@ it("deletes a Course atomically with either explicit Item strategy and replays s
       ),
   };
   const server = buildServer({
-    cloud: new CloudCourseManager(port),
+    cloud: new CloudDaymark(port),
     sync: new CloudSync(port),
     verifyToken: async (token) =>
       token === "one" ? firstOwner : token === "two" ? secondOwner : null,

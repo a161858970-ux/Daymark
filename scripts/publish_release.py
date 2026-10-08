@@ -30,7 +30,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Version in the filename climbs with every bump — glob instead of pinning.
 EXE = (
     sorted(
-        glob.glob(os.path.join(ROOT, "src-tauri/target/release/bundle/nsis/Daymark_*_x64-setup.exe")),
+        glob.glob(os.path.join(ROOT, "src-tauri/target/release/bundle/nsis/*_x64-setup.exe")),
         key=os.path.getmtime,
         reverse=True,
     )
@@ -151,7 +151,7 @@ def main() -> int:
         except urllib.error.HTTPError as exc:
             return exc.code, exc.read().decode(errors="replace")[:200]
 
-    status, rel = api(f"https://api.github.com/repos/a161858970-ux/course-manager/releases/tags/{TAG}")
+    status, rel = api(f"https://api.github.com/repos/a161858970-ux/daymark/releases/tags/{TAG}")
     if status != 200:
         die(f"读取 release 失败: {status} {rel}")
     # NOTE: asset deletion answers 301 → urllib would not replay DELETE
@@ -160,7 +160,7 @@ def main() -> int:
         subprocess.run(
             ["curl", "-sSL", "-o", os.devnull, "-X", "DELETE",
              "-H", f"Authorization: Bearer {token}",
-             f"https://api.github.com/repos/a161858970-ux/course-manager/releases/assets/{asset['id']}"],
+             f"https://api.github.com/repos/a161858970-ux/daymark/releases/assets/{asset['id']}"],
             check=False, capture_output=True, timeout=60)
     upload_url = rel["upload_url"].split("{")[0]
     for path in (EXE, APK):
@@ -173,7 +173,7 @@ def main() -> int:
         print(f"[3/4] Release 资产已替换: {name} ({size} B)")
 
     # --- 4) Verify ------------------------------------------------------
-    status, final = api(f"https://api.github.com/repos/a161858970-ux/course-manager/releases/tags/{TAG}")
+    status, final = api(f"https://api.github.com/repos/a161858970-ux/daymark/releases/tags/{TAG}")
     names = [a["name"] for a in final["assets"]] if isinstance(final, dict) else []
     print(f"[4/4] 回读资产: {names}")
     print(f"完成。清单: {BASE}/latest.json  版本 {version}")

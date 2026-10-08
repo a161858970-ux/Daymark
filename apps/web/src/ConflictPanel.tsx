@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { ConflictResolution } from "@course-manager/contracts";
-import type { Course, Semester } from "@course-manager/domain";
+import type { ConflictResolution } from "@daymark/contracts";
+import type { Course, Semester } from "@daymark/domain";
 import type { ConflictDetail } from "./syncTransport.js";
 import { AttentionSummary } from "./AttentionSummary.js";
 import { DateTimeField } from "./DateTimeField.js";

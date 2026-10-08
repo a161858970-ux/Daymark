@@ -3,8 +3,8 @@ import type {
   CourseImportCommitResult,
   CourseImportJob,
   CourseImportResolution,
-} from "@course-manager/contracts";
-import type { Course, Semester, SemesterWeek } from "@course-manager/domain";
+} from "@daymark/contracts";
+import type { Course, Semester, SemesterWeek } from "@daymark/domain";
 import { CourseImportPanel } from "./CourseImportPanel.js";
 import { getCommittingJobId } from "./courseCommitStore.js";
 import { DateTimeField } from "./DateTimeField.js";

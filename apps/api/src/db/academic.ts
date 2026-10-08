@@ -1,11 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
-import { dateOnlySchema } from "@course-manager/contracts";
-import type {
-  CourseSchedule,
-  Semester,
-  SemesterWeek,
-} from "@course-manager/domain";
+import { dateOnlySchema } from "@daymark/contracts";
+import type { CourseSchedule, Semester, SemesterWeek } from "@daymark/domain";
 import { CloudError, type CloudDatabase, type QueryPort } from "./cloud.js";
 import { recordExternalCollectionReplacement } from "./collections.js";
 

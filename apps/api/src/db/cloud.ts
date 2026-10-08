@@ -6,23 +6,20 @@ import type {
   Item,
   ItemAssociation,
   RawCapture,
-} from "@course-manager/domain";
+} from "@daymark/domain";
 import {
   calendarItems,
   hasItemTime,
   sortOverview,
   visibleOverviewItems,
-} from "@course-manager/domain";
-import type { Semester } from "@course-manager/domain";
+} from "@daymark/domain";
+import type { Semester } from "@daymark/domain";
 import { recordExternalCollectionReplacement } from "./collections.js";
 import type {
   CreateItemInput,
   CreateRawCaptureInput,
-} from "@course-manager/contracts";
-import {
-  createCourseSchema,
-  updateItemSchema,
-} from "@course-manager/contracts";
+} from "@daymark/contracts";
+import { createCourseSchema, updateItemSchema } from "@daymark/contracts";
 
 export interface QueryPort {
   query<Row extends object = Record<string, unknown>>(
@@ -99,7 +96,7 @@ async function singleJson<T extends object>(
   return result.rows[0]?.value ?? null;
 }
 
-export class CloudCourseManager {
+export class CloudDaymark {
   constructor(private readonly db: CloudDatabase) {}
 
   private async allItems(ownerId: string): Promise<Item[]> {

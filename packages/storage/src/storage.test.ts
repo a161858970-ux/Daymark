@@ -1,22 +1,18 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  CourseManager,
-  preprocessCapture,
-  type Runtime,
-} from "@course-manager/application";
+import { Daymark, preprocessCapture, type Runtime } from "@daymark/application";
 import {
   projectItemToCalendar,
   semesterWeekForDate,
   type Item,
-} from "@course-manager/domain";
-import { CourseManagerDb, DexieLocalRepository } from "./index.js";
+} from "@daymark/domain";
+import { DaymarkDb, DexieLocalRepository } from "./index.js";
 
-const databases: CourseManagerDb[] = [];
+const databases: DaymarkDb[] = [];
 
 function setup() {
-  const name = `course-manager-test-${crypto.randomUUID()}`;
-  const db = new CourseManagerDb(name);
+  const name = `daymark-test-${crypto.randomUUID()}`;
+  const db = new DaymarkDb(name);
   databases.push(db);
   const repo = new DexieLocalRepository(db);
   let time = "2026-09-22T08:00:00.000Z";
@@ -25,7 +21,7 @@ function setup() {
     name,
     db,
     repo,
-    manager: new CourseManager(repo, runtime),
+    manager: new Daymark(repo, runtime),
     setTime: (value: string) => {
       time = value;
     },
@@ -365,13 +361,13 @@ describe("local-first persistence and Item identity", () => {
     expect(await db.outbox_mutations.count()).toBe(1);
 
     db.close();
-    const reopened = new CourseManagerDb(name);
+    const reopened = new DaymarkDb(name);
     databases.push(reopened);
     const reopenedRepo = new DexieLocalRepository(reopened);
     expect((await reopenedRepo.getRawCapture(capture.id))?.raw_text).toBe(
       rawText,
     );
-    const processed = await new CourseManager(reopenedRepo).processClearCapture(
+    const processed = await new Daymark(reopenedRepo).processClearCapture(
       capture.id,
     );
     expect(processed?.status).toBe("INCOMPLETE");
@@ -384,8 +380,7 @@ describe("local-first persistence and Item identity", () => {
       rawText,
     );
     expect(
-      (await new CourseManager(reopenedRepo).processClearCapture(capture.id))
-        ?.id,
+      (await new Daymark(reopenedRepo).processClearCapture(capture.id))?.id,
     ).toBe(processed?.id);
     expect(await reopenedRepo.listOutputs(capture.id)).toHaveLength(1);
   });
@@ -589,9 +584,9 @@ describe("local-first persistence and Item identity", () => {
     const course = await manager.createCourse("经济法");
     const raw = await manager.capture("准备期末讲稿", "COURSE_ITEM", course.id);
     db.close();
-    const reopened = new CourseManagerDb(name);
+    const reopened = new DaymarkDb(name);
     databases.push(reopened);
-    const resumed = new CourseManager(new DexieLocalRepository(reopened));
+    const resumed = new Daymark(new DexieLocalRepository(reopened));
     await resumed.recoverPendingCaptures();
     expect((await reopened.items.toArray())[0]?.course_id).toBe(course.id);
     expect((await reopened.raw_captures.get(raw.id))?.processing_status).toBe(

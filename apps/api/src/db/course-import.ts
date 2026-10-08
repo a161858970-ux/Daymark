@@ -8,8 +8,8 @@ import {
   type CourseImportPreviewCourse,
   type CourseImportResolution,
   type CourseImportSourceType,
-} from "@course-manager/contracts";
-import type { CourseInformation, Semester } from "@course-manager/domain";
+} from "@daymark/contracts";
+import type { CourseInformation, Semester } from "@daymark/domain";
 import { ZodError } from "zod";
 import { ProviderError } from "../ai/chat-provider.js";
 import { CourseImportParseError } from "../ai/pdf-source.js";

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import type { Item } from "@course-manager/domain";
+import type { Item } from "@daymark/domain";
 import { changedItemFields } from "./itemEditDiff.js";
 
 const base: Item = {

@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
-import type { Course, Item, RawCapture } from "@course-manager/domain";
+import type { Course, Item, RawCapture } from "@daymark/domain";
 import { ItemDetail } from "./ItemDetail.js";
 
 const ownerId = "22222222-2222-4222-8222-222222222222";

@@ -14,7 +14,7 @@ import type {
   SyncConflict,
   SyncEntityType,
   SyncRepairDecision,
-} from "@course-manager/domain";
+} from "@daymark/domain";
 import type {
   CaptureContext,
   DeleteUndoRecord,
@@ -24,7 +24,7 @@ import type {
   ReminderRepository,
   ActionRequiredSyncIssue,
   SyncRepository,
-} from "@course-manager/application";
+} from "@daymark/application";
 
 type Setting = { key: string; value: string };
 type StoredMutation = OutboxMutation & { local_sequence?: number };
@@ -109,7 +109,7 @@ function mutationOrder(a: StoredMutation, b: StoredMutation): number {
 
 export class OwnerBindingError extends Error {}
 
-export class CourseManagerDb extends Dexie {
+export class DaymarkDb extends Dexie {
   semesters!: Table<Semester, string>;
   semester_weeks!: Table<SemesterWeek, string>;
   courses!: Table<Course, string>;
@@ -415,23 +415,23 @@ export class CourseManagerDb extends Dexie {
 export class DexieLocalRepository
   implements LocalRepository, SyncRepository, ReminderRepository
 {
-  private readonly bootstrapDb: CourseManagerDb;
-  private activeDb: CourseManagerDb;
+  private readonly bootstrapDb: DaymarkDb;
+  private activeDb: DaymarkDb;
   private activeOwner: string | null;
-  private readonly ownerStores = new Map<string, CourseManagerDb>();
+  private readonly ownerStores = new Map<string, DaymarkDb>();
 
-  constructor(db: CourseManagerDb = new CourseManagerDb()) {
+  constructor(db: DaymarkDb = new DaymarkDb()) {
     this.bootstrapDb = db;
     const saved =
       typeof localStorage !== "undefined"
         ? localStorage.getItem("daymark.active_owner")
         : null;
     this.activeOwner = saved;
-    this.activeDb = saved ? new CourseManagerDb(this.ownerDbName(saved)) : db;
+    this.activeDb = saved ? new DaymarkDb(this.ownerDbName(saved)) : db;
     if (saved) this.ownerStores.set(saved, this.activeDb);
   }
 
-  get db(): CourseManagerDb {
+  get db(): DaymarkDb {
     return this.activeDb;
   }
 
@@ -458,7 +458,7 @@ export class DexieLocalRepository
     if (this.activeOwner === ownerId) return false;
     let target = this.ownerStores.get(ownerId);
     if (!target) {
-      target = new CourseManagerDb(this.ownerDbName(ownerId));
+      target = new DaymarkDb(this.ownerDbName(ownerId));
       const claimed = await this.bootstrapDb.settings.get(
         "bootstrap_claimed_by",
       );
@@ -479,10 +479,7 @@ export class DexieLocalRepository
   }
 
   /** One-time adopt of pre-login rows; account keys are re-derived by bindOwner. */
-  private async copyStore(
-    from: CourseManagerDb,
-    to: CourseManagerDb,
-  ): Promise<void> {
+  private async copyStore(from: DaymarkDb, to: DaymarkDb): Promise<void> {
     // Account-scoped settings never travel: a cursor or owner key issued
     // while the shared store belonged to ANOTHER account would be rejected
     // by the server (and poison every pull until discarded).

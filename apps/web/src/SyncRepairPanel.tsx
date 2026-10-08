@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import type { ActionRequiredSyncIssue } from "@course-manager/application";
-import type { Course } from "@course-manager/domain";
+import type { ActionRequiredSyncIssue } from "@daymark/application";
+import type { Course } from "@daymark/domain";
 import { AttentionSummary } from "./AttentionSummary.js";
 
 const reasons: Record<string, string> = {

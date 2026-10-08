@@ -3,8 +3,8 @@ import {
   preprocessCapture,
   reminderLevelForCapture,
   type ManualCaptureResolution,
-} from "@course-manager/application";
-import type { Course, RawCapture } from "@course-manager/domain";
+} from "@daymark/application";
+import type { Course, RawCapture } from "@daymark/domain";
 import { SelectField } from "./SelectField.js";
 import { TimeBlock } from "./TimeBlock.js";
 import { fromLocalInput, toLocalInput } from "./timeInputs.js";

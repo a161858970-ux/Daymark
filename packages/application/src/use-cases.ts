@@ -12,14 +12,14 @@ import type {
   Semester,
   SemesterWeek,
   SyncEntityType,
-} from "@course-manager/domain";
+} from "@daymark/domain";
 import {
   projectItemToCalendar,
   semesterForDate,
   sortOverview,
   visibleOverviewItems,
-} from "@course-manager/domain";
-import { createItemSchema, updateItemSchema } from "@course-manager/contracts";
+} from "@daymark/domain";
+import { createItemSchema, updateItemSchema } from "@daymark/contracts";
 import {
   preprocessCapture,
   reminderLevelForCapture,
@@ -82,7 +82,7 @@ function fieldChanged(key: string, current: unknown, next: unknown): boolean {
   return current !== next;
 }
 
-export class CourseManager {
+export class Daymark {
   constructor(
     private readonly repo: LocalRepository,
     private readonly runtime: Runtime = browserRuntime,

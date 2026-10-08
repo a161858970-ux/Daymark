@@ -1,8 +1,8 @@
 import "fake-indexeddb/auto";
 import Dexie from "dexie";
 import { afterEach, expect, it } from "vitest";
-import { SyncWorker, type SyncTransport } from "@course-manager/application";
-import { CourseManagerDb, DexieLocalRepository } from "./index.js";
+import { SyncWorker, type SyncTransport } from "@daymark/application";
+import { DaymarkDb, DexieLocalRepository } from "./index.js";
 
 const databases: string[] = [];
 
@@ -214,7 +214,7 @@ it("rehearses v5 row outbox upgrade into atomic collection commands without data
   ]);
   legacy.close();
 
-  const upgraded = new CourseManagerDb(name);
+  const upgraded = new DaymarkDb(name);
   await upgraded.open();
   const repo = new DexieLocalRepository(upgraded);
   expect(upgraded.verno).toBe(6);
@@ -331,7 +331,7 @@ it("quarantines an unresolvable legacy delete instead of partially syncing it", 
   ]);
   legacy.close();
 
-  const upgraded = new CourseManagerDb(name);
+  const upgraded = new DaymarkDb(name);
   await upgraded.open();
   const repo = new DexieLocalRepository(upgraded);
   const issue = (await repo.listActionRequiredIssues())[0];

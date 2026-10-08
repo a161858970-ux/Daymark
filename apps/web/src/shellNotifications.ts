@@ -1,5 +1,5 @@
-import type { Item } from "@course-manager/domain";
-import type { ReminderEvent } from "@course-manager/application";
+import type { Item } from "@daymark/domain";
+import type { ReminderEvent } from "@daymark/application";
 import {
   active,
   cancel as cancelByIds,

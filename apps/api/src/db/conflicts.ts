@@ -9,8 +9,8 @@ import {
   rawCaptureStatusSchema,
   conflictResolutionSchema,
   type ConflictResolution,
-} from "@course-manager/contracts";
-import type { SyncConflict } from "@course-manager/domain";
+} from "@daymark/contracts";
+import type { SyncConflict } from "@daymark/domain";
 import { CloudError, type CloudDatabase, type QueryPort } from "./cloud.js";
 import {
   currentCollectionDescriptor,

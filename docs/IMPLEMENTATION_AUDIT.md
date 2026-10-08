@@ -229,7 +229,7 @@
 - Keyboard/screen reader：导航焦点可见；Enter 激活；Search/Account/Quick Capture/Detail 分层 Escape；Mobile Detail `aria-modal` + Tab loop；desktop Detail 保持非 modal；关闭后焦点返回。
 - Resize：同一 Item 在 desktop → mobile → compact desktop → desktop 间保持 identity，详情只切换 Side Container / Bottom Sheet 表达。
 - Phase 7 closure 时 `pnpm build`、`pnpm test`、`pnpm lint`、`pnpm format:check` 全部通过，快照为 **88 passed，1 externally gated skip**，其中 Web 为 **23 passed**；Phase 8 最新总数见下节。
-- `pnpm --filter @course-manager/web dev` 已启动并由 HTTP 200 验证。Phase 7 closure 时 Vite 主 bundle 约 544 kB；Course Import 加入后的当前数字见 Phase 8 gate。
+- `pnpm --filter @daymark/web dev` 已启动并由 HTTP 200 验证。Phase 7 closure 时 Vite 主 bundle 约 544 kB；Course Import 加入后的当前数字见 Phase 8 gate。
 
 ### 8.3 Phase 7 result
 

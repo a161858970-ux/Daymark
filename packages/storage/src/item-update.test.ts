@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { afterEach, expect, it } from "vitest";
-import { CourseManager, type Item } from "@course-manager/application";
-import { CourseManagerDb, DexieLocalRepository } from "./index.js";
+import { Daymark, type Item } from "@daymark/application";
+import { DaymarkDb, DexieLocalRepository } from "./index.js";
 
 /**
  * Spec 14 §22.3 / 17: edits whose fields do not overlap must merge on the
@@ -10,7 +10,7 @@ import { CourseManagerDb, DexieLocalRepository } from "./index.js";
  * layer has to strip the untouched ones before they reach the outbox.
  */
 
-const openDbs: CourseManagerDb[] = [];
+const openDbs: DaymarkDb[] = [];
 
 afterEach(async () => {
   for (const db of openDbs.splice(0)) {
@@ -20,14 +20,14 @@ afterEach(async () => {
 });
 
 async function seedItem(): Promise<{
-  manager: CourseManager;
+  manager: Daymark;
   repo: DexieLocalRepository;
   item: Item;
 }> {
-  const db = new CourseManagerDb(`item-update-${crypto.randomUUID()}`);
+  const db = new DaymarkDb(`item-update-${crypto.randomUUID()}`);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
-  const manager = new CourseManager(repo, {
+  const manager = new Daymark(repo, {
     now: () => "2026-09-27T08:00:00.000Z",
     id: () => crypto.randomUUID(),
   });

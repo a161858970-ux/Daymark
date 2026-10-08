@@ -1,16 +1,12 @@
 import "fake-indexeddb/auto";
 import { afterEach, expect, it } from "vitest";
 import {
-  CourseManager,
+  Daymark,
   SyncWorker,
   type RemoteChange,
   type SyncTransport,
-} from "@course-manager/application";
-import {
-  CourseManagerDb,
-  DexieLocalRepository,
-  OwnerBindingError,
-} from "./index.js";
+} from "@daymark/application";
+import { DaymarkDb, DexieLocalRepository, OwnerBindingError } from "./index.js";
 
 /**
  * Auth V1 owner continuity (acceptance items 20, 21, 24).
@@ -24,7 +20,7 @@ import {
 
 const ownerA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ownerB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const openDbs: CourseManagerDb[] = [];
+const openDbs: DaymarkDb[] = [];
 
 afterEach(async () => {
   for (const db of openDbs.splice(0)) {
@@ -34,18 +30,18 @@ afterEach(async () => {
 });
 
 async function seedLocalData(): Promise<{
-  db: CourseManagerDb;
+  db: DaymarkDb;
   repo: DexieLocalRepository;
 }> {
   const name = `owner-continuity-${crypto.randomUUID()}`;
-  const db = new CourseManagerDb(name);
+  const db = new DaymarkDb(name);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
   const fixed = {
     now: () => "2026-09-27T08:00:00.000Z",
     id: () => crypto.randomUUID(),
   };
-  const manager = new CourseManager(repo, fixed);
+  const manager = new Daymark(repo, fixed);
   const course = await manager.createCourse("环境经济学");
   const raw = await manager.capture("找学姐要笔记", "COURSE_ITEM", course.id);
   await manager.processClearCapture(raw.id);
@@ -84,7 +80,7 @@ it("never migrates local data to a different account", async () => {
 
 it("rebinds a still-empty store that first signed into the wrong account", async () => {
   const name = `owner-continuity-${crypto.randomUUID()}`;
-  const db = new CourseManagerDb(name);
+  const db = new DaymarkDb(name);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
 
@@ -102,14 +98,14 @@ it("lets accounts switch freely: each keeps its own store, no lock", async () =>
   if (typeof localStorage !== "undefined")
     localStorage.removeItem("daymark.active_owner");
   const name = `owner-scoped-${crypto.randomUUID()}`;
-  const db = new CourseManagerDb(name);
+  const db = new DaymarkDb(name);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
   const fixed = {
     now: () => "2026-10-06T08:00:00.000Z",
     id: () => crypto.randomUUID(),
   };
-  const manager = new CourseManager(repo, fixed);
+  const manager = new Daymark(repo, fixed);
 
   // Rows created before any sign-in belong to the first account arriving.
   await manager.createCourse("登录前课程");
@@ -143,7 +139,7 @@ it("lets accounts switch freely: each keeps its own store, no lock", async () =>
 });
 
 it("discards a pull cursor issued to a different account", async () => {
-  const db = new CourseManagerDb(`cursor-guard-${crypto.randomUUID()}`);
+  const db = new DaymarkDb(`cursor-guard-${crypto.randomUUID()}`);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
   await repo.bindOwner(ownerA);
@@ -174,7 +170,7 @@ it("never copies shared-store account keys into the first account's store", asyn
   if (typeof localStorage !== "undefined")
     localStorage.removeItem("daymark.active_owner");
   const name = `migrate-skip-${crypto.randomUUID()}`;
-  const db = new CourseManagerDb(name);
+  const db = new DaymarkDb(name);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
   const encode = (payload: object) =>

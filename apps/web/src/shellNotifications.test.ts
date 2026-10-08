@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Item } from "@course-manager/domain";
+import type { Item } from "@daymark/domain";
 import {
   createNotificationAdapter,
   notificationId,

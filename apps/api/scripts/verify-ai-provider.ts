@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import {
   courseImportParseResultSchema,
   interpretationSchema,
-} from "@course-manager/contracts";
+} from "@daymark/contracts";
 import {
   ChatCompletionsInterpretationProvider,
   ProviderError,

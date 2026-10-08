@@ -38,13 +38,13 @@ importers:
 
   apps/api:
     dependencies:
-      '@course-manager/application':
+      '@daymark/application':
         specifier: workspace:*
         version: link:../../packages/application
-      '@course-manager/contracts':
+      '@daymark/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@course-manager/domain':
+      '@daymark/domain':
         specifier: workspace:*
         version: link:../../packages/domain
       '@fastify/cors':
@@ -69,7 +69,7 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
     devDependencies:
-      '@course-manager/storage':
+      '@daymark/storage':
         specifier: workspace:*
         version: link:../../packages/storage
       '@electric-sql/pglite':
@@ -84,16 +84,16 @@ importers:
 
   apps/web:
     dependencies:
-      '@course-manager/application':
+      '@daymark/application':
         specifier: workspace:*
         version: link:../../packages/application
-      '@course-manager/contracts':
+      '@daymark/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@course-manager/domain':
+      '@daymark/domain':
         specifier: workspace:*
         version: link:../../packages/domain
-      '@course-manager/storage':
+      '@daymark/storage':
         specifier: workspace:*
         version: link:../../packages/storage
       '@supabase/supabase-js':
@@ -130,16 +130,16 @@ importers:
 
   packages/application:
     dependencies:
-      '@course-manager/contracts':
+      '@daymark/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@course-manager/domain':
+      '@daymark/domain':
         specifier: workspace:*
         version: link:../domain
 
   packages/contracts:
     dependencies:
-      '@course-manager/domain':
+      '@daymark/domain':
         specifier: workspace:*
         version: link:../domain
       zod:
@@ -150,10 +150,10 @@ importers:
 
   packages/storage:
     dependencies:
-      '@course-manager/application':
+      '@daymark/application':
         specifier: workspace:*
         version: link:../application
-      '@course-manager/domain':
+      '@daymark/domain':
         specifier: workspace:*
         version: link:../domain
       dexie:

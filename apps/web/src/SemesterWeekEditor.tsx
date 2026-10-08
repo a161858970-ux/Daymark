@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Semester, SemesterWeek } from "@course-manager/domain";
+import type { Semester, SemesterWeek } from "@daymark/domain";
 import { SelectField } from "./SelectField.js";
 import { toUserMessage } from "./errors.js";
 import {

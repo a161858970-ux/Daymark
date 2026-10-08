@@ -5,9 +5,9 @@ import {
   type ReminderDeliveryPort,
   type ReminderPolicy,
   type ReminderWindow,
-} from "@course-manager/application";
-import type { Item } from "@course-manager/domain";
-import { CourseManagerDb, DexieLocalRepository } from "./index.js";
+} from "@daymark/application";
+import type { Item } from "@daymark/domain";
+import { DaymarkDb, DexieLocalRepository } from "./index.js";
 
 const hour = 60 * 60 * 1000;
 // Test-only numbers. Production remains gated on R-01.
@@ -63,7 +63,7 @@ function item(): Item {
 
 it("persists derived schedules, cancels stale deliveries, and recovers across restart", async () => {
   const name = `reminders-${crypto.randomUUID()}`;
-  let db = new CourseManagerDb(name);
+  let db = new DaymarkDb(name);
   let repo = new DexieLocalRepository(db);
   const value = item();
   const delivered: string[] = [];
@@ -98,7 +98,7 @@ it("persists derived schedules, cancels stale deliveries, and recovers across re
     ).toBe("CONSUMED");
 
     db.close();
-    db = new CourseManagerDb(name);
+    db = new DaymarkDb(name);
     repo = new DexieLocalRepository(db);
     engine = new ReminderCoordinator(repo, port);
     expect(

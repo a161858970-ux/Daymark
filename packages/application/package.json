@@ -1,5 +1,5 @@
 {
-  "name": "@course-manager/application",
+  "name": "@daymark/application",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -17,7 +17,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@course-manager/domain": "workspace:*",
-    "@course-manager/contracts": "workspace:*"
+    "@daymark/domain": "workspace:*",
+    "@daymark/contracts": "workspace:*"
   }
 }

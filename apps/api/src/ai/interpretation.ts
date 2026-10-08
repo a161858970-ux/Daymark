@@ -1,11 +1,11 @@
-import { preprocessCapture } from "@course-manager/application";
+import { preprocessCapture } from "@daymark/application";
 import {
   interpretationSchema,
   type CaptureInterpretation,
   type InterpretationRequest,
-} from "@course-manager/contracts";
-import type { Course, RawCapture } from "@course-manager/domain";
-import { CloudCourseManager, CloudError } from "../db/cloud.js";
+} from "@daymark/contracts";
+import type { Course, RawCapture } from "@daymark/domain";
+import { CloudDaymark, CloudError } from "../db/cloud.js";
 import { CloudAcademicManager } from "../db/academic.js";
 import type { RateLimiter } from "../rateLimit.js";
 
@@ -22,7 +22,7 @@ export interface InterpretationProvider {
 
 export class CaptureInterpretationService {
   constructor(
-    private readonly cloud: CloudCourseManager,
+    private readonly cloud: CloudDaymark,
     private readonly academic: CloudAcademicManager | null,
     private readonly provider: InterpretationProvider | null,
     /** AI quota is charged only when the provider is actually invoked. */

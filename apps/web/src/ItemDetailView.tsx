@@ -4,7 +4,7 @@ import type {
   Item,
   ItemAssociation,
   RawCapture,
-} from "@course-manager/domain";
+} from "@daymark/domain";
 import { SelectField } from "./SelectField.js";
 
 interface Props {

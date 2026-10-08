@@ -6,12 +6,12 @@ import {
   type FormEvent,
   type MutableRefObject,
 } from "react";
-import type { ConflictResolution } from "@course-manager/contracts";
+import type { ConflictResolution } from "@daymark/contracts";
 import type {
   ActionRequiredSyncIssue,
   ManualCaptureResolution,
-} from "@course-manager/application";
-import { semesterForDate } from "@course-manager/domain";
+} from "@daymark/application";
+import { semesterForDate } from "@daymark/domain";
 import type {
   Course,
   CourseInformation,
@@ -21,8 +21,8 @@ import type {
   RawCapture,
   Semester,
   SemesterWeek,
-} from "@course-manager/domain";
-import { courseManager, localRepository } from "./services.js";
+} from "@daymark/domain";
+import { daymark, localRepository } from "./services.js";
 import { ItemList } from "./ItemList.js";
 import { ItemDetail, type EditableItemFields } from "./ItemDetail.js";
 import { QuickCapture } from "./QuickCapture.js";
@@ -195,28 +195,28 @@ export function App() {
       semesterData,
       selectedAssociationData,
     ] = await Promise.all([
-      courseManager.listCourses(),
-      courseManager.listItems(),
-      courseManager.overview(today, now, selectedSemesterId ?? undefined),
-      courseManager.unresolvedCaptures(),
+      daymark.listCourses(),
+      daymark.listItems(),
+      daymark.overview(today, now, selectedSemesterId ?? undefined),
+      daymark.unresolvedCaptures(),
       currentCourseId
-        ? courseManager.courseItems(currentCourseId, now)
+        ? daymark.courseItems(currentCourseId, now)
         : Promise.resolve([]),
       currentCourseId
-        ? courseManager.courseInformation(currentCourseId)
+        ? daymark.courseInformation(currentCourseId)
         : Promise.resolve([]),
-      courseManager.allCourseInformation(),
+      daymark.allCourseInformation(),
       currentCourseId
-        ? courseManager.courseSchedules(currentCourseId)
+        ? daymark.courseSchedules(currentCourseId)
         : Promise.resolve([]),
-      courseManager.calendarItems(),
-      courseManager.listSemesters(),
+      daymark.calendarItems(),
+      daymark.listSemesters(),
       selectedItem
-        ? courseManager.itemAssociations(selectedItem.id)
+        ? daymark.itemAssociations(selectedItem.id)
         : Promise.resolve([]),
     ]);
     const weekGroups = await Promise.all(
-      semesterData.map((semester) => courseManager.semesterWeeks(semester.id)),
+      semesterData.map((semester) => daymark.semesterWeeks(semester.id)),
     );
     setCourses(courseData);
     setAllItems(allItemData);
@@ -227,7 +227,7 @@ export function App() {
         await Promise.all(
           unresolvedData.map(async (capture) => [
             capture.id,
-            await courseManager.courseContextForCapture(capture.id),
+            await daymark.courseContextForCapture(capture.id),
           ]),
         ),
       ),
@@ -242,7 +242,7 @@ export function App() {
     if (selectedItemIdRef.current === requestedSelectedItemId) {
       setItemAssociations(selectedAssociationData);
       if (requestedSelectedItemId) {
-        const next = await courseManager.getItem(requestedSelectedItemId);
+        const next = await daymark.getItem(requestedSelectedItemId);
         if (selectedItemIdRef.current !== requestedSelectedItemId) return;
         if (next?.deleted_at) setSelectedItem(null);
         else if (next) setSelectedItem(next);
@@ -394,7 +394,7 @@ export function App() {
     window.scrollTo({ left: 0, top: 0 });
   }, [currentCourseId, page]);
   useEffect(() => {
-    void courseManager
+    void daymark
       .recoverPendingCaptures()
       .then(refresh)
       .catch((cause: unknown) => setError(toUserMessage(cause)));
@@ -503,7 +503,7 @@ export function App() {
 
   async function saveCapture(text: string, courseId: string | null = null) {
     try {
-      const raw = await courseManager.capture(
+      const raw = await daymark.capture(
         text,
         courseId ? "COURSE_ITEM" : "QUICK_CAPTURE",
         courseId,
@@ -513,7 +513,7 @@ export function App() {
           message: "✓ 已记录",
           duration: motionDuration.feedback,
         });
-      void courseManager
+      void daymark
         .processClearCapture(raw.id, courseId)
         .then(refresh)
         .catch((cause: unknown) => setError(toUserMessage(cause)));
@@ -530,8 +530,8 @@ export function App() {
     setSelectedRaw(null);
     setItemAssociations([]);
     const [rawCapture, associations] = await Promise.all([
-      courseManager.rawCaptureForItem(item.id),
-      courseManager.itemAssociations(item.id),
+      daymark.rawCaptureForItem(item.id),
+      daymark.itemAssociations(item.id),
     ]);
     if (detailRequestIdRef.current !== requestId) return;
     setSelectedRaw(rawCapture ?? null);
@@ -540,19 +540,19 @@ export function App() {
 
   async function addItemAssociation(associatedItemId: string) {
     if (!selectedItem) return;
-    await courseManager.associateItems(selectedItem.id, associatedItemId);
-    setItemAssociations(await courseManager.itemAssociations(selectedItem.id));
+    await daymark.associateItems(selectedItem.id, associatedItemId);
+    setItemAssociations(await daymark.itemAssociations(selectedItem.id));
   }
 
   async function removeItemAssociation(associationId: string) {
     if (!selectedItem) return;
-    await courseManager.deleteItemAssociation(associationId);
-    setItemAssociations(await courseManager.itemAssociations(selectedItem.id));
+    await daymark.deleteItemAssociation(associationId);
+    setItemAssociations(await daymark.itemAssociations(selectedItem.id));
   }
 
   async function complete(item: Item) {
     try {
-      const completed = await courseManager.completeItem(item.id);
+      const completed = await daymark.completeItem(item.id);
       clearMotionTimer(completionTimersRef, item.id);
       setPendingMoveIds((ids) => new Set(ids).add(item.id));
       replaceItemLocally(completed);
@@ -561,7 +561,7 @@ export function App() {
         duration: motionDuration.feedback,
         action: async () => {
           clearMotionTimer(completionTimersRef, item.id);
-          const restored = await courseManager.restoreItem(item.id);
+          const restored = await daymark.restoreItem(item.id);
           setPendingMoveIds((ids) => {
             const next = new Set(ids);
             next.delete(item.id);
@@ -591,7 +591,7 @@ export function App() {
 
   async function restore(item: Item) {
     try {
-      const restored = await courseManager.restoreItem(item.id);
+      const restored = await daymark.restoreItem(item.id);
       replaceItemLocally(restored);
       await refresh();
       markItemEntering(item.id);
@@ -602,7 +602,7 @@ export function App() {
 
   async function remove(item: Item): Promise<boolean> {
     try {
-      const deleted = await courseManager.deleteItem(item.id);
+      const deleted = await daymark.deleteItem(item.id);
       clearMotionTimer(deletionTimersRef, item.id);
       setPendingDeleteIds((ids) => new Set(ids).add(item.id));
       showFeedback({
@@ -615,10 +615,7 @@ export function App() {
             next.delete(item.id);
             return next;
           });
-          const restored = await courseManager.undoDelete(
-            item.id,
-            deleted.token,
-          );
+          const restored = await daymark.undoDelete(item.id, deleted.token);
           replaceItemLocally(restored);
           await refresh();
           markItemEntering(item.id);
@@ -645,7 +642,7 @@ export function App() {
 
   async function saveEdit(item: Item, fields: EditableItemFields) {
     try {
-      setSelectedItem(await courseManager.updateItem(item.id, fields));
+      setSelectedItem(await daymark.updateItem(item.id, fields));
       await refresh();
     } catch (cause) {
       setError(toUserMessage(cause));
@@ -667,7 +664,7 @@ export function App() {
   async function addInformation(content: string) {
     if (!currentCourseId) return;
     try {
-      await courseManager.addCourseInformation(currentCourseId, content);
+      await daymark.addCourseInformation(currentCourseId, content);
       await refresh();
     } catch (cause) {
       setError(toUserMessage(cause));
@@ -677,7 +674,7 @@ export function App() {
 
   async function replaceSchedules(values: ScheduleFields[]) {
     if (!currentCourseId) return;
-    await courseManager.replaceCourseSchedules(currentCourseId, values);
+    await daymark.replaceCourseSchedules(currentCourseId, values);
     await refresh();
   }
 
@@ -685,7 +682,7 @@ export function App() {
     strategy: "DELETE_ASSOCIATED_ITEMS" | "UNLINK_ASSOCIATED_ITEMS",
   ) {
     if (!activeCourse) return;
-    await courseManager.deleteCourseWithStrategy(
+    await daymark.deleteCourseWithStrategy(
       activeCourse.id,
       strategy,
       courseItems.map((item) => item.id),
@@ -698,7 +695,7 @@ export function App() {
 
   async function deleteSemester(id: string) {
     try {
-      const result = await courseManager.deleteSemester(id);
+      const result = await daymark.deleteSemester(id);
       if (selectedSemesterId === id) setSelectedSemesterId(null);
       if (activeCourse?.semester_id === id) {
         setCurrentCourseId(null);
@@ -718,7 +715,7 @@ export function App() {
 
   async function editInformation(id: string, content: string) {
     try {
-      await courseManager.updateCourseInformation(id, content);
+      await daymark.updateCourseInformation(id, content);
       await refresh();
     } catch (cause) {
       setError(toUserMessage(cause));
@@ -728,7 +725,7 @@ export function App() {
 
   async function deleteInformation(id: string) {
     try {
-      await courseManager.deleteCourseInformation(id);
+      await daymark.deleteCourseInformation(id);
       await refresh();
     } catch (cause) {
       setError(toUserMessage(cause));
@@ -740,7 +737,7 @@ export function App() {
     resolution: ManualCaptureResolution,
     keepOne = false,
   ) {
-    await courseManager.resolveRawCapture(
+    await daymark.resolveRawCapture(
       captureId,
       resolution,
       keepOne ? "KEEP_ONE" : null,
@@ -752,13 +749,13 @@ export function App() {
     captureId: string,
     resolutions: Extract<ManualCaptureResolution, { kind: "ITEM" }>[],
   ) {
-    await courseManager.resolveSplitCapture(captureId, resolutions);
+    await daymark.resolveSplitCapture(captureId, resolutions);
     await refresh();
   }
 
   async function deferPending(captureId: string) {
     try {
-      await courseManager.deferRawCapture(captureId);
+      await daymark.deferRawCapture(captureId);
       setDismissedThisLaunch((ids) => new Set(ids).add(captureId));
     } catch (cause) {
       setError(toUserMessage(cause));
@@ -767,7 +764,7 @@ export function App() {
 
   async function deletePending(captureId: string) {
     try {
-      await courseManager.deleteUnresolvedCapture(captureId);
+      await daymark.deleteUnresolvedCapture(captureId);
       await refresh();
     } catch (cause) {
       setError(toUserMessage(cause));
@@ -787,10 +784,7 @@ export function App() {
         message: "已删除事项",
         duration: 5000,
         action: async () => {
-          await courseManager.undoDelete(
-            result.undo!.itemId,
-            result.undo!.token,
-          );
+          await daymark.undoDelete(result.undo!.itemId, result.undo!.token);
           await refresh();
         },
       });
@@ -801,7 +795,7 @@ export function App() {
     const object = issue.local_object;
     switch (issue.mutation.entity_type) {
       case "ITEM": {
-        const item = await courseManager.getItem(issue.mutation.entity_id);
+        const item = await daymark.getItem(issue.mutation.entity_id);
         if (item) await openItem(item);
         return;
       }
@@ -1220,33 +1214,26 @@ export function App() {
                   setShowCourseDelete(false);
                 }}
                 onFindCandidate={(name, semesterId) =>
-                  courseManager.priorCourseCandidate(name, semesterId)
+                  daymark.priorCourseCandidate(name, semesterId)
                 }
                 onCreateCourse={async (name, semesterId, inheritFromId) => {
                   if (inheritFromId && semesterId)
-                    await courseManager.createCourseWithInheritance(
+                    await daymark.createCourseWithInheritance(
                       name,
                       semesterId,
                       inheritFromId,
                     );
                   else
-                    await courseManager.createCourse(
-                      name,
-                      semesterId,
-                      localDate(),
-                    );
+                    await daymark.createCourse(name, semesterId, localDate());
                   await refresh();
                 }}
                 onCreateSemester={async (name, startDate, endDate) => {
-                  await courseManager.createSemester(name, startDate, endDate);
+                  await daymark.createSemester(name, startDate, endDate);
                   await refresh();
                 }}
                 onReplaceWeeks={async (values: WeekFields[]) => {
                   if (!targetSemesterId) return;
-                  await courseManager.replaceSemesterWeeks(
-                    targetSemesterId,
-                    values,
-                  );
+                  await daymark.replaceSemesterWeeks(targetSemesterId, values);
                   await refresh();
                 }}
                 onDeleteSemester={deleteSemester}

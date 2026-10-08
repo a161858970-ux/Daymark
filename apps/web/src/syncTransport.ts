@@ -1,12 +1,12 @@
-import type { OutboxMutation } from "@course-manager/domain";
-import type { SyncConflict } from "@course-manager/domain";
-import type { ConflictResolution } from "@course-manager/contracts";
+import type { OutboxMutation } from "@daymark/domain";
+import type { SyncConflict } from "@daymark/domain";
+import type { ConflictResolution } from "@daymark/contracts";
 import { apiBase } from "./apiBase.js";
 import type {
   PushResult,
   RemoteChange,
   SyncTransport,
-} from "@course-manager/application";
+} from "@daymark/application";
 
 export class SyncHttpError extends Error {
   constructor(

@@ -1,7 +1,7 @@
 import { buildServer } from "./server.js";
 import pg from "pg";
 import { createSupabaseVerifier } from "./auth.js";
-import { CloudCourseManager, PoolCloudDatabase } from "./db/cloud.js";
+import { CloudDaymark, PoolCloudDatabase } from "./db/cloud.js";
 import { CloudSync } from "./db/sync.js";
 import { CloudAcademicManager } from "./db/academic.js";
 import { CaptureInterpretationService } from "./ai/interpretation.js";
@@ -77,7 +77,7 @@ const baseUrl =
   process.env.MIMO_BASE_URL ??
   "https://api.xiaomimimo.com/v1";
 const providerConfig = apiKey ? { apiKey, model, imageModel, baseUrl } : null;
-const cloud = cloudDatabase ? new CloudCourseManager(cloudDatabase) : null;
+const cloud = cloudDatabase ? new CloudDaymark(cloudDatabase) : null;
 // Security default (configurable): AI endpoints only, per authenticated owner.
 const aiRateLimiter = new RateLimiter(rateLimitFromEnv());
 const academic = cloudDatabase ? new CloudAcademicManager(cloudDatabase) : null;

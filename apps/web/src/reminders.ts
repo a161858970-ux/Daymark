@@ -1,4 +1,4 @@
-import type { Item } from "@course-manager/domain";
+import type { Item } from "@daymark/domain";
 import { apiBase } from "./apiBase.js";
 import {
   REMINDER_POLICY_V1,
@@ -11,7 +11,7 @@ import {
   type ReminderPolicy,
   type ReminderRepository,
   type ReminderWindow,
-} from "@course-manager/application";
+} from "@daymark/application";
 
 export const reminderPolicySource = (): string | null =>
   (import.meta.env.VITE_REMINDER_POLICY as string | undefined) ?? null;

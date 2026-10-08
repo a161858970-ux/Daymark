@@ -11,7 +11,7 @@ import type {
   Semester,
   SemesterWeek,
   SyncEntityType,
-} from "@course-manager/domain";
+} from "@daymark/domain";
 
 export interface DeleteUndoRecord {
   item_id: string;

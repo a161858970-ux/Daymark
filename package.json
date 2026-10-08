@@ -1,21 +1,21 @@
 {
-  "name": "course-manager",
+  "name": "daymark",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.25.0",
   "scripts": {
-    "dev": "pnpm build && pnpm --parallel --filter @course-manager/web --filter @course-manager/api run dev",
+    "dev": "pnpm build && pnpm --parallel --filter @daymark/web --filter @daymark/api run dev",
     "build": "pnpm -r build",
     "test": "pnpm build && pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "db:migrate": "pnpm build && pnpm --filter @course-manager/api db:migrate",
-    "db:seed": "pnpm build && pnpm --filter @course-manager/api db:seed",
+    "db:migrate": "pnpm build && pnpm --filter @daymark/api db:migrate",
+    "db:seed": "pnpm build && pnpm --filter @daymark/api db:seed",
     "test:postgres": "pnpm build && node scripts/test-real-postgres.mjs",
     "verify:live-api": "node scripts/verify-live-api.mjs",
-    "verify:ai": "pnpm --filter @course-manager/api exec tsx scripts/verify-ai-provider.ts"
+    "verify:ai": "pnpm --filter @daymark/api exec tsx scripts/verify-ai-provider.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

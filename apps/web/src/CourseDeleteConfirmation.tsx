@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Course, Item } from "@course-manager/domain";
+import type { Course, Item } from "@daymark/domain";
 import { toUserMessage } from "./errors.js";
 
 type Strategy = "DELETE_ASSOCIATED_ITEMS" | "UNLINK_ASSOCIATED_ITEMS";

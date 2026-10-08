@@ -1,4 +1,4 @@
-import type { Course, RawCaptureSource } from "@course-manager/domain";
+import type { Course, RawCaptureSource } from "@daymark/domain";
 
 export interface CapturePreprocessing {
   normalized: string;

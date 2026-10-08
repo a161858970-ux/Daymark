@@ -1,16 +1,16 @@
 import "fake-indexeddb/auto";
 import { afterEach, expect, it } from "vitest";
 import {
-  CourseManager,
+  Daymark,
   deriveReminderSchedule,
   type ReminderPolicy,
   type ReminderWindow,
   type Runtime,
-} from "@course-manager/application";
-import { projectItemToCalendar } from "@course-manager/domain";
-import { CourseManagerDb, DexieLocalRepository } from "./index.js";
+} from "@daymark/application";
+import { projectItemToCalendar } from "@daymark/domain";
+import { DaymarkDb, DexieLocalRepository } from "./index.js";
 
-const databases: CourseManagerDb[] = [];
+const databases: DaymarkDb[] = [];
 const hour = 60 * 60 * 1000;
 const policy: ReminderPolicy = {
   version: "acceptance-only",
@@ -41,7 +41,7 @@ const reminderWindow: ReminderWindow = {
 
 function setup() {
   const name = `acceptance-${crypto.randomUUID()}`;
-  const db = new CourseManagerDb(name);
+  const db = new DaymarkDb(name);
   databases.push(db);
   const repo = new DexieLocalRepository(db);
   let now = "2026-09-22T08:00:00.000Z";
@@ -53,7 +53,7 @@ function setup() {
     name,
     db,
     repo,
-    manager: new CourseManager(repo, runtime),
+    manager: new Daymark(repo, runtime),
     setNow: (value: string) => {
       now = value;
     },
@@ -77,9 +77,9 @@ it("T-AI-004/005/010 and T-REC-004 keep deferred ambiguity across restart until 
   );
 
   db.close();
-  const reopened = new CourseManagerDb(name);
+  const reopened = new DaymarkDb(name);
   databases.push(reopened);
-  const resumed = new CourseManager(new DexieLocalRepository(reopened));
+  const resumed = new Daymark(new DexieLocalRepository(reopened));
   expect((await resumed.unresolvedCaptures()).map((value) => value.id)).toEqual(
     [raw.id],
   );

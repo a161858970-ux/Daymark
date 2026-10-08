@@ -39,7 +39,7 @@ export default function WindowTitleBar() {
     >
       <div className="titlebar-label">
         <img src="/daymark-icon.png" alt="" />
-        <span>拾序 Daymark</span>
+        <span>拾序</span>
       </div>
       <div className="window-controls">
         <button

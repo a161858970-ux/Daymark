@@ -1,4 +1,4 @@
-import type { Item } from "@course-manager/domain";
+import type { Item } from "@daymark/domain";
 
 /** The values the edit form holds, after input conversion. */
 export interface ItemEditValues {

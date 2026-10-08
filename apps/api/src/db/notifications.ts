@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { isoDateTimeSchema, uuidSchema } from "@course-manager/contracts";
+import { isoDateTimeSchema, uuidSchema } from "@daymark/contracts";
 import { CloudError, type CloudDatabase, type QueryPort } from "./cloud.js";
 
 export const deviceRegistrationSchema = z.object({

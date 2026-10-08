@@ -4,7 +4,7 @@ import {
   type CourseImportJob,
   type CourseImportResolution,
   type CourseImportSourceType,
-} from "@course-manager/contracts";
+} from "@daymark/contracts";
 import { synchronizeAuthenticatedData } from "./authSync.js";
 import { beginAiTask } from "./aiTaskStore.js";
 import { beginCourseCommit, endCourseCommit } from "./courseCommitStore.js";

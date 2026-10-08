@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { expect, it } from "vitest";
 import { buildServer } from "../server.js";
-import { CloudCourseManager, type CloudDatabase } from "./cloud.js";
+import { CloudDaymark, type CloudDatabase } from "./cloud.js";
 import { CloudNotificationManager } from "./notifications.js";
 
 const owner = "11111111-1111-4111-8111-111111111111";
@@ -35,7 +35,7 @@ async function harness() {
         }),
       ),
   };
-  const cloud = new CloudCourseManager(database);
+  const cloud = new CloudDaymark(database);
   const notifications = new CloudNotificationManager(database);
   const server = buildServer({
     cloud,

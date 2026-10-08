@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { CourseInformation } from "@course-manager/domain";
+import type { CourseInformation } from "@daymark/domain";
 
 interface Props {
   information: CourseInformation[];

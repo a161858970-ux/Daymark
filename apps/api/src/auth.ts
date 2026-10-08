@@ -1,5 +1,5 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import { uuidSchema } from "@course-manager/contracts";
+import { uuidSchema } from "@daymark/contracts";
 
 export function createJwtVerifier(jwksUrl: URL, issuer: string) {
   const jwks = createRemoteJWKSet(jwksUrl);

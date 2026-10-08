@@ -1,4 +1,4 @@
-import type { CourseSchedule } from "@course-manager/domain";
+import type { CourseSchedule } from "@daymark/domain";
 
 export type ScheduleFields = Pick<
   CourseSchedule,

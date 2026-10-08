@@ -1,5 +1,5 @@
-import type { Course, Item } from "@course-manager/domain";
-import { localDateOfInstant } from "@course-manager/domain";
+import type { Course, Item } from "@daymark/domain";
+import { localDateOfInstant } from "@daymark/domain";
 
 interface Props {
   date: string;

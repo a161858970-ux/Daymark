@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { expect, it } from "vitest";
 import { buildServer } from "../server.js";
-import { CloudCourseManager, type CloudDatabase } from "./cloud.js";
+import { CloudDaymark, type CloudDatabase } from "./cloud.js";
 
 const owner = "11111111-1111-4111-8111-111111111111";
 
@@ -22,7 +22,7 @@ it("covers Course update, CourseInformation writes, and symmetric ItemAssociatio
       ),
   };
   const server = buildServer({
-    cloud: new CloudCourseManager(port),
+    cloud: new CloudDaymark(port),
     verifyToken: async (token) => (token === "valid" ? owner : null),
   });
   const request = (

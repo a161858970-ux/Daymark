@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { expect, it } from "vitest";
 import { buildServer } from "../server.js";
-import { CloudCourseManager, type CloudDatabase } from "./cloud.js";
+import { CloudDaymark, type CloudDatabase } from "./cloud.js";
 
 const ownerOne = "11111111-1111-4111-8111-111111111111";
 const ownerTwo = "22222222-2222-4222-8222-222222222222";
@@ -23,7 +23,7 @@ it("protects the capture → course → item API, persists provenance, and repla
       ),
   };
   const server = buildServer({
-    cloud: new CloudCourseManager(port),
+    cloud: new CloudDaymark(port),
     verifyToken: async (token) =>
       token === "one" ? ownerOne : token === "two" ? ownerTwo : null,
   });

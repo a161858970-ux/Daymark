@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  searchCourseManagerRecords,
+  searchDaymarkRecords,
   type Course,
   type CourseInformation,
-  type CourseManagerSearchResults,
+  type DaymarkSearchResults,
   type Item,
-} from "@course-manager/domain";
+} from "@daymark/domain";
 import { motionDuration, useExitTransition } from "./motion.js";
 
 export function SearchGlyph() {
@@ -43,7 +43,7 @@ export function SearchResultGroups({
   onOpenCourse,
   onOpenInformation,
 }: {
-  results: CourseManagerSearchResults;
+  results: DaymarkSearchResults;
   courses: Course[];
   onOpenItem(item: Item): void;
   onOpenCourse(course: Course): void;
@@ -162,8 +162,7 @@ export function SearchSurface({
     motionDuration.short,
   );
   const results = useMemo(
-    () =>
-      searchCourseManagerRecords(query, { items, courses, courseInformation }),
+    () => searchDaymarkRecords(query, { items, courses, courseInformation }),
     [courseInformation, courses, items, query],
   );
   const resultCount =

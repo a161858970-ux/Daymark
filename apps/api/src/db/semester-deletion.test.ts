@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { expect, it } from "vitest";
 import { buildServer } from "../server.js";
-import { CloudCourseManager, type CloudDatabase } from "./cloud.js";
+import { CloudDaymark, type CloudDatabase } from "./cloud.js";
 import { CloudAcademicManager } from "./academic.js";
 import { CloudSync } from "./sync.js";
 
@@ -31,7 +31,7 @@ it("removes a Semester with its courses, items and timetable rows, and exposes t
       ),
   };
   const server = buildServer({
-    cloud: new CloudCourseManager(port),
+    cloud: new CloudDaymark(port),
     sync: new CloudSync(port),
     academic: new CloudAcademicManager(port),
     verifyToken: async (token) => (token === "one" ? owner : null),

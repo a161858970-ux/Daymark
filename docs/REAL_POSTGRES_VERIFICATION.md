@@ -13,7 +13,7 @@
 
 ## 1. 准备开发/验收数据库
 
-使用一个空的、可丢弃的 PostgreSQL 数据库。迁移会创建 Course Manager 表；不要把 `REAL_DATABASE_URL` 指向生产数据库。
+使用一个空的、可丢弃的 PostgreSQL 数据库。迁移会创建 Daymark 表；不要把 `REAL_DATABASE_URL` 指向生产数据库。
 
 ```powershell
 $env:DATABASE_URL = "postgres://USER:PASSWORD@HOST:5432/DB?sslmode=require"

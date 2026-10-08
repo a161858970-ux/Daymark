@@ -3,8 +3,8 @@ import type {
   CourseImportCommitResult,
   CourseImportJob,
   CourseImportResolution,
-} from "@course-manager/contracts";
-import type { Semester } from "@course-manager/domain";
+} from "@daymark/contracts";
+import type { Semester } from "@daymark/domain";
 import {
   getCommittingJobId,
   subscribeCourseCommit,

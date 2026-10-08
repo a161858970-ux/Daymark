@@ -2,15 +2,15 @@ import "fake-indexeddb/auto";
 import Dexie from "dexie";
 import { afterEach, expect, it } from "vitest";
 import {
-  CourseManager,
+  Daymark,
   SyncWorker,
   type RemoteChange,
   type SyncTransport,
-} from "@course-manager/application";
-import { CourseManagerDb, DexieLocalRepository } from "./index.js";
+} from "@daymark/application";
+import { DaymarkDb, DexieLocalRepository } from "./index.js";
 
 const ownerId = "11111111-1111-4111-8111-111111111111";
-const openDbs: CourseManagerDb[] = [];
+const openDbs: DaymarkDb[] = [];
 
 afterEach(async () => {
   for (const db of openDbs.splice(0)) {
@@ -21,14 +21,14 @@ afterEach(async () => {
 
 it("keeps capture and ordered outbox across restart, then binds owner, pushes and pulls atomically", async () => {
   const name = `sync-test-${crypto.randomUUID()}`;
-  const db = new CourseManagerDb(name);
+  const db = new DaymarkDb(name);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
   const fixed = {
     now: () => "2026-09-22T08:00:00.000Z",
     id: () => crypto.randomUUID(),
   };
-  const manager = new CourseManager(repo, fixed);
+  const manager = new Daymark(repo, fixed);
   const course = await manager.createCourse("环境经济学");
   const raw = await manager.capture("找学姐要笔记", "COURSE_ITEM", course.id);
   const item = await manager.processClearCapture(raw.id);
@@ -43,7 +43,7 @@ it("keeps capture and ordered outbox across restart, then binds owner, pushes an
     "RAW_CAPTURE",
   ]);
   db.close();
-  const reopened = new CourseManagerDb(name);
+  const reopened = new DaymarkDb(name);
   openDbs.push(reopened);
   const resumed = new DexieLocalRepository(reopened);
   const sent: string[] = [];
@@ -103,7 +103,7 @@ it("keeps capture and ordered outbox across restart, then binds owner, pushes an
 });
 
 it("does not advance pull cursor when a remote page cannot be applied", async () => {
-  const db = new CourseManagerDb(`sync-invalid-${crypto.randomUUID()}`);
+  const db = new DaymarkDb(`sync-invalid-${crypto.randomUUID()}`);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
   await expect(
@@ -127,10 +127,10 @@ it("does not advance pull cursor when a remote page cannot be applied", async ()
 });
 
 it("keeps the pull cursor when a new local edit overlaps a remote page", async () => {
-  const db = new CourseManagerDb(`sync-overlap-${crypto.randomUUID()}`);
+  const db = new DaymarkDb(`sync-overlap-${crypto.randomUUID()}`);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
-  const manager = new CourseManager(repo);
+  const manager = new Daymark(repo);
   const raw = await manager.capture("提交报告");
   const item = await manager.processClearCapture(raw.id);
   expect(item).toBeTruthy();
@@ -173,10 +173,10 @@ it("keeps the pull cursor when a new local edit overlaps a remote page", async (
 });
 
 it("retains rejected mutations with diagnostics instead of acknowledging them", async () => {
-  const db = new CourseManagerDb(`sync-rejected-${crypto.randomUUID()}`);
+  const db = new DaymarkDb(`sync-rejected-${crypto.randomUUID()}`);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
-  await new CourseManager(repo).capture("找学姐要笔记");
+  await new Daymark(repo).capture("找学姐要笔记");
   const worker = new SyncWorker(repo, {
     identity: async () => ownerId,
     push: async () => {
@@ -194,10 +194,10 @@ it("retains rejected mutations with diagnostics instead of acknowledging them", 
 });
 
 it("repairs an ACTION_REQUIRED edit with current local data and a new idempotency identity", async () => {
-  const db = new CourseManagerDb(`sync-repair-${crypto.randomUUID()}`);
+  const db = new DaymarkDb(`sync-repair-${crypto.randomUUID()}`);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
-  const manager = new CourseManager(repo);
+  const manager = new Daymark(repo);
   const raw = await manager.capture("提交报告");
   const item = await manager.processClearCapture(raw.id);
   expect(item).toBeTruthy();
@@ -244,10 +244,10 @@ it("repairs an ACTION_REQUIRED edit with current local data and a new idempotenc
 });
 
 it("abandons an expired Undo only by accepting synced state and preserving repair provenance", async () => {
-  const db = new CourseManagerDb(`sync-abandon-${crypto.randomUUID()}`);
+  const db = new DaymarkDb(`sync-abandon-${crypto.randomUUID()}`);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
-  const manager = new CourseManager(repo);
+  const manager = new Daymark(repo);
   const raw = await manager.capture("提交报告");
   const item = await manager.processClearCapture(raw.id);
   expect(item).toBeTruthy();
@@ -302,10 +302,10 @@ it("abandons an expired Undo only by accepting synced state and preserving repai
 });
 
 it("acknowledges a resolved conflict while preserving a later local edit", async () => {
-  const db = new CourseManagerDb(`sync-resolution-${crypto.randomUUID()}`);
+  const db = new DaymarkDb(`sync-resolution-${crypto.randomUUID()}`);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
-  const manager = new CourseManager(repo);
+  const manager = new Daymark(repo);
   const raw = await manager.capture("提交报告");
   const item = await manager.processClearCapture(raw.id);
   expect(item).toBeTruthy();
@@ -349,10 +349,10 @@ it("acknowledges a resolved conflict while preserving a later local edit", async
 });
 
 it("applies a collection envelope atomically and leaves its cursor unchanged on invalid data", async () => {
-  const db = new CourseManagerDb(`sync-collection-${crypto.randomUUID()}`);
+  const db = new DaymarkDb(`sync-collection-${crypto.randomUUID()}`);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
-  const manager = new CourseManager(repo);
+  const manager = new Daymark(repo);
   const course = await manager.createCourse("统计学");
   await repo.bindOwner(ownerId);
   for (const mutation of await repo.pendingMutations())
@@ -422,12 +422,10 @@ it("applies a collection envelope atomically and leaves its cursor unchanged on 
 });
 
 it("accepts a resolved collection conflict without overwriting a later local replacement", async () => {
-  const db = new CourseManagerDb(
-    `sync-collection-resolution-${crypto.randomUUID()}`,
-  );
+  const db = new DaymarkDb(`sync-collection-resolution-${crypto.randomUUID()}`);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
-  const manager = new CourseManager(repo);
+  const manager = new Daymark(repo);
   const course = await manager.createCourse("统计学");
   await repo.bindOwner(ownerId);
   for (const mutation of await repo.pendingMutations())
@@ -502,7 +500,7 @@ it("upgrades a version 2 outbox without dropping unsent capture mutations", asyn
   };
   await legacy.table("outbox_mutations").put(mutation);
   legacy.close();
-  const current = new CourseManagerDb(name);
+  const current = new DaymarkDb(name);
   openDbs.push(current);
   const pending = await new DexieLocalRepository(current).pendingMutations();
   expect(pending).toHaveLength(1);
@@ -514,14 +512,14 @@ it("upgrades a version 2 outbox without dropping unsent capture mutations", asyn
 
 it("applies a remote Semester deletion so switchers drop it", async () => {
   const name = `sync-semester-delete-${crypto.randomUUID()}`;
-  const db = new CourseManagerDb(name);
+  const db = new DaymarkDb(name);
   openDbs.push(db);
   const repo = new DexieLocalRepository(db);
   const fixed = {
     now: () => "2026-10-05T08:00:00.000Z",
     id: () => crypto.randomUUID(),
   };
-  const manager = new CourseManager(repo, fixed);
+  const manager = new Daymark(repo, fixed);
   const ownerId = await repo.ownerId();
   const semester = await manager.createSemester(
     "被删学期",

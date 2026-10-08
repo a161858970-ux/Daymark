@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
-import type { Course, Semester } from "@course-manager/domain";
+import type { Course, Semester } from "@daymark/domain";
 import { CourseIndex } from "./CourseIndex.js";
 
 const ownerId = "11111111-1111-4111-8111-111111111111";

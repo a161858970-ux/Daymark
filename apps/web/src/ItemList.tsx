@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Course, Item } from "@course-manager/domain";
+import type { Course, Item } from "@daymark/domain";
 
 interface Props {
   items: Item[];

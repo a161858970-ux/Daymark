@@ -3,13 +3,8 @@ import {
   addCalendarDays,
   buildCalendarMonth,
   calendarItemsForDay,
-} from "@course-manager/domain";
-import type {
-  Course,
-  Item,
-  Semester,
-  SemesterWeek,
-} from "@course-manager/domain";
+} from "@daymark/domain";
+import type { Course, Item, Semester, SemesterWeek } from "@daymark/domain";
 import { CalendarDayView } from "./CalendarDayView.js";
 import { CalendarGrid } from "./CalendarGrid.js";
 import { localDate } from "./timeInputs.js";

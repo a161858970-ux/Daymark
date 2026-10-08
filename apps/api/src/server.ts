@@ -12,8 +12,8 @@ import {
   interpretationRequestSchema,
   itemStatusSchema,
   uuidSchema,
-} from "@course-manager/contracts";
-import { CloudCourseManager, CloudError } from "./db/cloud.js";
+} from "@daymark/contracts";
+import { CloudDaymark, CloudError } from "./db/cloud.js";
 import { CloudSync, syncMutationSchema } from "./db/sync.js";
 import {
   CloudAcademicManager,
@@ -37,7 +37,7 @@ import {
 } from "./db/notifications.js";
 
 export interface ServerDependencies {
-  cloud: CloudCourseManager;
+  cloud: CloudDaymark;
   sync?: CloudSync;
   academic?: CloudAcademicManager;
   interpretation?: CaptureInterpretationService;

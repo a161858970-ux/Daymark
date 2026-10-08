@@ -10,7 +10,7 @@ import {
   importFailureMessage,
   type CourseImportParser,
 } from "./course-import.js";
-import { CloudCourseManager, type CloudDatabase } from "./cloud.js";
+import { CloudDaymark, type CloudDatabase } from "./cloud.js";
 import { ProviderError } from "../ai/chat-provider.js";
 import { CourseImportParseError } from "../ai/pdf-source.js";
 import { RateLimiter } from "../rateLimit.js";
@@ -41,7 +41,7 @@ async function harness(parser: CourseImportParser, limiter?: RateLimiter) {
         }),
       ),
   };
-  const cloud = new CloudCourseManager(database);
+  const cloud = new CloudDaymark(database);
   const academic = new CloudAcademicManager(database);
   const imports = new CloudCourseImportManager(
     database,

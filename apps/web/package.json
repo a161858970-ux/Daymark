@@ -1,5 +1,5 @@
 {
-  "name": "@course-manager/web",
+  "name": "@daymark/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,10 +10,10 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@course-manager/application": "workspace:*",
-    "@course-manager/contracts": "workspace:*",
-    "@course-manager/domain": "workspace:*",
-    "@course-manager/storage": "workspace:*",
+    "@daymark/application": "workspace:*",
+    "@daymark/contracts": "workspace:*",
+    "@daymark/domain": "workspace:*",
+    "@daymark/storage": "workspace:*",
     "@supabase/supabase-js": "^2.116.0",
     "@tauri-apps/api": "^2.12.1",
     "@tauri-apps/plugin-notification": "^2.5.1",

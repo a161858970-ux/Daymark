@@ -1,5 +1,5 @@
 {
-  "name": "@course-manager/storage",
+  "name": "@daymark/storage",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -17,8 +17,8 @@
     "test": "vitest run src"
   },
   "dependencies": {
-    "@course-manager/application": "workspace:*",
-    "@course-manager/domain": "workspace:*",
+    "@daymark/application": "workspace:*",
+    "@daymark/domain": "workspace:*",
     "dexie": "^4.4.6"
   }
 }

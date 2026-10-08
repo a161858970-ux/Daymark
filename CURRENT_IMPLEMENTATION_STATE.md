@@ -155,7 +155,7 @@ Phase 6 的自动证据包括：
 - **现象**：安静时段的提醒永远发不出（`notification_deliveries` 恒 0 行）。**原因**：`deriveReminderSchedule` 用**原始事件时间**判 6 小时窗口，顺延会把提醒推到窗口外，`tick` 随即 CANCELED。**解决**：见 §14，已按顺延后时间判窗并加回归测试（`64cc420`）。
 - **现象**：MSYS bash 里 `taskkill //PID 6160` 报「无效参数」。**原因**：Git Bash 路径转换吃掉了 `/PID`。**解决**：用 `powershell -NoProfile -Command "Stop-Process -Id <pid> -Force"`，或加 `MSYS2_ARG_CONV_EXCL='*'`。
 - **现象**：`supabase functions deploy` 报 `unexpected character "P" in variable name near "Project URL"`。**原因**：`.env` 里残留了标签行。**解决**：把无等号的标签行注释掉（L11/L13 已处理）。
-- **Git remote**：`origin = https://github.com/a161858970-ux/course-manager.git`，每轮改动 commit + push；提交前跑密钥正则自检（结果必须 0）。
+- **Git remote**：`origin = https://github.com/a161858970-ux/daymark.git`，每轮改动 commit + push；提交前跑密钥正则自检（结果必须 0）。
 
 ### 当前风险与需要总控提供的输入
 
@@ -255,7 +255,7 @@ Phase 6 的自动证据包括：
 - **登录 UI** `apps/web/src/auth/SignInPanel.tsx`：PRIMARY 手机号验证码 → SECONDARY Google → TERTIARY 邮箱（验证码 / 密码 / 忘记密码），第一屏不平铺五个按钮。
 - **身份管理 UI** `apps/web/src/auth/AccountIdentities.tsx`：登录方式列表（已验证 / 未验证 / 未绑定）、绑定与验证、设置/修改密码、忘记密码、解除绑定（遵循 Supabase ≥2 identity 约束，保住最后一条登录路径）。
 - **接线**：`authSync.ts` 导出 `authAdapter` 并移除旧魔法链接入口 `sendSignInLink`；`AccountControl.tsx` 登录态改为 `AuthAccount`，并把 OAuth / recovery 回跳错误（如 `identity_already_exists`）一次性提示后清理 URL。
-- **数据库变更**：无；密码、哈希、凭据从不进入 Course Manager 数据库。
+- **数据库变更**：无；密码、哈希、凭据从不进入 Daymark 数据库。
 - **文档**：`docs/AUTH_REAL_VALIDATION.md`（架构、改动文件、Supabase Dashboard 配置清单、12 项真实验收表、OTP 安全矩阵、已知限制）；`README.md` 登录描述已更新。
 
 ### VERIFIED LOCAL
@@ -307,7 +307,7 @@ Phase 6 的自动证据包括：
 - **安静时段顺延缺陷（2026-09-29 D5 验收发现并修复 `64cc420`）**：`deriveReminderSchedule` 原本用**原始事件时间**过滤 `[now-6h, now+14d]` 窗口，而安静时段会把提醒**向后顺延**——凌晨 00:06 的提醒在 06:06 之后即被判"过期"，`tick` 随即把 PENDING 记录 CANCELED，**08:00 时已无记录可发** ⇒ 顺延语义在设计上必然失效（D5 首轮 0 认领即为此）。修复：按**顺延后**的时间判窗 + 48h 下限（对齐 `nextAllowedTime` 硬上限），回归测试 2 条。
 - **环境坑（复发会再踩）**：① API 进程曾挂在 Hermes 会话下，会话中断/关闭 Hermes 被 SIGTERM → 前端红色「稍后重试」（连踩 4 次），**先查 3100**；
   **2026-09-29 已根治**：改用独立窗口启动（`%TEMP%\start-cm-api.cmd`，PowerShell `Start-Process -WindowStyle Minimized`），
-  关闭 Hermes 不再影响；**唯一禁忌是别关任务栏那个 `CourseManager API` 小窗口**（关了才停），且 D5 这类隔夜验收依赖它常驻；② `scripts/test-real-postgres.mjs` 在 `npm_execpath=pnpm.exe` 时被 Node 当 JS 执行而崩溃，已修复；③ **持久化类验收必须用普通窗口**——无痕窗口关窗即清空（浏览器行为，非产品缺陷）。
+  关闭 Hermes 不再影响；**唯一禁忌是别关任务栏那个 `Daymark API` 小窗口**（关了才停），且 D5 这类隔夜验收依赖它常驻；② `scripts/test-real-postgres.mjs` 在 `npm_execpath=pnpm.exe` 时被 Node 当 JS 执行而崩溃，已修复；③ **持久化类验收必须用普通窗口**——无痕窗口关窗即清空（浏览器行为，非产品缺陷）。
 
 ## 14. 本会话结项与 Handoff（2026-09-29）
 
@@ -429,13 +429,13 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 
 - 手机通知复测（O-4，2026-09-30）结束后**已还原**：`main.ts` 的 `listen host` 回到 `127.0.0.1`（本轮改动随 O-4 一并提交）、Web 按默认 `vite --host 127.0.0.1` 启动。
 - 还原后核验：`127.0.0.1:3100/api/v1/health` → 200、`127.0.0.1:5173` → 200；`10.11.152.182:3100/5173` **均拒绝连接**（局域网暴露已关闭）。
-- API 由原自动重启窗口（`%TEMP%\start-cm-api.cmd`，标题 CourseManager API）承载；Web 当前由本次会话的后台进程承载，若其退出用 `pnpm --filter @course-manager/web dev` 拉起。
+- API 由原自动重启窗口（`%TEMP%\start-cm-api.cmd`，标题 Daymark API）承载；Web 当前由本次会话的后台进程承载，若其退出用 `pnpm --filter @daymark/web dev` 拉起。
 
 ## 18. Tauri 桌面壳与账户换绑修复（2026-10-06）
 
 ### 生产环境（阶段 1，已交付，此前只在会话记录里）
 
-- API 生产地址 `https://api.daymark.top`（香港 VPS `206.187.209.142`：Ubuntu 24.04 + systemd `cm-api` + Caddy 反代 127.0.0.1:3100 + Let's Encrypt 自动续期 + ufw 22/80/443）；健康检查 `/api/v1/health`。部署方式：服务器 `/opt/daymark/course-manager` 里 `git pull` + `pnpm --filter @course-manager/api build` + `systemctl restart cm-api`。SSH 免密密钥 `~/.ssh/id_ed25519_daymark2`（先用密码登录开启 `sshd_config.d/99-daymark.conf` 的公钥开关）。
+- API 生产地址 `https://api.daymark.top`（香港 VPS `206.187.209.142`：Ubuntu 24.04 + systemd `cm-api` + Caddy 反代 127.0.0.1:3100 + Let's Encrypt 自动续期 + ufw 22/80/443）；健康检查 `/api/v1/health`。部署方式：服务器 `/opt/daymark/daymark` 里 `git pull` + `pnpm --filter @daymark/api build` + `systemctl restart cm-api`。SSH 免密密钥 `~/.ssh/id_ed25519_daymark2`（先用密码登录开启 `sshd_config.d/99-daymark.conf` 的公钥开关）。
 - 域名 `daymark.top` 托管在 NameSilo 自带 DNS（`api.` 子域 A 记录指服务器）；根域/`www` 仍停放页，留作官网。Caddy 已开访问日志：`/var/log/caddy/access.log`。
 - 用户命名：中文「拾序」/ 英文「Daymark」（exe/安装器/窗口标题统一）。
 
@@ -464,7 +464,7 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 
 ### 设计（结构级，不是补丁）
 
-- **一个账号一个 IndexedDB**：`<bootstrap名>::owner::<uuid>`（真实应用即 `course-manager::owner::<auth.users.id>`）。换账号 = 换指针（`activateOwner()`），上一个账号的行、发件箱、冲突、**同步游标**原封不动留在自己的库里——看不见、不动、也不需要解锁。
+- **一个账号一个 IndexedDB**：`<bootstrap名>::owner::<uuid>`（真实应用即 `daymark::owner::<auth.users.id>`）。换账号 = 换指针（`activateOwner()`），上一个账号的行、发件箱、冲突、**同步游标**原封不动留在自己的库里——看不见、不动、也不需要解锁。
 - **共享 bootstrap 库只装"登录前"的行**，由第一个到访的账号**一次性认领**（先写 `bootstrap_claimed_by` 标记再拷贝，崩溃也绝不会把行漏给第二个账号）；替代旧的"谁先登录就盖章给谁"。
 - **当前账号持久化在 localStorage `daymark.active_owner`**，构造函数同步恢复 → 启动即开对库，无空窗。
 - `bindOwner` 的抛错保留，但语义降级为**库内部不变量守卫**（同一库绑定过别人+有数据=程序 bug 才可能触发），正常换账号流程永远走不到 → 界面上的锁**彻底消失**。
@@ -550,7 +550,7 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 
 ## 22. 正式发布 v0.1.0（2026-10-07，A→B→C 收工计划的 A 步）
 
-- **GitHub Release**：https://github.com/a161858970-ux/course-manager/releases/tag/v0.1.0（tag `v0.1.0` 已推；资产 exe 1.67MB + universal APK 19.78MB，服务端回读字节数与本地一致，SHA-256 前 16 位记录在 docs/FINAL_RELEASE_VALIDATION.md §H）。
+- **GitHub Release**：https://github.com/a161858970-ux/daymark/releases/tag/v0.1.0（tag `v0.1.0` 已推；资产 exe 1.67MB + universal APK 19.78MB，服务端回读字节数与本地一致，SHA-256 前 16 位记录在 docs/FINAL_RELEASE_VALIDATION.md §H）。
 - **发版门控**：format:check/lint/typecheck/build 全 0 + 全量 282 passed + 1 skipped。
 - **`.prettierignore`**：加 `src-tauri/gen/android/app/build/`——安卓构建产物每次都会把 `format:check` 打成 1（发版时发现，已根治）。
 - **收工计划（用户拍板顺序）**：A 发版 ✅ → **B 阶段 4 Google 登录接回**（需 Supabase 后台 Site URL/回跳白名单 + 壳内回调机制）→ **C 遗留清单清尾**（#9 返回手势、#10 裸按钮审计、托盘拍板、Clash DIRECT、O-4 通知待定等）→ 全部收工。
@@ -558,7 +558,7 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 ## 23. C 遗留清尾计划（2026-10-07，用户拍板后定稿）
 
 - **拍板结果**：C1 系统托盘 **做**（常驻+关窗最小化+托盘菜单）；C2 时间"无时间"出口 **维持现状**（记为已知行为）；C3 O-4 安卓通知 **做**（查根因并实现）；B2 裸按钮审计 **删除**（用户在真实使用中发现后再说）；C4 Clash 规则待用户理解后再定；C5 无边框窗口拖拽/四边缩放手感 = 用户 30 秒实测项。
-- **执行序**：A1 文档对账 → A2 服务器模型钉查（**进行中**：SSH 22 持续 banner 失败 3/3，服务器 .env 疑似从模板抄了 `AI_MODEL=mimo-v2.6-flash`（文本路 724s 超时）——仓库侧 `.env.example` 已钉正为 pro；服务器侧待 SSH 恢复自修，或用户走椰子云 web 控制台粘贴幂等命令 `sed -i 's/^AI_MODEL=.*/AI_MODEL=mimo-v2.6-pro/' /opt/daymark/course-manager/.env && systemctl restart cm-api` → A3 SSH 探测 → C1 托盘（桌面）→ B1 安卓返回手势（浮层逐层关，根页面回后台）→ B3+C3 通知（点击回前台+根因）→ 门控+双端重打 → 用户集中验收 → A4 Release 最终刷新 → 收工。
+- **执行序**：A1 文档对账 → A2 服务器模型钉查（**进行中**：SSH 22 持续 banner 失败 3/3，服务器 .env 疑似从模板抄了 `AI_MODEL=mimo-v2.6-flash`（文本路 724s 超时）——仓库侧 `.env.example` 已钉正为 pro；服务器侧待 SSH 恢复自修，或用户走椰子云 web 控制台粘贴幂等命令 `sed -i 's/^AI_MODEL=.*/AI_MODEL=mimo-v2.6-pro/' /opt/daymark/daymark/.env && systemctl restart cm-api` → A3 SSH 探测 → C1 托盘（桌面）→ B1 安卓返回手势（浮层逐层关，根页面回后台）→ B3+C3 通知（点击回前台+根因）→ 门控+双端重打 → 用户集中验收 → A4 Release 最终刷新 → 收工。
 
 ### §23 附：通知"无事发生"诊断（2026-10-07 23:15，代码实读定案）
 

@@ -7,9 +7,9 @@ import {
   dateOnlySchema,
   isoDateTimeSchema,
   uuidSchema,
-} from "@course-manager/contracts";
+} from "@daymark/contracts";
 import {
-  CloudCourseManager,
+  CloudDaymark,
   CloudError,
   type CloudDatabase,
   type QueryPort,
@@ -104,10 +104,10 @@ async function insertLog(
 
 /** Sync creates retain client UUIDs. Authentication, not changed_fields.owner_id, defines ownership. */
 export class CloudSync {
-  private readonly items: CloudCourseManager;
+  private readonly items: CloudDaymark;
   private readonly collections: CloudCollectionSync;
   constructor(private readonly db: CloudDatabase) {
-    this.items = new CloudCourseManager(db);
+    this.items = new CloudDaymark(db);
     this.collections = new CloudCollectionSync(db);
   }
 

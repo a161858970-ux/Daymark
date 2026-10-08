@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { expect, it } from "vitest";
 import { buildServer } from "../server.js";
-import { CloudCourseManager, type CloudDatabase } from "../db/cloud.js";
+import { CloudDaymark, type CloudDatabase } from "../db/cloud.js";
 import {
   CaptureInterpretationService,
   type InterpretationProvider,
@@ -27,7 +27,7 @@ it("interprets only unresolved captures owned by the caller and never creates It
         work({ query: async (sql, params) => tx.query(sql, params) }),
       ),
   };
-  const cloud = new CloudCourseManager(port);
+  const cloud = new CloudDaymark(port);
   let calls = 0;
   let providerValue: unknown = null;
   let providerFails = false;

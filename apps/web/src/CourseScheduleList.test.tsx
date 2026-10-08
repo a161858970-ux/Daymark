@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
-import type { CourseSchedule } from "@course-manager/domain";
+import type { CourseSchedule } from "@daymark/domain";
 import {
   CourseScheduleList,
   buildScheduleReplace,

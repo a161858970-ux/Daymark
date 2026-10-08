@@ -1,5 +1,5 @@
 {
-  "name": "@course-manager/contracts",
+  "name": "@daymark/contracts",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -17,7 +17,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@course-manager/domain": "workspace:*",
+    "@daymark/domain": "workspace:*",
     "zod": "^4.6.5"
   }
 }

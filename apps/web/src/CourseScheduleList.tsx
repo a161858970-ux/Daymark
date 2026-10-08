@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import type { CourseSchedule } from "@course-manager/domain";
+import type { CourseSchedule } from "@daymark/domain";
 import { DateTimeField } from "./DateTimeField.js";
 import { SelectField } from "./SelectField.js";
 import { toUserMessage } from "./errors.js";

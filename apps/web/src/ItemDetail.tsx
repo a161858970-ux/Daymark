@@ -4,7 +4,7 @@ import type {
   Item,
   ItemAssociation,
   RawCapture,
-} from "@course-manager/domain";
+} from "@daymark/domain";
 import { ItemEditForm, type EditableItemFields } from "./ItemEditForm.js";
 import { ItemDetailView } from "./ItemDetailView.js";
 import { motionDuration, useExitTransition } from "./motion.js";

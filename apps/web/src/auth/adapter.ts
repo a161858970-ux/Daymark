@@ -12,7 +12,7 @@
  * existing sync worker already binds local data to.
  *
  * All calls delegate to Supabase Auth (no password, hash or credential is
- * ever stored by Course Manager) and every failure is translated by
+ * ever stored by Daymark) and every failure is translated by
  * `toAuthUiError` so provider internals never reach the UI.
  */
 
@@ -498,7 +498,7 @@ export function createAuthAdapter(client: AuthClientLike): AuthAdapter {
 
     canUnlink(identities) {
       // Supabase Auth requires at least two linked identities to unlink one;
-      // Course Manager additionally must never remove the last login path.
+      // Daymark additionally must never remove the last login path.
       return identities.length >= 2;
     },
 

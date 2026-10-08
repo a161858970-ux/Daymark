@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
-import type { Course, CourseInformation, Item } from "@course-manager/domain";
+import type { Course, CourseInformation, Item } from "@daymark/domain";
 import { SearchResultGroups, SearchSurface } from "./SearchSurface.js";
 
 const base = {

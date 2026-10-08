@@ -1,6 +1,6 @@
 import type { Course, CourseInformation, Item } from "./entities.js";
 
-export interface CourseManagerSearchResults {
+export interface DaymarkSearchResults {
   items: Item[];
   courses: Course[];
   courseInformation: CourseInformation[];
@@ -18,14 +18,14 @@ function contains(value: string | null, query: string): boolean {
  * Deterministic local keyword matching. Results preserve source order and are
  * grouped by object type; there is no inferred relevance or AI ranking.
  */
-export function searchCourseManagerRecords(
+export function searchDaymarkRecords(
   query: string,
   records: {
     items: readonly Item[];
     courses: readonly Course[];
     courseInformation: readonly CourseInformation[];
   },
-): CourseManagerSearchResults {
+): DaymarkSearchResults {
   const needle = normalized(query.trim());
   if (!needle) return { items: [], courses: [], courseInformation: [] };
   return {

@@ -44,14 +44,14 @@ export function AppNavigation({
 }) {
   return (
     <nav className="main-nav" aria-label="主导航">
-      <div className="brand" aria-label="课程与事项">
+      <div className="brand" aria-label="拾序">
         <span className="brand-mark" aria-hidden="true">
           <i />
           <i />
         </span>
         <span>
-          <strong>课程与事项</strong>
-          <small>COURSE MANAGER</small>
+          <strong>拾序</strong>
+          <small>DAYMARK</small>
         </span>
       </div>
       <div className="nav-primary">

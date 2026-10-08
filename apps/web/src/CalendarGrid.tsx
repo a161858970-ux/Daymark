@@ -5,7 +5,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import type { CalendarWeekRow, Item } from "@course-manager/domain";
+import type { CalendarWeekRow, Item } from "@daymark/domain";
 import { motionDuration } from "./motion.js";
 
 interface Props {

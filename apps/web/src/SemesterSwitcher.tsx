@@ -1,4 +1,4 @@
-import type { Semester } from "@course-manager/domain";
+import type { Semester } from "@daymark/domain";
 import { SelectField } from "./SelectField.js";
 
 interface Props {

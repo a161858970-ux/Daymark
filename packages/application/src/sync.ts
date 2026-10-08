@@ -1,4 +1,4 @@
-import type { OutboxMutation, SyncEntityType } from "@course-manager/domain";
+import type { OutboxMutation, SyncEntityType } from "@daymark/domain";
 
 export interface ActionRequiredSyncIssue {
   mutation: OutboxMutation;

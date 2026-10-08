@@ -1,13 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Daymark",
-  "version": "0.1.3",
+  "productName": "拾序",
+  "version": "0.1.4",
   "identifier": "com.daymark.desktop",
   "build": {
     "frontendDist": "../apps/web/dist",
     "devUrl": "http://127.0.0.1:5173",
-    "beforeDevCommand": "pnpm --filter @course-manager/web dev",
-    "beforeBuildCommand": "pnpm --filter @course-manager/web build"
+    "beforeDevCommand": "pnpm --filter @daymark/web dev",
+    "beforeBuildCommand": "pnpm --filter @daymark/web build"
   },
   "app": {
     "windows": [

@@ -4,14 +4,10 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { expect, it } from "vitest";
-import {
-  CourseManager,
-  SyncWorker,
-  type SyncTransport,
-} from "@course-manager/application";
-import { CourseManagerDb, DexieLocalRepository } from "@course-manager/storage";
+import { Daymark, SyncWorker, type SyncTransport } from "@daymark/application";
+import { DaymarkDb, DexieLocalRepository } from "@daymark/storage";
 import { buildServer } from "../server.js";
-import { CloudCourseManager, type CloudDatabase } from "./cloud.js";
+import { CloudDaymark, type CloudDatabase } from "./cloud.js";
 import { CloudSync } from "./sync.js";
 import { CloudConflictManager } from "./conflicts.js";
 
@@ -38,7 +34,7 @@ it("round-trips local capture through authenticated API without changing Item id
       ),
   };
   const server = buildServer({
-    cloud: new CloudCourseManager(port),
+    cloud: new CloudDaymark(port),
     sync: new CloudSync(port),
     conflicts: new CloudConflictManager(port),
     verifyToken: async (token) =>
@@ -48,9 +44,9 @@ it("round-trips local capture through authenticated API without changing Item id
           ? "22222222-2222-4222-8222-222222222222"
           : null,
   });
-  const local = new CourseManagerDb(`sync-roundtrip-${randomUUID()}`);
+  const local = new DaymarkDb(`sync-roundtrip-${randomUUID()}`);
   const repo = new DexieLocalRepository(local);
-  const manager = new CourseManager(repo);
+  const manager = new Daymark(repo);
   try {
     const semester = await manager.createSemester(
       "2026 秋季学期",

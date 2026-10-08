@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { Course, CourseInformation, Item } from "./entities.js";
-import { searchCourseManagerRecords } from "./search.js";
+import { searchDaymarkRecords } from "./search.js";
 
 const base = {
   owner_id: "owner",
@@ -41,7 +41,7 @@ const information: CourseInformation = {
 
 it("matches local records by keyword without inventing a ranked result order", () => {
   const secondItem = { ...item, id: "second", title: "ppt 复习提纲" };
-  const results = searchCourseManagerRecords("ＰＰＴ", {
+  const results = searchDaymarkRecords("ＰＰＴ", {
     items: [item, secondItem],
     courses: [course],
     courseInformation: [information],
@@ -55,14 +55,14 @@ it("matches local records by keyword without inventing a ranked result order", (
 
 it("matches secondary readable fields and excludes deleted records", () => {
   expect(
-    searchCourseManagerRecords("林老师", {
+    searchDaymarkRecords("林老师", {
       items: [],
       courses: [course],
       courseInformation: [],
     }).courses,
   ).toEqual([course]);
   expect(
-    searchCourseManagerRecords("第五章", {
+    searchDaymarkRecords("第五章", {
       items: [{ ...item, deleted_at: "2026-09-02T00:00:00.000Z" }],
       courses: [],
       courseInformation: [],

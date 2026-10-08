@@ -4,19 +4,15 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, expect, it } from "vitest";
-import {
-  CourseManager,
-  SyncWorker,
-  type SyncTransport,
-} from "@course-manager/application";
-import { CourseManagerDb, DexieLocalRepository } from "@course-manager/storage";
+import { Daymark, SyncWorker, type SyncTransport } from "@daymark/application";
+import { DaymarkDb, DexieLocalRepository } from "@daymark/storage";
 import { buildServer } from "../server.js";
-import { CloudCourseManager, type CloudDatabase } from "./cloud.js";
+import { CloudDaymark, type CloudDatabase } from "./cloud.js";
 import { CloudConflictManager } from "./conflicts.js";
 import { CloudSync } from "./sync.js";
 
 const owner = "11111111-1111-4111-8111-111111111111";
-const localDbs: CourseManagerDb[] = [];
+const localDbs: DaymarkDb[] = [];
 
 afterEach(async () => {
   for (const db of localDbs.splice(0)) {
@@ -46,7 +42,7 @@ async function harness() {
   };
   const conflicts = new CloudConflictManager(port);
   const server = buildServer({
-    cloud: new CloudCourseManager(port),
+    cloud: new CloudDaymark(port),
     sync: new CloudSync(port),
     conflicts,
     verifyToken: async () => owner,
@@ -84,13 +80,13 @@ async function harness() {
     },
   });
   const local = () => {
-    const db = new CourseManagerDb(`device-${randomUUID()}`);
+    const db = new DaymarkDb(`device-${randomUUID()}`);
     localDbs.push(db);
     const repo = new DexieLocalRepository(db);
     return {
       db,
       repo,
-      manager: new CourseManager(repo),
+      manager: new Daymark(repo),
       worker: new SyncWorker(repo, transport()),
     };
   };

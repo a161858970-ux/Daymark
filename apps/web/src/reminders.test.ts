@@ -1,13 +1,13 @@
 import { expect, it } from "vitest";
-import type { Item } from "@course-manager/domain";
-import type { ReminderEvent } from "@course-manager/application";
+import type { Item } from "@daymark/domain";
+import type { ReminderEvent } from "@daymark/application";
 import {
   BrowserNotificationAdapter,
   ReminderScheduler,
   WebReminderDeliveryPort,
   loadReminderPolicy,
 } from "./reminders.js";
-import type { LocalReminderRecord } from "@course-manager/application";
+import type { LocalReminderRecord } from "@daymark/application";
 
 const item: Item = {
   id: "11111111-1111-4111-8111-111111111111",

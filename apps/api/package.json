@@ -1,5 +1,5 @@
 {
-  "name": "@course-manager/api",
+  "name": "@daymark/api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,9 +13,9 @@
     "db:seed": "node dist/db/seed.js"
   },
   "dependencies": {
-    "@course-manager/application": "workspace:*",
-    "@course-manager/contracts": "workspace:*",
-    "@course-manager/domain": "workspace:*",
+    "@daymark/application": "workspace:*",
+    "@daymark/contracts": "workspace:*",
+    "@daymark/domain": "workspace:*",
     "@fastify/cors": "^11.3.0",
     "@napi-rs/canvas": "^1.0.9",
     "fastify": "^5.12.5",
@@ -25,7 +25,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@course-manager/storage": "workspace:*",
+    "@daymark/storage": "workspace:*",
     "@electric-sql/pglite": "^0.5.8",
     "@types/pg": "^8.23.1",
     "tsx": "^4.23.15"

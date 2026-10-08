@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { Course, Item } from "@course-manager/domain";
+import type { Course, Item } from "@daymark/domain";
 import { changedItemFields } from "./itemEditDiff.js";
 import { SelectField } from "./SelectField.js";
 import { TimeBlock } from "./TimeBlock.js";

@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
-import type { CourseImportJob } from "@course-manager/contracts";
+import type { CourseImportJob } from "@daymark/contracts";
 import {
   CourseImportReview,
   committedMessage,

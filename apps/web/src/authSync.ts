@@ -5,9 +5,9 @@ import {
   interpretationSchema,
   type CaptureInterpretation,
   type ConflictResolution,
-} from "@course-manager/contracts";
-import type { ActionRequiredSyncIssue } from "@course-manager/application";
-import { OwnerBindingError } from "@course-manager/storage";
+} from "@daymark/contracts";
+import type { ActionRequiredSyncIssue } from "@daymark/application";
+import { OwnerBindingError } from "@daymark/storage";
 import { createSyncWorker, localRepository } from "./services.js";
 import { HttpSyncTransport, type ConflictDetail } from "./syncTransport.js";
 import { apiBase } from "./apiBase.js";
@@ -39,7 +39,7 @@ export async function currentAccessToken(): Promise<string | null> {
   return data.session.access_token;
 }
 
-export type { CaptureInterpretation } from "@course-manager/contracts";
+export type { CaptureInterpretation } from "@daymark/contracts";
 
 export async function synchronizeAuthenticatedData(): Promise<string> {
   if (!authClient) throw new Error("请先配置账户同步，再导入课程表。");

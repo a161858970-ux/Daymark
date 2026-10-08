@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
-import type { Semester, SemesterWeek } from "@course-manager/domain";
+import type { Semester, SemesterWeek } from "@daymark/domain";
 import { SemesterWeekEditor } from "./SemesterWeekEditor.js";
 
 const semester: Semester = {
