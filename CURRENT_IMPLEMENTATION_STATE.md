@@ -585,6 +585,6 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 - **签名**：私钥 `E:\devtools\tauri-keys\daymark.key`（**永不入库、丢失=旧装机无法再更新**），构建需 `TAURI_SIGNING_PRIVATE_KEY` 环境变量；公钥已入 tauri.conf。
 - **一键发布**：`uv run --with paramiko python scripts/publish_release.py --notes "..."`（验签→清单→SFTP 服务器→挪 tag→替换 Release 资产→回读）。
 - **引导装机（bootstrap）**：0.1.0 旧装机没有 updater 代码，**首次升级需手动装一次**（此后热更新生效）。
-- **排队（用户点名）**：首次启动权限引导专项——配合通知授权一次性引导 电池优化豁免/精确闹钟/自启动（各厂商差异适配），替代"教用户翻 MIUI 设置"。
+- **首启权限引导（已实施 2026-10-08）**：`FirstLaunchGuide` 仅安卓、一次性（localStorage 标记）；打开即自动弹通知授权，卡片四行（通知状态/电池豁免/精确闹钟/自启动+MIUI 指引）每行一键开系统页（`android_open_settings`：battery/exact_alarm/app_details）；Manifest + `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`/`SCHEDULE_EXACT_ALARM`；系统一次只能开一个设置页 → 其余项用按钮而非连环自动弹（连环全屏 intent 会互相掩埋）；桌面零渲染（gate 纯函数+4 测试）。
 - **E2E 实测（2026-10-08，CDP 直连真机壳）**：卡片渲染 ✓ → 下载启动 ✓ → 验签执行 ✓ → **版本绑定防篡改**生效（清单谎报 0.1.2/产物签 0.1.1 被正确拒绝：`signed for version 0.1.1 but announced 0.1.2`）→ 同版本负控不弹卡 ✓。
 - **两个实战坑**：① 嵌套 effect——App.tsx 补丁锚点落进别的 effect 内部 → `Invalid hook call` → 卡片永不出现；补丁后必须确认 effect 在组件顶层。② 裸 invoke 探针必须用 **snake_case**（`plugin:app|version`），camelCase 会报 `Command not found` 误判成 ACL 坏。
