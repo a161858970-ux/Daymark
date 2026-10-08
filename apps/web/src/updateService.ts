@@ -1,6 +1,7 @@
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { invoke } from "@tauri-apps/api/core";
 import { sendNotification } from "@tauri-apps/plugin-notification";
+import { cacheDir, join } from "@tauri-apps/api/path";
 import { isAndroid, isTauri } from "./apiBase.js";
 
 /**
@@ -94,12 +95,24 @@ export async function installUpdate(info: UpdateInfo): Promise<void> {
     // being backgrounded, and the update card can close immediately so
     // the user keeps working. Completion posts a tappable notification
     // ("下载完成，点按安装") which routes to the system installer.
-    const started = await invoke<{ id: string }>("android_start_update", {
-      url: info.androidUrl,
-      fileName: UPDATE_APK_NAME,
-    });
-    void watchUpdateDownload(started.id);
-    return;
+    try {
+      const started = await invoke<{ id: string }>("android_start_update", {
+        url: info.androidUrl,
+        fileName: UPDATE_APK_NAME,
+      });
+      void watchUpdateDownload(started.id);
+      return;
+    } catch {
+      // DownloadManager rejected the request (OEM/path quirks) → fall
+      // back to the direct download-and-install flow so an update can
+      // never deadlock behind a downloader failure.
+      const dest = await join(await cacheDir(), UPDATE_APK_NAME);
+      await invoke("android_install_apk", {
+        url: info.androidUrl,
+        destPath: dest,
+      });
+      return;
+    }
   }
   throw new Error("没有可安装的更新");
 }

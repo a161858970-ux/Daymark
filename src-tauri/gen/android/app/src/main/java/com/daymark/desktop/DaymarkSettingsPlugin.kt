@@ -144,15 +144,18 @@ class DaymarkSettingsPlugin(private val activity: Activity) : Plugin(activity) {
   fun startUpdateDownload(invoke: Invoke) {
     val args = invoke.parseArgs(StartDownloadArgs::class.java)
     try {
-      val dm = activity.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-      val dest = File(activity.cacheDir, args.fileName)
+      // DownloadManager refuses app-internal paths ("Unsupported path"
+      // for /data/data/...); the app-specific EXTERNAL dir is the
+      // sanctioned destination and needs no storage permission.
+      val dest = updateFile(args.fileName)
       if (dest.exists()) dest.delete()
+      val dm = activity.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
       val request = DownloadManager.Request(Uri.parse(args.url)).apply {
         setMimeType("application/vnd.android.package.archive")
         setTitle("拾序更新")
         setDescription("正在下载新版本…")
         setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-        setDestinationUri(Uri.fromFile(dest))
+        setDestinationInExternalFilesDir(activity, UPDATE_DIR_TYPE, args.fileName)
       }
       val id = dm.enqueue(request)
       lastUpdateFileName = args.fileName
@@ -203,12 +206,20 @@ class DaymarkSettingsPlugin(private val activity: Activity) : Plugin(activity) {
   @Command
   fun openUpdateInstaller(invoke: Invoke) {
     val fileName = lastUpdateFileName ?: DEFAULT_UPDATE_FILE_NAME
-    val error = fireInstaller(File(activity.cacheDir, fileName))
+    val error = fireInstaller(updateFile(fileName))
     if (error != null) invoke.reject(error) else invoke.resolve()
+  }
+
+  /** Canonical on-disk location for the update package — the SAME place
+   *  DownloadManager writes it, so the notification tap always finds it. */
+  private fun updateFile(fileName: String): File {
+    val dir = activity.getExternalFilesDir(UPDATE_DIR_TYPE) ?: activity.cacheDir
+    return File(dir, fileName)
   }
 
   companion object {
     private const val DEFAULT_UPDATE_FILE_NAME = "daymark-update.apk"
+    private const val UPDATE_DIR_TYPE = "update"
     private var lastUpdateFileName: String? = null
   }
 }
