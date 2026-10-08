@@ -9,6 +9,14 @@ import { AuthUiError } from "./errors.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Last-known identities per user, kept OUTSIDE React state so reopening
+ * the account section renders the real binding status instantly instead
+ * of flashing "未绑定" while the async list resolves. First open shows a
+ * neutral "读取中…" — never a wrong status.
+ */
+const identityCache = new Map<string, AuthIdentityView[]>();
+
 type RowForm = "phone" | "phone-code" | "email" | "email-code" | "password";
 
 /**
@@ -27,7 +35,9 @@ export function AccountIdentities({
   adapter: AuthAdapter | null;
   account: AuthAccount | null;
 }) {
-  const [identities, setIdentities] = useState<AuthIdentityView[]>([]);
+  const [identities, setIdentities] = useState<AuthIdentityView[] | null>(
+    () => (account ? identityCache.get(account.userId) : undefined) ?? null,
+  );
   const [form, setForm] = useState<RowForm | null>(null);
   // Same China-only decision as the sign-in panel: fixed +86, no picker.
   const countryCode = DEFAULT_PHONE_COUNTRY;
@@ -40,13 +50,17 @@ export function AccountIdentities({
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
-    if (!adapter) return;
+    if (!adapter || !account) return;
     try {
-      setIdentities(await adapter.listIdentities());
+      const list = await adapter.listIdentities();
+      identityCache.set(account.userId, list);
+      setIdentities(list);
     } catch {
-      /* listing failures are surfaced on the next action */
+      // Keep the last-known status when a refresh fails; only fall back
+      // to the neutral list if we never had one (surface on next action).
+      setIdentities((previous) => previous ?? []);
     }
-  }, [adapter]);
+  }, [adapter, account]);
 
   useEffect(() => {
     void refresh();
@@ -54,13 +68,13 @@ export function AccountIdentities({
 
   if (!adapter || !account) return null;
 
-  const phoneIdentity = identities.find((value) => value.provider === "phone");
-  const emailIdentity = identities.find((value) => value.provider === "email");
-  const googleIdentity = identities.find(
-    (value) => value.provider === "google",
-  );
+  const loaded = identities !== null;
+  const list = identities ?? [];
+  const phoneIdentity = list.find((value) => value.provider === "phone");
+  const emailIdentity = list.find((value) => value.provider === "email");
+  const googleIdentity = list.find((value) => value.provider === "google");
   const passwordSet = adapter.passwordStatus(account.userId) === "SET";
-  const unlinkAllowed = adapter.canUnlink(identities);
+  const unlinkAllowed = adapter.canUnlink(list);
 
   function fail(error: unknown) {
     setIsError(true);
@@ -220,14 +234,17 @@ export function AccountIdentities({
         <div>
           <strong>手机号</strong>
           <small>
-            {phoneIdentity
-              ? `${formatPhoneDisplay(phoneIdentity.label ?? account.phone ?? "")} · ${phoneIdentity.verified ? "已验证" : "未验证"}`
-              : "未绑定"}
+            {!loaded
+              ? "读取中…"
+              : phoneIdentity
+                ? `${formatPhoneDisplay(phoneIdentity.label ?? account.phone ?? "")} · ${phoneIdentity.verified ? "已验证" : "未验证"}`
+                : "未绑定"}
           </small>
         </div>
         <div className="identity-actions">
-          {!phoneIdentity && bindButton("phone", "绑定手机号")}
-          {phoneIdentity &&
+          {loaded && !phoneIdentity && bindButton("phone", "绑定手机号")}
+          {loaded &&
+            phoneIdentity &&
             !phoneIdentity.verified &&
             bindButton("phone", "完成验证")}
           {unlinkButton("phone", Boolean(phoneIdentity))}
@@ -291,14 +308,17 @@ export function AccountIdentities({
         <div>
           <strong>邮箱</strong>
           <small>
-            {emailIdentity
-              ? `${emailIdentity.label ?? account.email ?? ""} · ${emailIdentity.verified ? "已验证" : "未验证"}`
-              : "未绑定"}
+            {!loaded
+              ? "读取中…"
+              : emailIdentity
+                ? `${emailIdentity.label ?? account.email ?? ""} · ${emailIdentity.verified ? "已验证" : "未验证"}`
+                : "未绑定"}
           </small>
         </div>
         <div className="identity-actions">
-          {!emailIdentity && bindButton("email", "绑定邮箱")}
-          {emailIdentity &&
+          {loaded && !emailIdentity && bindButton("email", "绑定邮箱")}
+          {loaded &&
+            emailIdentity &&
             !emailIdentity.verified &&
             bindButton("email", "完成验证")}
           {unlinkButton("email", Boolean(emailIdentity))}
@@ -359,10 +379,12 @@ export function AccountIdentities({
       <section className="identity-row">
         <div>
           <strong>Google</strong>
-          <small>{googleIdentity ? "已绑定" : "未绑定"}</small>
+          <small>
+            {!loaded ? "读取中…" : googleIdentity ? "已绑定" : "未绑定"}
+          </small>
         </div>
         <div className="identity-actions">
-          {!googleIdentity && (
+          {loaded && !googleIdentity && (
             <button
               type="button"
               disabled={busy || !online}

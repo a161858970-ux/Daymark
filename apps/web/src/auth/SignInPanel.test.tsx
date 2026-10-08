@@ -45,8 +45,11 @@ it("lists every login method with its binding status for a signed-in account", (
   expect(markup).toContain("邮箱");
   expect(markup).toContain("Google");
   expect(markup).toContain("密码");
-  expect(markup).toContain("绑定手机号");
-  expect(markup).toContain("绑定 Google");
+  // First paint never shows a wrong status: the async identity list has
+  // not resolved yet, so rows read 读取中… and NO bind buttons flash in.
+  expect(markup).toContain("读取中");
+  expect(markup).not.toContain("绑定手机号");
+  expect(markup).not.toContain("绑定 Google");
 });
 
 it("shows one China phone field with no country picker or +86 prefix", () => {
