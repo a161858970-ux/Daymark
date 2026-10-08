@@ -266,26 +266,31 @@ export function App() {
       active = false;
     };
   }, [refresh]);
+  // Update check (shell only): desktop goes through the official updater
+  // plugin, Android through the same manifest + custom APK install.
   useEffect(() => {
-    // Update check (shell only): desktop goes through the official updater
-    // plugin, Android through the same manifest + custom APK install.
-    useEffect(() => {
-      if (!isTauri()) return;
-      let alive = true;
-      void (async () => {
-        try {
-          const version = await getVersion();
-          const info = await checkForUpdate(version);
-          if (alive && info) setAvailableUpdate(info);
-        } catch {
-          // Update check is best-effort; a flaky network must not annoy.
-        }
-      })();
-      return () => {
-        alive = false;
-      };
-    }, []);
+    if (!isTauri()) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const version = await getVersion();
+        const info = await checkForUpdate(version);
+        console.info(
+          "[UPDATE_CHECK]",
+          version,
+          info ? `v${info.version}` : "none",
+        );
+        if (alive && info) setAvailableUpdate(info);
+      } catch (cause) {
+        console.error("[UPDATE_CHECK_ERR]", cause);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
+  useEffect(() => {
     const update = () => setOnline(navigator.onLine);
     window.addEventListener("online", update);
     window.addEventListener("offline", update);

@@ -20,13 +20,22 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import glob
 import json
 import os
 import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXE = os.path.join(ROOT, "src-tauri/target/release/bundle/nsis/Daymark_0.1.0_x64-setup.exe")
+# Version in the filename climbs with every bump — glob instead of pinning.
+EXE = (
+    sorted(
+        glob.glob(os.path.join(ROOT, "src-tauri/target/release/bundle/nsis/Daymark_*_x64-setup.exe")),
+        key=os.path.getmtime,
+        reverse=True,
+    )
+    or [""]
+)[0]
 APK = os.path.join(ROOT, "src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk")
 KEY = r"E:\devtools\tauri-keys\daymark.key"
 BASE = "https://api.daymark.top/update"
@@ -44,11 +53,12 @@ def sign_file(path: str) -> str:
     """Return signature file contents, signing on demand if missing."""
     sig_path = path + ".sig"
     if not os.path.exists(sig_path):
-        env = dict(os.environ)
-        env["TAURI_SIGNING_PRIVATE_KEY"] = open(KEY, encoding="utf-8").read()
         cli = r"E:\devtools\tauri-cli-src\tauri-cli-2.12.1\target\release\cargo-tauri.exe"
-        subprocess.run([cli, "signer", "sign", "-k", KEY, path],
-                       check=True, env=env, capture_output=True, timeout=120)
+        # `-k` takes the key CONTENT; `-f` takes the file path.
+        result = subprocess.run([cli, "signer", "sign", "-f", KEY, path],
+                                capture_output=True, timeout=120)
+        if result.returncode != 0:
+            die(f"补签失败 {path}: {result.stderr.decode(errors='replace')[:300]}")
     if not os.path.exists(sig_path):
         die(f"签名缺失: {sig_path}")
     return open(sig_path, encoding="utf-8").read().strip()
@@ -105,8 +115,8 @@ def main() -> int:
     client.connect(SSH_HOST, username=SSH_USER, key_filename=SSH_KEY,
                    timeout=12, banner_timeout=12, auth_timeout=12,
                    look_for_keys=False, allow_agent=False)
+    client.exec_command("mkdir -p /opt/daymark/update")
     sftp = client.open_sftp()
-    sftp.makedirs("/opt/daymark/update")
     for path in (EXE, APK):
         sftp.put(path, f"/opt/daymark/update/{os.path.basename(path)}")
     sftp.put(manifest_path, "/opt/daymark/update/latest.json")
@@ -124,10 +134,16 @@ def main() -> int:
     token = github_token()
     import urllib.request
 
-    def api(url: str, data: bytes | None = None, method: str | None = None) -> tuple[int, object]:
-        req = urllib.request.Request(url, data=data, method=method, headers={
+    def api(url: str, data: bytes | None = None, method: str | None = None,
+            content_type: str | None = None) -> tuple[int, object]:
+        headers = {
             "Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
-            "User-Agent": "daymark-release"})
+            "User-Agent": "daymark-release"}
+        if content_type:
+            # urllib defaults to urlencoded when a body is present; GitHub
+            # rejects that for release assets (422 content_type).
+            headers["Content-Type"] = content_type
+        req = urllib.request.Request(url, data=data, method=method, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=300) as resp:
                 body = resp.read()
@@ -138,13 +154,19 @@ def main() -> int:
     status, rel = api(f"https://api.github.com/repos/a161858970-ux/course-manager/releases/tags/{TAG}")
     if status != 200:
         die(f"读取 release 失败: {status} {rel}")
+    # NOTE: asset deletion answers 301 → urllib would not replay DELETE
+    # through the redirect; curl -L does, and this is the proven path.
     for asset in rel["assets"]:
-        api(f"https://api.github.com/repos/a161858970-ux/course-manager/releases/assets/{asset['id']}",
-            method="DELETE")
+        subprocess.run(
+            ["curl", "-sSL", "-o", os.devnull, "-X", "DELETE",
+             "-H", f"Authorization: Bearer {token}",
+             f"https://api.github.com/repos/a161858970-ux/course-manager/releases/assets/{asset['id']}"],
+            check=False, capture_output=True, timeout=60)
     upload_url = rel["upload_url"].split("{")[0]
     for path in (EXE, APK):
         name = os.path.basename(path)
-        status, resp = api(f"{upload_url}?name={name}", data=open(path, "rb").read(), method="POST")
+        status, resp = api(f"{upload_url}?name={name}", data=open(path, "rb").read(),
+                           method="POST", content_type="application/octet-stream")
         size = resp.get("size") if isinstance(resp, dict) else None
         if status not in (200, 201):
             die(f"上传 {name} 失败: {status} {resp}")
