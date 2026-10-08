@@ -89,6 +89,7 @@ import {
   type UpdateInfo,
 } from "./updateService.js";
 import { UpdateDialog } from "./UpdateDialog.js";
+import { FirstLaunchGuide } from "./FirstLaunchGuide.js";
 import { toUserMessage } from "./errors.js";
 import type { AiTaskKind } from "./aiTaskStore.js";
 import { apiBase, isTauri } from "./apiBase.js";
@@ -926,6 +927,8 @@ export function App() {
           }}
         />
       ) : null}
+      {/* First-launch permission guide — Android only, renders null elsewhere. */}
+      <FirstLaunchGuide />
       <AccountControl
         online={online}
         status={syncStatus}

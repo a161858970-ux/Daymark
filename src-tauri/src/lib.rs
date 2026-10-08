@@ -26,6 +26,65 @@ fn show_main_window(app: &tauri::AppHandle) {
 /// source), so the shell downloads the APK into the app cache (path handed
 /// over by JS via the path plugin) and hands it to the system package
 /// installer through a FileProvider content URI.
+/// First-launch permission guidance: open the system settings surface the
+/// named permission lives on (no OEM API exposes these in-process; each
+/// target is a plain `am start` against a standard Settings action).
+#[tauri::command]
+fn android_open_settings(kind: String) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        const PKG: &str = "com.daymark.desktop";
+        let mut command = std::process::Command::new("am");
+        command.arg("start");
+        match kind.as_str() {
+            // System dialog: "let this app ignore battery optimisations?"
+            "battery" => {
+                command.args([
+                    "-a",
+                    "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+                    "-d",
+                    &format!("package:{PKG}"),
+                ]);
+            }
+            // Alarms & reminders special-access page for this package.
+            "exact_alarm" => {
+                command.args([
+                    "-a",
+                    "android.settings.REQUEST_SCHEDULE_EXACT_ALARM",
+                    "--es",
+                    "android.provider.extra.PACKAGE_NAME",
+                    PKG,
+                ]);
+            }
+            // App details — where MIUI keeps 自启动 + 省电策略 switches.
+            "app_details" => {
+                command.args([
+                    "-a",
+                    "android.settings.APPLICATION_DETAILS_SETTINGS",
+                    "-d",
+                    &format!("package:{PKG}"),
+                ]);
+            }
+            _ => return Err("未知设置项".to_string()),
+        }
+        let output = command
+            .output()
+            .map_err(|e| format!("无法打开设置: {e}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "打开设置失败: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = kind;
+        Err("该设置仅安卓提供".to_string())
+    }
+}
+
 #[tauri::command]
 async fn android_install_apk(url: String, dest_path: String) -> Result<(), String> {
     #[cfg(target_os = "android")]
@@ -87,7 +146,10 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         // pubkey/endpoints come from tauri.conf (plugins.updater) via Config.
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![android_install_apk])
+        .invoke_handler(tauri::generate_handler![
+            android_install_apk,
+            android_open_settings,
+        ])
         .setup(|app| {
             #[cfg(not(mobile))]
             {
