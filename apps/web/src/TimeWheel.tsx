@@ -66,6 +66,13 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
   const touchingRef = useRef(false);
   const nativeScrollRef = useRef(false);
   const settleTimerRef = useRef(0);
+  // The scroll/wheel listeners register once (mount / count change), so the
+  // closures they capture would otherwise keep the FIRST render's onChange —
+  // composing an edit from stale parts (e.g. touching the minute wheel after
+  // the 现在 preset rebuilt time snapped the HOUR back to the original value).
+  // Always call through the latest prop instead.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   const [centerIndex, setCenterIndex] = useState(() =>
     centerIndexFor(value, count),
   );
@@ -74,7 +81,7 @@ export function TimeWheel({ count, value, onChange, label, ariaLabel }: Props) {
     const wrapped = valueFromIndex(index, count);
     if (wrapped !== lastValueRef.current) {
       lastValueRef.current = wrapped;
-      onChange(wrapped);
+      onChangeRef.current(wrapped);
     }
     setCenterIndex((current) => (current === index ? current : index));
   }
