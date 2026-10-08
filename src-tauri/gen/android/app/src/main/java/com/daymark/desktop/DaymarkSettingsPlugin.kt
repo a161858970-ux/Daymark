@@ -119,15 +119,25 @@ class DaymarkSettingsPlugin(private val activity: Activity) : Plugin(activity) {
         setDataAndType(uri, "application/vnd.android.package.archive")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
       }
+      // Resolve the REAL system installer, never an arbitrary app that
+      // merely claims APK mime types (MT Manager and friends registered
+      // VIEW handlers and previously got silently pinned → the install
+      // ran inside a third-party app). Rules: SYSTEM apps only, with any
+      // *packageinstaller* package first; if no system handler exists,
+      // leave the intent unpinned and let the system resolve it.
       @Suppress("DEPRECATION")
-      val handlers =
-        activity.packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
-      val packages = handlers.mapNotNull { it.activityInfo?.packageName }.distinct()
-      val installer = packages.firstOrNull { it.contains("packageinstaller", ignoreCase = true) }
-        ?: packages.firstOrNull {
-          !it.contains("intentresolver", ignoreCase = true) && it != activity.packageName
-        }
-      if (installer != null) intent.setPackage(installer)
+      val handlers = activity.packageManager.queryIntentActivities(intent, 0)
+      val activities = handlers.mapNotNull { it.activityInfo }
+      val isSystem: (android.content.pm.ActivityInfo) -> Boolean = { ai ->
+        val app = ai.applicationInfo
+        app != null && (app.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+      }
+      val installer = activities
+        .firstOrNull { isSystem(it) && it.packageName.contains("packageinstaller", true) }
+        ?: activities.firstOrNull { isSystem(it) }
+      if (installer != null) {
+        intent.setPackage(installer.packageName)
+      }
       try {
         activity.startActivity(intent)
       } catch (notFound: ActivityNotFoundException) {
