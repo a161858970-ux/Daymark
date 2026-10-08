@@ -87,6 +87,14 @@ class DaymarkSettingsPlugin(private val activity: Activity) : Plugin(activity) {
         setDataAndType(uri, "application/vnd.android.package.archive")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
       }
+      // Pin the intent to the default package installer. Without this,
+      // Android 11+ shows the "open with" chooser whenever several apps
+      // claim APK mime types — picking another app (a file manager, WPS…)
+      // makes THAT app the attributed install source instead of us.
+      val installer = intent.resolveActivity(activity.packageManager)
+      if (installer != null) {
+        intent.setPackage(installer.packageName)
+      }
       activity.startActivity(intent)
       invoke.resolve()
     } catch (e: Exception) {
