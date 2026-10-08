@@ -205,7 +205,7 @@ class DaymarkSettingsPlugin(private val activity: Activity) : Plugin(activity) {
         )
         // Integrity: DM's own record vs the bytes actually on disk — a
         // truncated package must read as failed, never as "ready".
-        val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_BYTES_DOWNLOADED))
+        val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
         val fetched = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
         val fileName = lastUpdateFileName ?: DEFAULT_UPDATE_FILE_NAME
         val onDisk = updateFile(fileName).length()
