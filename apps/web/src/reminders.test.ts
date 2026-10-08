@@ -113,15 +113,16 @@ it("claims through the server, acknowledges the delivery and shows it once", asy
   ]);
 });
 
-it("keeps local delivery when the other device holds the lease", async () => {
+it("still delivers locally when the other device holds the lease", async () => {
   const { port, adapter } = harness(() => ({
     claimed: false,
     delivery_id: "delivery-1",
     reason: "LEASED",
   }));
-  // ReminderCoordinator only calls deliver() after a successful claim.
-  await expect(port.claim(event)).resolves.toBe(false);
-  expect(adapter.shown).toHaveLength(0);
+  // 2026-10-08 decision: the claim is telemetry only — both devices notify.
+  await expect(port.claim(event)).resolves.toBe(true);
+  await port.deliver(event);
+  expect(adapter.shown).toHaveLength(1);
 });
 
 it("stays reliable offline: network failure still allows local delivery", async () => {

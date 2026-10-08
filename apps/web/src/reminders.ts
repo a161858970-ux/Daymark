@@ -217,7 +217,11 @@ export class WebReminderDeliveryPort implements ReminderDeliveryPort {
     });
     if (result?.claimed === false) {
       this.claimIds.delete(event.logical_key);
-      return false;
+      // 2026-10-08 product decision (user): BOTH devices must notify. The
+      // server claim stays as bookkeeping/telemetry (the first device owns
+      // the delivery row) but no longer suppresses this device's local show
+      // — each device keeps its own 60-min per-item dedup, so no spam.
+      return true;
     }
     if (typeof result?.delivery_id === "string")
       this.claimIds.set(event.logical_key, result.delivery_id);
