@@ -77,6 +77,12 @@ export interface NotificationAdapter {
   cancel(logicalKey: string): void;
   /** Browsers only allow permission prompts from a user gesture. */
   armPermissionRequest(): void;
+  /**
+   * Hand a FUTURE reminder to the OS so it fires even when the app process
+   * is dead (Android only; desktop plugins ignore scheduling). Same id as
+   * `show` so the OS replaces rather than duplicates.
+   */
+  schedule?(event: ReminderEvent, item: Item): void;
 }
 
 type NotificationCtor = new (

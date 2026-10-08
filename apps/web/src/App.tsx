@@ -276,6 +276,7 @@ export function App() {
         void scheduler?.consume(logicalKey);
         openItemRef.current(item);
       },
+      getItem: (itemId) => localRepository.getItem(itemId),
       notice: (title) =>
         showFeedback({
           message: `提醒：${title}`,
@@ -316,7 +317,27 @@ export function App() {
         new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
         runtime,
       );
-    const tick = () => engine.tick(windowFor());
+    // Every tick also hands FUTURE reminders to the OS (Android): the 15 s
+    // heartbeat only lives as long as the app process, so a killed app would
+    // otherwise never fire — and then dump them all on the next open.
+    const syncScheduled = () => {
+      void (async () => {
+        const records = await localRepository.listReminderRecords();
+        const horizon = Date.now() + 14 * 24 * 60 * 60 * 1000;
+        for (const record of records) {
+          if (record.state !== "PENDING") continue;
+          const due = Date.parse(record.scheduled_for);
+          if (!(due > Date.now() + 5_000 && due <= horizon)) continue;
+          const item = await localRepository.getItem(record.item_id);
+          if (item) adapter.schedule?.(record, item);
+        }
+      })().catch(() => undefined);
+    };
+    const tick = () => {
+      const run = engine.tick(windowFor());
+      syncScheduled();
+      return run;
+    };
     reminderTickRef.current = tick;
     void tick().catch(() => undefined);
     const interval = window.setInterval(
