@@ -1,0 +1,35 @@
+# AGENTS.md — 拾序 Daymark 仓库导览（给接手的 AI agent / 新模型）
+
+**这是什么**：拾序（Daymark）——面向学生的课程事务应用，Windows 桌面（Tauri 2 统一 exe）+ 安卓 APK + 云端 API，数据本地优先、登录后云同步。产品中文名「拾序」、文件/代码侧一律 `daymark`。
+
+**当前阶段**：**发布后维护更新阶段**（2026-10-08 开发阶段收官）。工作模式 = 发现/修复 bug → 小步发版 → 记档，不再有开发期大待办。
+
+## 按需读（职责边界清晰，别把信息塞回这里）
+
+| 你想知道                            | 去哪读                                                                                                                             |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 产品是什么、面向用户怎么介绍        | [`README.md`](README.md)（产品向，含实机截图）                                                                                     |
+| 当前代码事实、历史决策、阶段记录    | [`CURRENT_IMPLEMENTATION_STATE.md`](CURRENT_IMPLEMENTATION_STATE.md)（§25 热更新架构、**§26 本窗口品牌重塑/热更新终局/阶段转换**） |
+| **待修 bug 与遗留事项总账**         | [`docs/POST_RELEASE_BUGS.md`](docs/POST_RELEASE_BUGS.md)（现存待修 PR-00x / 遗留 L-0x / 已修复存档；修复验证后移档）               |
+| **怎么发版、热更新架构、踩坑速查**  | [`docs/HOT_UPDATE_RELEASE.md`](docs/HOT_UPDATE_RELEASE.md)（跨 agent 必读，自包含）                                                |
+| 安卓打包四坑（符号链接/NDK/工具链） | [`docs/ANDROID_APK_BUILD.md`](docs/ANDROID_APK_BUILD.md)                                                                           |
+| 发布验收证据（阶段 A–H）            | [`docs/FINAL_RELEASE_VALIDATION.md`](docs/FINAL_RELEASE_VALIDATION.md)                                                             |
+| AI 调用点/限流/供应商状态           | [`docs/AI_USAGE_MAP.md`](docs/AI_USAGE_MAP.md)                                                                                     |
+| 架构决策记录                        | `docs/ADR-001…009`；规格映射 `IMPLEMENTATION_CONTEXT.md`                                                                           |
+
+## 硬性约定（违反=事故）
+
+1. **门控全 0 才提交**：`pnpm format:check && pnpm lint && pnpm typecheck && pnpm test`（基线 **304+1** 通过）+ `src-tauri` 下 `cargo check` 0 警告。
+2. **每轮改动 commit + push**，中文提交信息；提交前密钥正则自检为 0，`.env` 永不入库；更新签名私钥（`E:\devtools\tauri-keys\daymark.key`）绝不入库。
+3. **永不向真实 Supabase（`xaqmzjhvewkrpnqaunwd`）写演示/种子数据**；验收先查真实数据库，"skipped" 不算通过。
+4. **不关闭**任务栏 "CourseManager API (watchdog)" 窗口。
+5. 范围纪律：不做规格外功能；**Deterministic Code > LLM**；用户要求保守修改、不伤害现有功能。
+6. 更新卡文案与 Release 正文一律白话（用户明确要求）。
+7. 数据安全红线：Dexie 库名 `"course-manager"` 与 `course_manager_device_id` 是本机/设备持久化键，**改名工程永不得触碰**。
+
+## 环境速查
+
+- Windows 11、pnpm monorepo（`apps/web` React+Vite、`apps/api` Fastify、`packages/*` 分层域模型）；安卓全家与 cargo/rustup 在 E 盘（细节见 ANDROID_APK_BUILD.md）。
+- 服务器：椰子云香港 `206.187.209.142`（`/opt/daymark`，systemd `cm-api` + Caddy 反代 3100）；SSH 密钥 `~/.ssh/id_ed25519_daymark2`；**VPS 带宽仅约 0.3Mbps（PR-002）**。
+- GitHub：`violetsnowl/Daymark`（release `v0.1.0` 单 release 覆盖策略，内部版本已爬到 0.1.11）。
+- 官网域名 daymark.top 已购未解析（L-06）。

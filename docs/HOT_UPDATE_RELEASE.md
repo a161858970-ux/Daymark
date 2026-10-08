@@ -1,0 +1,59 @@
+# 拾序 Daymark · 发布与热更新手册（跨 agent 必读）
+
+> 面向接手本仓库的任何 agent/模型：本文自包含，不依赖任何本地会话记忆。
+> 维护阶段的 bug 总账在 [`POST_RELEASE_BUGS.md`](POST_RELEASE_BUGS.md)；本文只讲“怎么发版与热更新”。
+
+## 0. 一句话架构
+
+桌面（Windows）走官方 `tauri-plugin-updater`（ed25519 验签，**验签含版本绑定**：清单版本必须等于产物签名版本，否则拒绝）；**安卓全自研**（插件的移动端安装是空实现），链路：启动查清单 → 弹卡 → 系统 DownloadManager 后台下载 → 前台应用内弹窗/后台通知 → 装前完整性校验 → Kotlin 挑系统安装器 → 系统安装页。清单与产物同时托管：清单在 `api.daymark.top/update/latest.json`，**安卓包下载源 = GitHub Release CDN**（VPS 实测带宽仅约 0.3Mbps，见 PR-002），服务器 `/opt/daymark/update/` 留作镜像。
+
+## 1. 发版流程（一条命令 + 两个前置）
+
+1. **改版本**：`src-tauri/tauri.conf.json` 的 `version` **必须递增**（与线上清单相等不触发更新；0.1.0 期间 GitHub tag/release 固定为 `v0.1.0` 不动）。
+2. **双端构建**（签名环境变量必须带，否则无 `.sig`）：
+   - exe：`pnpm exec tauri build` → `src-tauri/target/release/bundle/nsis/拾序_<ver>_x64-setup.exe` + `.sig`
+   - apk：补丁版 `E:\devtools\tauri-cli-src\tauri-cli-2.12.1\target\release\cargo-tauri.exe android build --ci --apk`（四坑见 [`ANDROID_APK_BUILD.md`](ANDROID_APK_BUILD.md)）
+3. **一键发布**：`uv run --with paramiko python scripts/publish_release.py --notes "<更新卡文案（白话）>" --body "<Release 正文（白话）>"`
+   = 验签（缺 `.sig` 自动补签）→ 写清单 → SFTP 服务器 → `git push -f origin v0.1.0`（刷 source code）→ 替换 GitHub 资产 → 更新正文 → 回读。
+4. **终检**：`curl -s https://api.daymark.top/update/latest.json`（version/URL/notes）+ 下载 `Content-Length` 与本地产物一致 + Release 资产回读恰两件。
+
+## 2. 关键位置
+
+| 东西         | 位置                                                                                                                                                                              |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 更新签名私钥 | `E:\devtools\tauri-keys\daymark.key`（**绝不入库**；丢失=所有旧装机无法再更新）；公钥在 `tauri.conf → plugins.updater.pubkey`                                                     |
+| 清单/镜像    | 服务器 `/opt/daymark/update/latest.json`（Caddy `handle_path /update/*` + `ACAO *`）                                                                                              |
+| GitHub 仓库  | `violetsnowl/Daymark`（旧地址 301；发布脚本内已是规范名）                                                                                                                         |
+| 发布脚本     | `scripts/publish_release.py`（ASCII 资产别名 `daymark_<ver>_x64-setup.exe`、删除与正文走 `curl -L`、上传 URL 百分号编码）                                                         |
+| 安卓安装插件 | `src-tauri/gen/android/.../DaymarkSettingsPlugin.kt`（设置页/安装器挑选/DownloadManager 三命令）                                                                                  |
+| 前端更新逻辑 | `apps/web/src/updateService.ts`（平台分流、后台轮询、完成事件/通知/持久标记）                                                                                                     |
+| 真机验证方法 | 桌面壳带 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333` 启动 → WebSocket CDP `Runtime.evaluate`（记得 `awaitPromise`）读 DOM/控制台；安卓无 CDP，靠真机口述 |
+
+## 3. 踩坑速查（现象 → 原因 → 解）
+
+| 现象                                                      | 原因                                                                    | 解法                                                                                           |
+| --------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 安卓点更新报 `SecurityException: com.android.shell ≠ uid` | Android 14+ 禁止 app 进程 `am start`                                    | 一切系统页/安装器调起走 Kotlin 插件真 Intent                                                   |
+| `No Activity found … pkg=com.android.intentresolver`      | `resolveActivity()` 可能返回选择器本体                                  | 枚举处理器；**只认 FLAG_SYSTEM 应用**（PR-001：MT管理器等第三方曾被点名）                      |
+| `Unsupported path /data/data/.../cache`                   | DownloadManager 拒绝应用内部私有目录                                    | `getExternalFilesDir("update")` + `setDestinationInExternalFilesDir`；失败自动回退直接下载安装 |
+| 安装报 `(33) packageinfo is null`                         | 损坏/截断包进了安装器                                                   | 装前三重校验（≥5MB + ZIP 魔数 + 字节比对），不完整判 failed 明示                               |
+| Release 资产变 `_0.1.x_...` 中文被剥、清单 404            | GitHub 不接受非 ASCII 资产名                                            | 资产/清单 URL 统一 `daymark_*` ASCII 别名（安装包内部显示名仍为拾序）                          |
+| Release 正文 PATCH 307 失败                               | urllib 不重放带 body 的 307（且旧仓库名 301）                           | `curl -L -X PATCH`（脚本已改）                                                                 |
+| 手机更新**永远**只能到“上一版”                            | 不是——检查永远对齐**最新**清单，天然跳版；但见铁律                      | 见下                                                                                           |
+| 更新卡安装环节用的还是坏代码                              | **铁律：执行安装的永远是已装版本的代码**                                | 坏手版本手动装一次破局（已三次：0.1.2/0.1.5/0.1.7）                                            |
+| 图标命令后安卓图标/底色变了                               | `cargo-tauri icon` 连带重写 gen 安卓资源与 `ic_launcher_background.xml` | 按验收参数重生成安卓五密度+前景、底色回 `#F8F6F1`                                              |
+| `COLUMN_TOTAL_BYTES_*` 编译不过                           | 常量名记错                                                              | 真名 `COLUMN_TOTAL_SIZE_BYTES`（javap android.jar 实证）                                       |
+| 桌面双击快捷方式无限开新窗                                | 无单实例锁                                                              | `tauri-plugin-single-instance`（桌面 cfg 门控，安卓无此插件）                                  |
+
+## 4. 空包测试法（临时抬清单验证更新链）
+
+改服务器 `latest.json` 的 `version` 字段抬一位（如 0.1.9→0.1.10）→ 真机点卡实测 → **验完必须改回**。
+注意：桌面端会因版本绑定**正确拒绝**（别点）；安卓端不验此绑定，可完整走通。历史空包轮：0.1.10、0.1.11（后均转正）。
+
+## 5. 硬性约定（项目级）
+
+- 本地回归四件套 + Rust：`pnpm format:check && pnpm lint && pnpm typecheck && pnpm test`（基线 **304+1**）+ `src-tauri` 下 `cargo check` 0 警告，全 0 才可提交。
+- 每轮改动 commit + push 中文提交信息；**密钥正则自检**（`sk-…/whsec…/PRIVATE` 出现次数=0）；`.env` 永不入库。
+- 永不向真实 Supabase 写演示/种子数据；验收先查真实数据库。
+- 不关闭任务栏 "CourseManager API (watchdog)" 窗口。
+- 更新卡与 Release 正文一律**白话**（面向用户，不写技术语言）。

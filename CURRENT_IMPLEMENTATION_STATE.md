@@ -588,3 +588,14 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 - **首启权限引导（已实施 2026-10-08）**：`FirstLaunchGuide` 仅安卓、一次性（localStorage 标记）；打开即自动弹通知授权，卡片四行（通知状态/电池豁免/精确闹钟/自启动+MIUI 指引）每行一键开系统页（`android_open_settings`：battery/exact_alarm/app_details）；Manifest + `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`/`SCHEDULE_EXACT_ALARM`；系统一次只能开一个设置页 → 其余项用按钮而非连环自动弹（连环全屏 intent 会互相掩埋）；桌面零渲染（gate 纯函数+4 测试）。
 - **E2E 实测（2026-10-08，CDP 直连真机壳）**：卡片渲染 ✓ → 下载启动 ✓ → 验签执行 ✓ → **版本绑定防篡改**生效（清单谎报 0.1.2/产物签 0.1.1 被正确拒绝：`signed for version 0.1.1 but announced 0.1.2`）→ 同版本负控不弹卡 ✓。
 - **两个实战坑**：① 嵌套 effect——App.tsx 补丁锚点落进别的 effect 内部 → `Invalid hook call` → 卡片永不出现；补丁后必须确认 effect 在组件顶层。② 裸 invoke 探针必须用 **snake_case**（`plugin:app|version`），camelCase 会报 `Command not found` 误判成 ACL 坏。
+
+## 26. 品牌重塑 + 热更新终局 + 阶段转换（2026-10-08）
+
+- **品牌重塑（全局）**：新 logo（深绿文档+对勾、米白底、透明外缘）全端落位——Windows/ico/Web/favicon 走 `cargo-tauri icon`，安卓五密度 legacy+round+adaptive 前景手生成、底色 `#F8F6F1`（**坑：icon 命令会连带重写安卓资源与 `values/ic_launcher_background.xml`（白），须回正**；桌面显小根因=新图仅占画布 64% → 裁边放大 90.6%）。项目改名 course-manager→daymark（97 文件：包名 `@daymark/*`、类名 Daymark、仓库 URL；**保护不动：Dexie 库名 `"course-manager"`（本机数据）、`course_manager_device_id`**）。产品名「拾序」：productName/安卓标签/窗口/品牌区；**文件侧 daymark**（GitHub 会剥非 ASCII 资产名 → 发布资产统一 `daymark_<ver>_x64-setup.exe` 别名）。
+- **仓库转移**：已转主 **`violetsnowl/Daymark`**（API 对旧路径 301；git remote 已改直连；仓内 9 处旧地址已统一）。
+- **发布策略执行**：0.1.0 期间**单 release 覆盖**（tag v0.1.0 强推刷 source code）+ **内部 semver 爬升**（0.1.1→0.1.11，清单相等不触发）；`scripts/publish_release.py` 一键：验签→清单→SFTP→挪 tag→GitHub 资产（curl -L 删/正文 PATCH/URL 编码均实测踩坑后修正）。
+- **热更新终局形态**（0.1.11 现役）：桌面官方插件（验签含版本绑定）；安卓全自研——启动查清单（GitHub CDN 源）→ 弹卡 → **系统 DownloadManager 后台下载（通知栏进度，外部专属目录）→ 完成：前台=应用内弹窗 / 后台=通知（持久标记兜底）→ 装前三重完整性校验 → Kotlin 挑系统安装器（FLAG_SYSTEM 限定）→ 系统安装页**；DM 失败自动回退直接下载安装。详见 `docs/HOT_UPDATE_RELEASE.md`。
+- **铁律**：**执行安装/下载的永远是“当前已装版本”的代码**——修复无法自我安装（鸡生蛋），坏手版本只能手动装一次破局（已连踩三次：0.1.2/0.1.5/0.1.7 各手动一次）。
+- **本窗口其他落地**：单实例（`tauri-plugin-single-instance`，桌面 cfg 门控，防快捷方式无限开窗）；首启权限引导（小米已验收，他厂未验=PR-003）；账户页绑定状态闪跳修复（按 userId 缓存+读取中占位）；`[UPDATE_CHECK]` 诊断桩保留。
+- **阶段转换**：**开发阶段结束 → 发布后维护阶段**。bug 总账 = `docs/POST_RELEASE_BUGS.md`（现存待修 PR-001~006 / 遗留事项 L-02~08 / 已修复存档）；入口索引 = `AGENTS.md`。
+- **门控基线**（收官时）：FMT/LINT/TSC/TEST 全 0（**304+1**：web150、api80+1、storage44、domain11、application19）、cargo check 0 警告；0.1.11 双产物回读通过。

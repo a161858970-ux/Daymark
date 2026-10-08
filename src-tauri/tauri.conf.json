@@ -26,9 +26,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": [
-      "nsis"
-    ],
+    "targets": ["nsis"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -48,9 +46,7 @@
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIxODcyNjRFQTJGN0VENEQKUldSTjdmZWlUaWFIc1dZTS8xQlF3c1FaU2swNUlzQVFaRm1sYk9nTjQ2elk4TWxzRFdLaUxwaEcK",
-      "endpoints": [
-        "https://api.daymark.top/update/latest.json"
-      ]
+      "endpoints": ["https://api.daymark.top/update/latest.json"]
     }
   }
 }
