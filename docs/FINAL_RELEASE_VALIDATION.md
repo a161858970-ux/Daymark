@@ -181,10 +181,10 @@ pnpm --filter @daymark/web dev -- --host 0.0.0.0
 
 ## H. v0.1.0 发布记录（2026-10-07；深夜终版刷新）
 
-- **Release**：https://github.com/a161858970-ux/daymark/releases/tag/v0.1.0（正式版，非 draft/非 prerelease）
+- **Release**：https://github.com/violetsnowl/Daymark/releases/tag/v0.1.0（正式版，非 draft/非 prerelease）
 - **终版产物**（2026-10-07 深夜重新上传，服务端回读字节数与本地一致）：
-  - `Daymark_0.1.0_x64-setup.exe` 1,703,854 B — https://github.com/a161858970-ux/daymark/releases/download/v0.1.0/Daymark_0.1.0_x64-setup.exe（SHA-256 前 16 位 `bb65f83936ab882b`）
-  - `Daymark_0.1.0_android.apk` 19,799,191 B — https://github.com/a161858970-ux/daymark/releases/download/v0.1.0/Daymark_0.1.0_android.apk（SHA-256 前 16 位 `c6b7e949f70e256a`，universal 四 ABI、CN=Daymark V2 签名）
+  - `Daymark_0.1.0_x64-setup.exe` 1,703,854 B — https://github.com/violetsnowl/Daymark/releases/download/v0.1.0/Daymark_0.1.0_x64-setup.exe（SHA-256 前 16 位 `bb65f83936ab882b`）
+  - `Daymark_0.1.0_android.apk` 19,799,191 B — https://github.com/violetsnowl/Daymark/releases/download/v0.1.0/Daymark_0.1.0_android.apk（SHA-256 前 16 位 `c6b7e949f70e256a`，universal 四 ABI、CN=Daymark V2 签名）
 - **终版包含**（相对首发布增量）：系统托盘（关窗入托盘+菜单）、安卓返回手势（浮层逐层关/根页面回后台）、壳内系统通知适配器、时间滚轮触屏修复、R-01 `r01-v2` 截止到点档、Google 登录接回（回跳键名修正+白名单+安卓明文 NSC）、移动端三轮视觉返修。
 - **发版门控**（终版时刻全绿）：`format:check` / `lint` / `typecheck` / `build` 全 0；全量测试 **295 passed + 1 skipped**（domain 11、application 19、storage 44、web 141、api 80+1）。
 - **门控加固**：`.prettierignore` 加 `src-tauri/gen/android/app/build/`（安卓构建产物曾把 format:check 打成 1）。

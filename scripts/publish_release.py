@@ -156,7 +156,7 @@ def main() -> int:
         except urllib.error.HTTPError as exc:
             return exc.code, exc.read().decode(errors="replace")[:200]
 
-    status, rel = api(f"https://api.github.com/repos/a161858970-ux/daymark/releases/tags/{TAG}")
+    status, rel = api(f"https://api.github.com/repos/violetsnowl/Daymark/releases/tags/{TAG}")
     if status != 200:
         die(f"读取 release 失败: {status} {rel}")
     # NOTE: asset deletion answers 301 → urllib would not replay DELETE
@@ -165,7 +165,7 @@ def main() -> int:
         subprocess.run(
             ["curl", "-sSL", "-o", os.devnull, "-X", "DELETE",
              "-H", f"Authorization: Bearer {token}",
-             f"https://api.github.com/repos/a161858970-ux/daymark/releases/assets/{asset['id']}"],
+             f"https://api.github.com/repos/violetsnowl/Daymark/releases/assets/{asset['id']}"],
             check=False, capture_output=True, timeout=60)
     upload_url = rel["upload_url"].split("{")[0]
     for path, name in ((EXE, exe_name), (APK, apk_name)):
@@ -179,17 +179,24 @@ def main() -> int:
         print(f"[3/4] Release 资产已替换: {name} ({size} B)")
 
     # --- 4) Verify ------------------------------------------------------
-    status, final = api(f"https://api.github.com/repos/a161858970-ux/daymark/releases/tags/{TAG}")
+    status, final = api(f"https://api.github.com/repos/violetsnowl/Daymark/releases/tags/{TAG}")
     names = [a["name"] for a in final["assets"]] if isinstance(final, dict) else []
     if args.body:
-        status, _ = api(
-            f"https://api.github.com/repos/a161858970-ux/daymark/releases/{rel['id']}",
-            data=json.dumps({"body": args.body}).encode(),
-            method="PATCH",
-            content_type="application/json",
-        )
-        if status not in (200, 201):
-            die(f"更新 Release 正文失败: {status}")
+        # PATCH answers 307 here and urllib refuses to replay bodies
+        # through redirects — curl -L follows and keeps the method.
+        body_file = os.path.join(os.environ.get("TMPDIR", "."), "release_body.json")
+        json.dump({"body": args.body}, open(body_file, "w", encoding="utf-8"), ensure_ascii=False)
+        code = subprocess.run(
+            ["curl", "-sSL", "-o", os.devnull, "-w", "%{http_code}",
+             "-X", "PATCH",
+             "-H", f"Authorization: Bearer {token}",
+             "-H", "Accept: application/vnd.github+json",
+             "--data-binary", f"@{body_file}",
+             f"https://api.github.com/repos/violetsnowl/Daymark/releases/{rel['id']}"],
+            capture_output=True, timeout=120,
+        ).stdout.decode().strip()
+        if code not in ("200", "201"):
+            die(f"更新 Release 正文失败: {code}")
         print("[4/4] Release 正文已更新（白话版）")
     print(f"[4/4] 回读资产: {names}")
     print(f"完成。清单: {BASE}/latest.json  版本 {version}")
