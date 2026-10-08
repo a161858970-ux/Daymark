@@ -81,9 +81,17 @@ import {
   localDeviceId,
 } from "./reminders.js";
 import { createNotificationAdapter } from "./shellNotifications.js";
+import { getVersion } from "@tauri-apps/api/app";
+import {
+  checkForUpdate,
+  installUpdate,
+  releaseUpdate,
+  type UpdateInfo,
+} from "./updateService.js";
+import { UpdateDialog } from "./UpdateDialog.js";
 import { toUserMessage } from "./errors.js";
 import type { AiTaskKind } from "./aiTaskStore.js";
-import { apiBase } from "./apiBase.js";
+import { apiBase, isTauri } from "./apiBase.js";
 import WindowTitleBar from "./WindowTitleBar.js";
 
 export function App() {
@@ -141,6 +149,9 @@ export function App() {
   const [courseItemText, setCourseItemText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [syncConflicts, setSyncConflicts] = useState<ConflictDetail[]>([]);
+  const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(
+    null,
+  );
   const [syncIssues, setSyncIssues] = useState<ActionRequiredSyncIssue[]>([]);
   // Bumped by the account panel's 查看并处理 so the repair panel opens itself.
   const [repairOpenSignal, setRepairOpenSignal] = useState(0);
@@ -256,6 +267,25 @@ export function App() {
     };
   }, [refresh]);
   useEffect(() => {
+    // Update check (shell only): desktop goes through the official updater
+    // plugin, Android through the same manifest + custom APK install.
+    useEffect(() => {
+      if (!isTauri()) return;
+      let alive = true;
+      void (async () => {
+        try {
+          const version = await getVersion();
+          const info = await checkForUpdate(version);
+          if (alive && info) setAvailableUpdate(info);
+        } catch {
+          // Update check is best-effort; a flaky network must not annoy.
+        }
+      })();
+      return () => {
+        alive = false;
+      };
+    }, []);
+
     const update = () => setOnline(navigator.onLine);
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
@@ -880,6 +910,17 @@ export function App() {
   return (
     <div className="app-shell">
       <WindowTitleBar />
+      {availableUpdate ? (
+        <UpdateDialog
+          version={availableUpdate.version}
+          body={availableUpdate.body ?? null}
+          install={() => installUpdate(availableUpdate)}
+          onDismiss={() => {
+            releaseUpdate(availableUpdate);
+            setAvailableUpdate(null);
+          }}
+        />
+      ) : null}
       <AccountControl
         online={online}
         status={syncStatus}

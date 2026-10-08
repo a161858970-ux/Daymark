@@ -4363,3 +4363,56 @@ body.tauri-shell {
 .detail-panel::-webkit-scrollbar {
   display: none;
 }
+
+/* Update card: centered above everything, same material as popovers. */
+.update-dialog {
+  position: fixed;
+  z-index: 90;
+  left: 50%;
+  bottom: 36px;
+  transform: translateX(-50%);
+  width: min(430px, calc(100vw - 32px));
+  padding: 16px 18px;
+  background: rgb(250 248 243 / 96%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popover, 0 12px 32px rgb(0 0 0 / 18%));
+}
+.update-dialog-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+.update-dialog-notes {
+  margin: 0 0 10px;
+  color: var(--muted-foreground, #6b7268);
+  font-size: 13px;
+  line-height: 1.5;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.update-dialog-error {
+  margin: 0 0 8px;
+  color: #a4392f;
+  font-size: 13px;
+}
+.update-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.update-dialog-actions button {
+  min-height: 38px;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+.update-dialog-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.update-dialog-actions button:disabled {
+  opacity: 0.6;
+}

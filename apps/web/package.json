@@ -17,6 +17,7 @@
     "@supabase/supabase-js": "^2.116.0",
     "@tauri-apps/api": "^2.12.1",
     "@tauri-apps/plugin-notification": "^2.5.1",
+    "@tauri-apps/plugin-updater": "^2.13.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

@@ -574,3 +574,15 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 - **切换实施**：`deepseek-flash`（V4.1-Flash）双路（文本+图片），`thinking disabled` 非思考档；`providerCompat.ts` 按 base URL 分流（DeepSeek=json_object+Schema 内嵌提示词+关思考；MiMo 默认逐字节原样）。全量 **295 passed + 1 skipped**。
 - ~~**待用户动作**~~ **全部完成（2026-10-08 01:1x）**：本地 key 用户填好并冒烟（0.9s 合法 JSON）；SSH 22 通道经排障打通——**真凶=代理节点杀 22 端口**（GitHub:22 同死、80/443 同路全活、服务器日志里机器人畅通证明商家未封），Clash 的 `prepend-rules` 通道在本版本被原样透传给 mihomo 被无视（`payloadRule error` 还要求 CIDR 形式），改走**全局扩展脚本 Script.js `rules.unshift`（`IP-CIDR,206.187.209.142/32,DIRECT`）**生效（即 C4，以脚本方案闭环）。随后远程部署：pull+install+build ✓、env 换 deepseek 三行+key（stdin 管道直送、`/tmp/.dskey` 用后 shred，值全程不进对话）✓、cm-api active+health 200 ✓、dist 含 providerCompat ✓。**顺带**：服务器装 fail2ban 并启用（30 分钟 92 次爆破、即时封首个 IP）。
 - **v0.1.0 终版**：资产已重传（exe 1,703,854 B / apk 19,799,191 B，哈希见 `docs/FINAL_RELEASE_VALIDATION.md` §H）；C 组进度：B1/C1/C3(代码)/A1 完成，通知复测与 C4/C5 待用户，A2 并入服务器 DeepSeek 环境块。
+
+## 25. 热更新（2026-10-08 立项并实施）
+
+- **发布策略（用户拍板）**：0.1.0 期间**单 release 覆盖更新**——资产替换 + `git tag -f v0.1.0` 强推（GitHub 自动生成的 Source code 包随 tag 刷新）；**应用内 semver 必须爬升**（0.1.1→0.1.2…，updater 按版本比较，相等不触发）；0.1.0 敲定后改为新增 release。
+- **架构**：
+  - 桌面 = 官方 `tauri-plugin-updater`（Builder::new().build()，pubkey/endpoints 在 tauri.conf `plugins.updater`）：签名校验 + NSIS 静默装 + 自动重启。
+  - **安卓 = 自研**（插件源码 2.13.2 `#[cfg(mobile)] install_inner` 是空函数，装 APK 为 no-op）：JS 拉同一份 `latest.json`（Caddy `handle_path /update/*` + ACAO `*`）+ 本地 semver 比较 → `android_install_apk` Rust 命令（reqwest 下载到 `cacheDir()` 交给 JS 的路径 → `am start -VIEW` + FileProvider `my_cache_images` content URI 调系统安装器；Manifest 补 `REQUEST_INSTALL_PACKAGES`）。
+  - UI：`updateService.ts`（平台分流）+ `UpdateDialog`（确认卡片）；启动时 `getVersion()+checkForUpdate()`，best-effort 不打扰。
+- **签名**：私钥 `E:\devtools\tauri-keys\daymark.key`（**永不入库、丢失=旧装机无法再更新**），构建需 `TAURI_SIGNING_PRIVATE_KEY` 环境变量；公钥已入 tauri.conf。
+- **一键发布**：`uv run --with paramiko python scripts/publish_release.py --notes "..."`（验签→清单→SFTP 服务器→挪 tag→替换 Release 资产→回读）。
+- **引导装机（bootstrap）**：0.1.0 旧装机没有 updater 代码，**首次升级需手动装一次**（此后热更新生效）。
+- **排队（用户点名）**：首次启动权限引导专项——配合通知授权一次性引导 电池优化豁免/精确闹钟/自启动（各厂商差异适配），替代"教用户翻 MIUI 设置"。
