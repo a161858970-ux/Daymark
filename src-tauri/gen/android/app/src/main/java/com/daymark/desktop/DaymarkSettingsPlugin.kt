@@ -179,6 +179,11 @@ class DaymarkSettingsPlugin(private val activity: Activity) : Plugin(activity) {
         setDescription("正在下载新版本…")
         setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
         setDestinationInExternalFilesDir(activity, UPDATE_DIR_TYPE, args.fileName)
+        // GitHub Release CDN redirects to release-assets.githubusercontent.com;
+        // some OEM DownloadManagers stall without a UA and on metered networks.
+        addRequestHeader("User-Agent", "Daymark-Updater")
+        setAllowedOverMetered(true)
+        setAllowedOverRoaming(false)
       }
       val id = dm.enqueue(request)
       lastUpdateFileName = args.fileName
@@ -213,6 +218,12 @@ class DaymarkSettingsPlugin(private val activity: Activity) : Plugin(activity) {
             else -> "running"
           },
         )
+        if (status == DownloadManager.STATUS_FAILED) {
+          val reasonIdx = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON)
+          if (reasonIdx >= 0) {
+            out.put("reason", cursor.getInt(reasonIdx).toString())
+          }
+        }
         // Integrity: DM's own record vs the bytes actually on disk — a
         // truncated package must read as failed, never as "ready".
         val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))

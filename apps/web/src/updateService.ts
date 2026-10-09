@@ -21,6 +21,13 @@ import { readStoredLocale } from "./i18n/locale.js";
  */
 
 const MANIFEST_URL = "https://api.daymark.top/update/latest.json";
+/** Same package on our VPS — fallback when GitHub CDN is unreachable (CN mobile). */
+const MIRROR_BASE = "https://api.daymark.top/update/";
+const UPDATE_APK_NAME = "daymark-update.apk";
+
+function mirrorUrl(): string {
+  return `${MIRROR_BASE}app-universal-release.apk`;
+}
 
 export interface UpdateInfo {
   version: string;
@@ -92,29 +99,31 @@ export async function installUpdate(info: UpdateInfo): Promise<void> {
     return;
   }
   if (info.androidUrl) {
-    // Android: hand the download to the SYSTEM DownloadManager — progress
-    // shows in the notification shade, the download survives the app
-    // being backgrounded, and the update card can close immediately so
-    // the user keeps working. Completion posts a tappable notification
-    // ("下载完成，点按安装") which routes to the system installer.
-    try {
-      const started = await invoke<{ id: string }>("android_start_update", {
-        url: info.androidUrl,
-        fileName: UPDATE_APK_NAME,
-      });
-      void watchUpdateDownload(started.id);
-      return;
-    } catch {
-      // DownloadManager rejected the request (OEM/path quirks) → fall
-      // back to the direct download-and-install flow so an update can
-      // never deadlock behind a downloader failure.
-      const dest = await join(await cacheDir(), UPDATE_APK_NAME);
-      await invoke("android_install_apk", {
-        url: info.androidUrl,
-        destPath: dest,
-      });
-      return;
+    // Prefer GitHub Release CDN (fast), fall back to the VPS mirror when the
+    // phone cannot reach GitHub (common on CN mobile networks — DownloadManager
+    // sits on "connecting" then fails).
+    const sources = [info.androidUrl, mirrorUrl()];
+    for (const url of sources) {
+      try {
+        const started = await invoke<{ id: string }>("android_start_update", {
+          url,
+          fileName: UPDATE_APK_NAME,
+        });
+        void watchUpdateDownload(
+          started.id,
+          sources.filter((item) => item !== url),
+        );
+        return;
+      } catch {
+        // try next source
+      }
     }
+    // DownloadManager rejected every source → direct download-and-install.
+    await invoke("android_install_apk", {
+      url: mirrorUrl(),
+      destPath: await join(await cacheDir(), UPDATE_APK_NAME),
+    });
+    return;
   }
   throw new Error("No installable update");
 }
@@ -132,10 +141,12 @@ export function releaseUpdate(info: UpdateInfo | null): void {
 /** Canonical cache file name — must match DaymarkSettingsPlugin's default
  *  so the "download complete" notification tap finds the package even
  *  after the app process restarted. */
-const UPDATE_APK_NAME = "daymark-update.apk";
 
-/** Watch the system download in the background; ~10 min budget (1.5 s cadence). */
-async function watchUpdateDownload(id: string): Promise<void> {
+/** Watch the system download; on failure retry remaining sources once. */
+async function watchUpdateDownload(
+  id: string,
+  fallbackUrls: string[] = [],
+): Promise<void> {
   for (let attempt = 0; attempt < 400; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     try {
@@ -152,6 +163,7 @@ async function watchUpdateDownload(id: string): Promise<void> {
           state.expectedBytes > 0 &&
           state.fileBytes < state.expectedBytes
         ) {
+          if (await retryFallbackDownload(fallbackUrls)) return;
           await announceUpdateFailed();
           return;
         }
@@ -159,6 +171,7 @@ async function watchUpdateDownload(id: string): Promise<void> {
         return;
       }
       if (state.status === "failed") {
+        if (await retryFallbackDownload(fallbackUrls)) return;
         await announceUpdateFailed();
         return;
       }
@@ -166,6 +179,24 @@ async function watchUpdateDownload(id: string): Promise<void> {
       // transient IPC error — keep polling
     }
   }
+  await announceUpdateFailed();
+}
+
+async function retryFallbackDownload(fallbackUrls: string[]): Promise<boolean> {
+  for (const url of fallbackUrls) {
+    try {
+      const started = await invoke<{ id: string }>("android_start_update", {
+        url,
+        fileName: UPDATE_APK_NAME,
+      });
+      const rest = fallbackUrls.filter((item) => item !== url);
+      void watchUpdateDownload(started.id, rest);
+      return true;
+    } catch {
+      // next source
+    }
+  }
+  return false;
 }
 
 async function announceUpdateFailed(): Promise<void> {

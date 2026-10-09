@@ -3,6 +3,8 @@ import type { MessageTree } from "./types.js";
 export const commonZh: MessageTree = {
   brandName: "拾序",
   brandLatin: "DAYMARK",
+  brandPrimary: "拾序",
+  brandSecondary: "DAYMARK",
   cancel: "取消",
   confirm: "确认",
   save: "保存",
@@ -85,6 +87,8 @@ export const commonZh: MessageTree = {
 export const commonEn: MessageTree = {
   brandName: "拾序",
   brandLatin: "DAYMARK",
+  brandPrimary: "Daymark",
+  brandSecondary: "拾序",
   cancel: "Cancel",
   confirm: "Confirm",
   save: "Save",

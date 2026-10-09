@@ -62,14 +62,14 @@ export function AppNavigation({
 
   return (
     <nav className="main-nav" aria-label={t("nav.primary")}>
-      <div className="brand" aria-label={t("common.brandName")}>
+      <div className="brand" aria-label={t("common.brandPrimary")}>
         <span className="brand-mark" aria-hidden="true">
           <i />
           <i />
         </span>
         <span>
-          <strong>{t("common.brandName")}</strong>
-          <small>{t("common.brandLatin")}</small>
+          <strong>{t("common.brandPrimary")}</strong>
+          <small>{t("common.brandSecondary")}</small>
         </span>
       </div>
       <div className="nav-primary">
