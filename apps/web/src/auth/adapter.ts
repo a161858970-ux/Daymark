@@ -251,7 +251,7 @@ export function createAuthAdapter(client: AuthClientLike): AuthAdapter {
       throw new AuthUiError(
         "NOT_AUTHENTICATED",
         operation,
-        "请先登录账户后再操作。",
+        "auth.err.notAuthenticated",
       );
     return account;
   }
@@ -281,11 +281,7 @@ export function createAuthAdapter(client: AuthClientLike): AuthAdapter {
     const { data } = await client.getSession();
     const account = accountOf(data.session);
     if (!account)
-      throw new AuthUiError(
-        "SESSION",
-        operation,
-        "登录状态已过期，请重新登录。",
-      );
+      throw new AuthUiError("SESSION", operation, "auth.err.sessionExpired");
     return account;
   }
 
@@ -301,11 +297,7 @@ export function createAuthAdapter(client: AuthClientLike): AuthAdapter {
     }
     const account = await sessionAccount();
     if (!account)
-      throw new AuthUiError(
-        "SESSION",
-        operation,
-        "登录状态已过期，请重新登录。",
-      );
+      throw new AuthUiError("SESSION", operation, "auth.err.sessionExpired");
     writeHint(account.userId, "SET");
     return account;
   }
@@ -330,7 +322,7 @@ export function createAuthAdapter(client: AuthClientLike): AuthAdapter {
     throw new AuthUiError(
       "CONFIRMATION_REQUIRED",
       operation,
-      "注册成功；请完成验证后再登录。",
+      "auth.err.confirmationRequired",
     );
   }
 
@@ -512,7 +504,7 @@ export function createAuthAdapter(client: AuthClientLike): AuthAdapter {
           throw new AuthUiError(
             "VALIDATION_FAILED",
             "UNLINK_IDENTITY",
-            "至少保留一种登录方式，无法解除最后的绑定。",
+            "auth.err.keepLastIdentity",
           );
         const target = identities.find(
           (identity) => identity.provider === provider,
@@ -521,7 +513,7 @@ export function createAuthAdapter(client: AuthClientLike): AuthAdapter {
           throw new AuthUiError(
             "NOT_FOUND",
             "UNLINK_IDENTITY",
-            "该登录方式尚未绑定。",
+            "auth.err.identityNotLinked",
           );
         const { error: unlinkError } = await client.unlinkIdentity(target);
         if (unlinkError) throw unlinkError;
@@ -545,8 +537,8 @@ export function createAuthAdapter(client: AuthClientLike): AuthAdapter {
  * OAuth / recovery returns land on the redirect URL with an error query when
  * Supabase cannot complete the flow (identity_already_exists for a link that
  * already belongs to another user, provider_denied, ...). Parse it into the
- * same product copy as direct errors; PKCE session exchange is handled by
- * supabase-js itself.
+ * same product-copy keys as direct errors; PKCE session exchange is handled
+ * by supabase-js itself. Callers resolve the key with `t()` / `getMessage`.
  */
 export function readAuthRedirectError(search: string): string | null {
   return redirectErrorMessage(search, "");
@@ -555,6 +547,7 @@ export function readAuthRedirectError(search: string): string | null {
 /**
  * Some providers return the failure in the query string, others in the hash
  * fragment. Read both, preferring the explicit `error_code`.
+ * Returns a message key under `auth.err.*`.
  */
 export function redirectErrorMessage(
   search: string,
@@ -581,9 +574,9 @@ export function redirectErrorMessage(
     code.includes("identity_already_exists") ||
     code.includes("provider_already_exists")
   )
-    return "该登录方式已经关联其他账号。";
-  if (code.includes("access_denied")) return "登录未完成，请重试。";
-  return "登录未完成，请稍后再试。";
+    return "auth.err.identityAlreadyExists";
+  if (code.includes("access_denied")) return "auth.err.signInIncomplete";
+  return "auth.err.signInFailed";
 }
 
 /**

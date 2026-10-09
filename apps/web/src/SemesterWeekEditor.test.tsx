@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import type { Semester, SemesterWeek } from "@daymark/domain";
+import { I18nProvider } from "./i18n/index.js";
 import { SemesterWeekEditor } from "./SemesterWeekEditor.js";
 
 const semester: Semester = {
@@ -26,11 +27,13 @@ const firstWeek: SemesterWeek = {
 
 it("offers calendar week rows with projected numbers instead of date inputs", () => {
   const markup = renderToStaticMarkup(
-    <SemesterWeekEditor
-      semester={semester}
-      weeks={[firstWeek]}
-      onReplace={async () => {}}
-    />,
+    <I18nProvider initialLocale="zh-CN">
+      <SemesterWeekEditor
+        semester={semester}
+        weeks={[firstWeek]}
+        onReplace={async () => {}}
+      />
+    </I18nProvider>,
   );
   // No start/end date typing any more (product decision 2026-09-28).
   expect(markup).not.toContain('type="date"');
@@ -50,11 +53,13 @@ it("offers calendar week rows with projected numbers instead of date inputs", ()
 
 it("asks for the first week instead of inferring anything", () => {
   const markup = renderToStaticMarkup(
-    <SemesterWeekEditor
-      semester={semester}
-      weeks={[]}
-      onReplace={async () => {}}
-    />,
+    <I18nProvider initialLocale="zh-CN">
+      <SemesterWeekEditor
+        semester={semester}
+        weeks={[]}
+        onReplace={async () => {}}
+      />
+    </I18nProvider>,
   );
   expect(markup).toContain("先确定第一周");
   expect(markup).toContain("选为第1周");
@@ -66,11 +71,13 @@ it("asks for the first week instead of inferring anything", () => {
 
 it("reaches weeks before the semester start so 第1周 can begin earlier", () => {
   const markup = renderToStaticMarkup(
-    <SemesterWeekEditor
-      semester={{ ...semester, start_date: "2026-09-07" }}
-      weeks={[]}
-      onReplace={async () => {}}
-    />,
+    <I18nProvider initialLocale="zh-CN">
+      <SemesterWeekEditor
+        semester={{ ...semester, start_date: "2026-09-07" }}
+        weeks={[]}
+        onReplace={async () => {}}
+      />
+    </I18nProvider>,
   );
   // Four-week buffer: 2026-09-07 minus 28 days is Monday 2026-08-10.
   expect(markup).toContain("08.10 – 08.16");
@@ -79,12 +86,14 @@ it("reaches weeks before the semester start so 第1周 can begin earlier", () =>
 
 it("switches every row when the week start day changes", () => {
   const markup = renderToStaticMarkup(
-    <SemesterWeekEditor
-      semester={semester}
-      weeks={[]}
-      initialWeekStart={0}
-      onReplace={async () => {}}
-    />,
+    <I18nProvider initialLocale="zh-CN">
+      <SemesterWeekEditor
+        semester={semester}
+        weeks={[]}
+        initialWeekStart={0}
+        onReplace={async () => {}}
+      />
+    </I18nProvider>,
   );
   expect(markup).toContain('aria-label="一周起始日"');
   expect(markup).toContain("周日");

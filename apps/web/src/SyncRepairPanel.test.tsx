@@ -1,9 +1,14 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
+import { I18nProvider } from "./i18n/index.js";
 import { SyncRepairPanel } from "./SyncRepairPanel.js";
 
+function render(node: React.ReactNode) {
+  return renderToStaticMarkup(<I18nProvider>{node}</I18nProvider>);
+}
+
 it("shows the affected object and safe repair choices without queue internals", () => {
-  const html = renderToStaticMarkup(
+  const html = render(
     <SyncRepairPanel
       defaultExpanded
       issues={[
@@ -45,7 +50,7 @@ it("shows the affected object and safe repair choices without queue internals", 
 });
 
 it("opens itself when the account panel signals it", () => {
-  const html = renderToStaticMarkup(
+  const html = render(
     <SyncRepairPanel
       openSignal={1}
       issues={[

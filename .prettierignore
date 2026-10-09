@@ -4,3 +4,6 @@ node_modules
 # Android build outputs land here after every `tauri android build`;
 # thousands of generated JSON files that must not hit prettier's check.
 src-tauri/gen/android/app/build/
+# Local visual-check artifacts and browser session dumps.
+output/
+.playwright-cli/

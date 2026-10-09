@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
 import type { Course, Item, RawCapture } from "@daymark/domain";
+import { I18nProvider } from "./i18n/index.js";
 import { ItemDetail } from "./ItemDetail.js";
 
 const ownerId = "22222222-2222-4222-8222-222222222222";
@@ -52,20 +53,22 @@ afterEach(() => vi.unstubAllGlobals());
 
 it("keeps view, edit, status, provenance, and delete actions in one detail container", () => {
   const markup = renderToStaticMarkup(
-    <ItemDetail
-      item={item}
-      courses={[course]}
-      rawCapture={rawCapture}
-      associations={[]}
-      associationCandidates={[]}
-      onClose={() => undefined}
-      onComplete={() => undefined}
-      onRestore={() => undefined}
-      onDelete={async () => true}
-      onSave={async () => undefined}
-      onAssociate={async () => undefined}
-      onRemoveAssociation={async () => undefined}
-    />,
+    <I18nProvider>
+      <ItemDetail
+        item={item}
+        courses={[course]}
+        rawCapture={rawCapture}
+        associations={[]}
+        associationCandidates={[]}
+        onClose={() => undefined}
+        onComplete={() => undefined}
+        onRestore={() => undefined}
+        onDelete={async () => true}
+        onSave={async () => undefined}
+        onAssociate={async () => undefined}
+        onRemoveAssociation={async () => undefined}
+      />
+    </I18nProvider>,
   );
   expect(markup).toContain('role="dialog"');
   expect(markup).toContain(`data-item-id="${item.id}"`);
@@ -87,20 +90,22 @@ it("announces the mobile bottom sheet as modal and hides its pointer backdrop", 
     }),
   });
   const markup = renderToStaticMarkup(
-    <ItemDetail
-      item={item}
-      courses={[course]}
-      rawCapture={rawCapture}
-      associations={[]}
-      associationCandidates={[]}
-      onClose={() => undefined}
-      onComplete={() => undefined}
-      onRestore={() => undefined}
-      onDelete={async () => true}
-      onSave={async () => undefined}
-      onAssociate={async () => undefined}
-      onRemoveAssociation={async () => undefined}
-    />,
+    <I18nProvider>
+      <ItemDetail
+        item={item}
+        courses={[course]}
+        rawCapture={rawCapture}
+        associations={[]}
+        associationCandidates={[]}
+        onClose={() => undefined}
+        onComplete={() => undefined}
+        onRestore={() => undefined}
+        onDelete={async () => true}
+        onSave={async () => undefined}
+        onAssociate={async () => undefined}
+        onRemoveAssociation={async () => undefined}
+      />
+    </I18nProvider>,
   );
   expect(markup).toContain('role="dialog" aria-modal="true"');
   expect(markup).toContain('class="detail-backdrop " aria-hidden="true"');

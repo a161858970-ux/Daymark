@@ -8,6 +8,7 @@ import type { Course, Semester, SemesterWeek } from "@daymark/domain";
 import { CourseImportPanel } from "./CourseImportPanel.js";
 import { getCommittingJobId } from "./courseCommitStore.js";
 import { DateTimeField } from "./DateTimeField.js";
+import { useT } from "./i18n/index.js";
 import { SemesterWeekEditor, type WeekFields } from "./SemesterWeekEditor.js";
 import { toUserMessage } from "./errors.js";
 
@@ -71,6 +72,7 @@ export function CourseIndex({
   onImportCommitted,
   onDiscardImport,
 }: Props) {
+  const t = useT();
   const [courseName, setCourseName] = useState("");
   const [showCourseForm, setShowCourseForm] = useState(false);
   const [candidate, setCandidate] = useState<Course | null>(null);
@@ -118,7 +120,7 @@ export function CourseIndex({
             course.name === courseName.trim(),
         )
       ) {
-        setError("此学期已有同名课程，请打开已有课程核对。");
+        setError(t("course.duplicateNameError"));
         return;
       }
       const found = await onFindCandidate(courseName.trim(), targetSemesterId);
@@ -154,12 +156,14 @@ export function CourseIndex({
   }
 
   return (
-    <section className="course-index" aria-label="课程索引">
+    <section className="course-index" aria-label={t("course.indexTitle")}>
       <div className="course-index-intro">
         <div>
-          <p className="section-kicker">{semester?.name ?? "无学期归属"}</p>
-          <h2>课程索引</h2>
-          <p>打开一门课程，查看它的事项与课程信息。</p>
+          <p className="section-kicker">
+            {semester?.name ?? t("course.semesterNone")}
+          </p>
+          <h2>{t("course.indexTitle")}</h2>
+          <p>{t("course.indexDeck")}</p>
         </div>
         <div className="course-index-actions">
           <button
@@ -173,7 +177,7 @@ export function CourseIndex({
               setError(null);
             }}
           >
-            导入课程表
+            {t("course.importTimetable")}
           </button>
           <button
             type="button"
@@ -186,7 +190,7 @@ export function CourseIndex({
               setError(null);
             }}
           >
-            {showCourseForm ? "收起" : "＋ 添加课程"}
+            {showCourseForm ? t("common.collapse") : t("course.addCourse")}
           </button>
         </div>
       </div>
@@ -215,39 +219,42 @@ export function CourseIndex({
               setCourseName(event.target.value);
               setCandidate(null);
             }}
-            placeholder="输入课程名称"
-            aria-label="课程名称"
+            placeholder={t("course.courseNamePlaceholder")}
+            aria-label={t("course.courseName")}
             autoFocus
           />
-          <button type="submit">保存课程</button>
+          <button type="submit">{t("course.saveCourse")}</button>
         </form>
       )}
       {candidate && (
-        <section className="course-candidate" aria-label="同名课程确认">
-          <p>此前学期有同名课程“{candidate.name}”。这是同一门课程吗？</p>
+        <section
+          className="course-candidate"
+          aria-label={t("course.duplicateConfirmTitle")}
+        >
+          <p>{t("course.duplicatePrompt", { name: candidate.name })}</p>
           <p className="course-candidate-note">
-            确认后仅继承课程信息，不复制历史事项或新学期课表。
+            {t("course.duplicateInheritNote")}
           </p>
           <div>
             <button
               type="button"
               onClick={() => void createCourse(candidate.id)}
             >
-              是，继承课程信息
+              {t("course.duplicateYes")}
             </button>
             <button
               type="button"
               className="quiet-button"
               onClick={() => void createCourse(null)}
             >
-              不是，独立新建
+              {t("course.duplicateNo")}
             </button>
             <button
               type="button"
               className="quiet-button"
               onClick={() => setCandidate(null)}
             >
-              取消
+              {t("common.cancel")}
             </button>
           </div>
         </section>
@@ -263,7 +270,11 @@ export function CourseIndex({
             <button type="button" onClick={() => onOpen(course.id)}>
               <span className="course-row-copy">
                 <strong>{course.name}</strong>
-                <span>{incompleteCounts[course.id] ?? 0} 项未完成</span>
+                <span>
+                  {t("course.openCount", {
+                    count: incompleteCounts[course.id] ?? 0,
+                  })}
+                </span>
               </span>
               <span className="course-row-arrow" aria-hidden="true">
                 →
@@ -273,9 +284,7 @@ export function CourseIndex({
         ))}
       </ul>
       {courses.length === 0 && (
-        <p className="empty-state">
-          此学期视角下还没有课程；你也可以先记录无课程事项。
-        </p>
+        <p className="empty-state">{t("course.emptyCourses")}</p>
       )}
       <div className="semester-create-area">
         {semester && (
@@ -284,7 +293,9 @@ export function CourseIndex({
             className="quiet-button"
             onClick={() => setShowWeekEditor(!showWeekEditor)}
           >
-            {showWeekEditor ? "收起周次设置" : "设置学期周次"}
+            {showWeekEditor
+              ? t("course.collapseWeekSettings")
+              : t("course.weekSettings")}
           </button>
         )}
         {semester && showWeekEditor && (
@@ -299,7 +310,9 @@ export function CourseIndex({
           className="quiet-button"
           onClick={() => setShowSemesterForm(!showSemesterForm)}
         >
-          {showSemesterForm ? "收起学期设置" : "＋ 创建学期"}
+          {showSemesterForm
+            ? t("course.collapseSemesterSettings")
+            : t("course.semesterSettings")}
         </button>
         {semester && !showSemesterDelete && (
           <button
@@ -307,18 +320,20 @@ export function CourseIndex({
             className="quiet-button"
             onClick={() => setShowSemesterDelete(true)}
           >
-            删除学期
+            {t("course.deleteSemester")}
           </button>
         )}
         {semester && showSemesterDelete && (
           <div
             className="course-delete-confirmation"
             role="group"
-            aria-label="确认删除学期"
+            aria-label={t("course.deleteSemesterConfirm")}
           >
             <p>
-              删除「{semester.name}」将同时删除其下 {courses.length}{" "}
-              门课程、课表与关联事项（无课程事项保留）。
+              {t("course.deleteSemesterWarning", {
+                name: semester.name,
+                count: courses.length,
+              })}
             </p>
             <div className="course-delete-actions">
               <button
@@ -326,13 +341,13 @@ export function CourseIndex({
                 className="danger"
                 onClick={() => void confirmSemesterDelete()}
               >
-                确认删除
+                {t("course.confirmDelete")}
               </button>
               <button
                 type="button"
                 onClick={() => setShowSemesterDelete(false)}
               >
-                取消
+                {t("common.cancel")}
               </button>
             </div>
           </div>
@@ -343,35 +358,35 @@ export function CourseIndex({
             onSubmit={(event) => void submitSemester(event)}
           >
             <input
-              aria-label="学期名称"
-              placeholder="例如：2026 秋季学期"
+              aria-label={t("course.semesterName")}
+              placeholder={t("course.semesterNamePlaceholder")}
               value={semesterName}
               onChange={(event) => setSemesterName(event.target.value)}
               required
             />
             <label>
-              开始日期
+              {t("course.startDate")}
               <DateTimeField
                 mode="date"
-                label="学期开始日期"
-                ariaLabel="学期开始日期"
+                label={t("course.startDateLabel")}
+                ariaLabel={t("course.startDateLabel")}
                 required
                 value={semesterStart}
                 onChange={setSemesterStart}
               />
             </label>
             <label>
-              结束日期
+              {t("course.endDate")}
               <DateTimeField
                 mode="date"
-                label="学期结束日期"
-                ariaLabel="学期结束日期"
+                label={t("course.endDateLabel")}
+                ariaLabel={t("course.endDateLabel")}
                 required
                 value={semesterEnd}
                 onChange={setSemesterEnd}
               />
             </label>
-            <button type="submit">保存学期</button>
+            <button type="submit">{t("course.saveSemester")}</button>
           </form>
         )}
       </div>

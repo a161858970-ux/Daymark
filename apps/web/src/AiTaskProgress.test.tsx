@@ -1,22 +1,23 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
+import { I18nProvider } from "./i18n/index.js";
 import { AiTaskProgress } from "./AiTaskProgress.js";
 import { beginAiTask, dismissCompletedAiTasks } from "./aiTaskStore.js";
 
+function render(node: React.ReactNode) {
+  return renderToStaticMarkup(<I18nProvider>{node}</I18nProvider>);
+}
+
 it("stays hidden while no AI task is running", () => {
   dismissCompletedAiTasks();
-  expect(
-    renderToStaticMarkup(<AiTaskProgress onOpen={() => undefined} />),
-  ).toBe("");
+  expect(render(<AiTaskProgress onOpen={() => undefined} />)).toBe("");
 });
 
 it("shows an indeterminate placeholder while a task runs, never a percentage", () => {
   dismissCompletedAiTasks();
   const end = beginAiTask("course-import");
   try {
-    const markup = renderToStaticMarkup(
-      <AiTaskProgress onOpen={() => undefined} />,
-    );
+    const markup = render(<AiTaskProgress onOpen={() => undefined} />);
     expect(markup).toContain("ai-task-progress");
     expect(markup).toContain("phase-running");
     expect(markup).toContain("AI 正在后台处理中");
@@ -35,9 +36,7 @@ it("keeps a finished task as a clickable hint until it is opened", () => {
   const end = beginAiTask("course-import");
   end("ok");
   try {
-    const markup = renderToStaticMarkup(
-      <AiTaskProgress onOpen={() => undefined} />,
-    );
+    const markup = render(<AiTaskProgress onOpen={() => undefined} />);
     expect(markup).toContain("phase-completed");
     expect(markup).toContain("课表识别完成，点击查看");
     expect(markup).toContain("<button");
@@ -53,9 +52,7 @@ it("labels a failed wave as failed and still opens the page that explains it", (
   const end = beginAiTask("course-import");
   end("failed");
   try {
-    const markup = renderToStaticMarkup(
-      <AiTaskProgress onOpen={() => undefined} />,
-    );
+    const markup = render(<AiTaskProgress onOpen={() => undefined} />);
     expect(markup).toContain("phase-failed");
     expect(markup).toContain('data-phase="failed"');
     expect(markup).toContain("课表识别失败，点击查看");
@@ -74,9 +71,7 @@ it("prefers the import hint when a wave mixed both kinds", () => {
   endCapture("ok");
   endImport("ok");
   try {
-    const markup = renderToStaticMarkup(
-      <AiTaskProgress onOpen={() => undefined} />,
-    );
+    const markup = render(<AiTaskProgress onOpen={() => undefined} />);
     expect(markup).toContain('data-kind="course-import"');
     expect(markup).toContain("课表识别完成，点击查看");
   } finally {
@@ -89,9 +84,7 @@ it("labels the commit hint with what actually happened", () => {
   const ok = beginAiTask("course-commit");
   ok("ok");
   try {
-    const done = renderToStaticMarkup(
-      <AiTaskProgress onOpen={() => undefined} />,
-    );
+    const done = render(<AiTaskProgress onOpen={() => undefined} />);
     expect(done).toContain("课程建立完成，点击查看");
     expect(done).toContain('data-kind="course-commit"');
   } finally {
@@ -101,9 +94,7 @@ it("labels the commit hint with what actually happened", () => {
   const failed = beginAiTask("course-commit");
   failed("failed");
   try {
-    const broken = renderToStaticMarkup(
-      <AiTaskProgress onOpen={() => undefined} />,
-    );
+    const broken = render(<AiTaskProgress onOpen={() => undefined} />);
     expect(broken).toContain("课程建立失败，点击查看");
     expect(broken).not.toContain("课程建立完成");
   } finally {

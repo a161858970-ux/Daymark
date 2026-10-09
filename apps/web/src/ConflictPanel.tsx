@@ -6,36 +6,63 @@ import { AttentionSummary } from "./AttentionSummary.js";
 import { DateTimeField } from "./DateTimeField.js";
 import { SelectField } from "./SelectField.js";
 import { scheduleSummary, type ScheduleFields } from "./scheduleSummary.js";
+import { useT, type Translate } from "./i18n/index.js";
 
 type FieldChoice = "LOCAL" | "REMOTE" | "EXPLICIT";
 
-const fieldNames: Record<string, string> = {
-  title: "标题",
-  detail: "详情",
-  course_id: "所属课程",
-  start_at: "开始时间",
-  occurrence_start_at: "发生时间",
-  occurrence_end_at: "结束时间",
-  due_at: "截止时间",
-  reminder_level: "提醒方式",
-  status: "完成状态",
-  deleted_at: "删除状态",
-  content: "课程信息",
-  processing_status: "记录状态",
-  unresolved_reason: "待确认原因",
-  collection: "整组内容",
-  name: "名称",
-  instructor: "教师",
-  semester_id: "所属学期",
-  start_date: "开始日期",
-  end_date: "结束日期",
+const fieldKeys: Record<string, string> = {
+  title: "conflict.field.title",
+  detail: "conflict.field.detail",
+  course_id: "conflict.field.courseId",
+  start_at: "conflict.field.startAt",
+  occurrence_start_at: "conflict.field.occurrenceStartAt",
+  occurrence_end_at: "conflict.field.occurrenceEndAt",
+  due_at: "conflict.field.dueAt",
+  reminder_level: "conflict.field.reminderLevel",
+  status: "conflict.field.status",
+  deleted_at: "conflict.field.deletedAt",
+  content: "conflict.field.content",
+  processing_status: "conflict.field.processingStatus",
+  unresolved_reason: "conflict.field.unresolvedReason",
+  collection: "conflict.field.collection",
+  name: "conflict.field.name",
+  instructor: "conflict.field.instructor",
+  semester_id: "conflict.field.semesterId",
+  start_date: "conflict.field.startDate",
+  end_date: "conflict.field.endDate",
 };
+
+const statusKeys: Record<string, string> = {
+  COMPLETE: "conflict.status.complete",
+  INCOMPLETE: "conflict.status.incomplete",
+  OFF: "conflict.status.reminderOff",
+  NORMAL: "conflict.status.reminderNormal",
+  HIGH: "conflict.status.reminderHigh",
+  RAW: "conflict.status.raw",
+  PROCESSING: "conflict.status.processing",
+  RESOLVED: "conflict.status.resolved",
+  UNRESOLVED: "conflict.status.unresolved",
+  DELETED: "conflict.status.deleted",
+};
+
+const entityKeys: Record<string, string> = {
+  ITEM: "conflict.entity.item",
+  COURSE_INFORMATION: "conflict.entity.courseInformation",
+  COURSE_SCHEDULE_COLLECTION: "conflict.entity.courseSchedule",
+  SEMESTER_WEEK_COLLECTION: "conflict.entity.semesterWeeks",
+  COURSE: "conflict.entity.course",
+  SEMESTER: "conflict.entity.semester",
+};
+
+function fieldName(t: Translate, field: string): string {
+  return t(fieldKeys[field] ?? "conflict.valueLabel");
+}
 
 /**
  * A whole-group conflict (spec 17 §9) must let the user compare what each
  * option actually contains — "N 条记录" is not a decision.
  */
-function collectionLines(value: unknown): string[] {
+function collectionLines(t: Translate, value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map((raw, index) => {
     if (!raw || typeof raw !== "object") return String(raw);
@@ -49,21 +76,30 @@ function collectionLines(value: unknown): string[] {
     )
       return scheduleSummary(entry as unknown as ScheduleFields);
     if (typeof entry.week_number === "number")
-      return `第${entry.week_number}周 · ${String(entry.start_date ?? "")} – ${String(entry.end_date ?? "")}`;
+      return t("conflict.collectionWeek", {
+        week: entry.week_number,
+        start: String(entry.start_date ?? ""),
+        end: String(entry.end_date ?? ""),
+      });
     // Only human-readable fields: ids, versions and timestamps stay out
     // (ADR-004 — the panel never exposes sync internals).
     for (const key of ["title", "name", "content", "classroom"]) {
       const candidate = entry[key];
       if (typeof candidate === "string" && candidate.trim()) return candidate;
     }
-    return `记录 ${index + 1}`;
+    return t("common.recordedAt", { index: index + 1 });
   });
 }
 
 function CollectionValue({ value }: { value: unknown }) {
-  const lines = collectionLines(value);
+  const t = useT();
+  const lines = collectionLines(t, value);
   if (lines.length === 0)
-    return <em className="conflict-collection-empty">（空）</em>;
+    return (
+      <em className="conflict-collection-empty">
+        {t("conflict.collectionEmpty")}
+      </em>
+    );
   return (
     <ul className="conflict-collection">
       {lines.map((line, index) => (
@@ -74,34 +110,32 @@ function CollectionValue({ value }: { value: unknown }) {
 }
 
 function displayValue(
+  t: Translate,
   field: string,
   value: unknown,
   courses: Course[],
   semesters: Semester[],
 ): string {
-  if (field === "deleted_at") return value ? "删除" : "保留";
+  if (field === "deleted_at")
+    return value ? t("conflict.deleted") : t("conflict.kept");
   if (field === "collection" && Array.isArray(value))
-    return value.length === 0 ? "空" : `${value.length} 条记录`;
-  if (value === null || value === undefined || value === "") return "未填写";
+    return value.length === 0
+      ? t("conflict.empty")
+      : t("conflict.collectionCount", { count: value.length });
+  if (value === null || value === undefined || value === "")
+    return t("conflict.unfilled");
   if (field === "course_id" && typeof value === "string")
-    return courses.find((course) => course.id === value)?.name ?? "未知课程";
+    return (
+      courses.find((course) => course.id === value)?.name ??
+      t("common.unknownCourse")
+    );
   if (field === "semester_id" && typeof value === "string")
     return (
-      semesters.find((semester) => semester.id === value)?.name ?? "未知学期"
+      semesters.find((semester) => semester.id === value)?.name ??
+      t("common.unknownSemester")
     );
-  const labels: Record<string, string> = {
-    COMPLETE: "已完成",
-    INCOMPLETE: "未完成",
-    OFF: "关闭提醒",
-    NORMAL: "一般提醒",
-    HIGH: "较多提醒",
-    RAW: "原始记录",
-    PROCESSING: "处理中",
-    RESOLVED: "已整理",
-    UNRESOLVED: "待确认",
-    DELETED: "已删除",
-  };
-  if (typeof value === "string" && value in labels) return labels[value]!;
+  if (typeof value === "string" && value in statusKeys)
+    return t(statusKeys[value]!);
   if (typeof value === "string" && field.endsWith("_at")) {
     const date = new Date(value);
     if (!Number.isNaN(date.getTime())) return date.toLocaleString();
@@ -123,15 +157,17 @@ function ExplicitValueEditor({
   semesters: Semester[];
   onChange: (value: unknown) => void;
 }) {
+  const t = useT();
+  const label = fieldName(t, field);
   if (field === "course_id")
     return (
       <SelectField
-        ariaLabel="自定义所属课程"
-        label="所属课程"
+        ariaLabel={t("conflict.customCourse")}
+        label={t("conflict.field.courseId")}
         value={typeof value === "string" ? value : ""}
         onChange={(next) => onChange(next || null)}
         options={[
-          { value: "", label: "无课程" },
+          { value: "", label: t("common.noCourse") },
           ...courses
             .filter((course) => course.deleted_at === null)
             .map((course) => ({ value: course.id, label: course.name })),
@@ -141,12 +177,12 @@ function ExplicitValueEditor({
   if (field === "semester_id")
     return (
       <SelectField
-        ariaLabel="自定义所属学期"
-        label="所属学期"
+        ariaLabel={t("conflict.customSemester")}
+        label={t("conflict.field.semesterId")}
         value={typeof value === "string" ? value : ""}
         onChange={(next) => onChange(next || null)}
         options={[
-          { value: "", label: "无学期" },
+          { value: "", label: t("common.noSemester") },
           ...semesters
             .filter((semester) => semester.deleted_at === null)
             .map((semester) => ({ value: semester.id, label: semester.name })),
@@ -155,32 +191,32 @@ function ExplicitValueEditor({
     );
   const enumValues: Record<string, [string, string][]> = {
     status: [
-      ["INCOMPLETE", "未完成"],
-      ["COMPLETE", "已完成"],
+      ["INCOMPLETE", t("conflict.enum.statusIncomplete")],
+      ["COMPLETE", t("conflict.enum.statusComplete")],
     ],
     reminder_level: [
-      ["OFF", "关闭提醒"],
-      ["NORMAL", "一般提醒"],
-      ["HIGH", "较多提醒"],
+      ["OFF", t("conflict.enum.reminderOff")],
+      ["NORMAL", t("conflict.enum.reminderNormal")],
+      ["HIGH", t("conflict.enum.reminderHigh")],
     ],
     processing_status: [
-      ["RAW", "原始记录"],
-      ["PROCESSING", "处理中"],
-      ["RESOLVED", "已整理"],
-      ["UNRESOLVED", "待确认"],
-      ["DELETED", "已删除"],
+      ["RAW", t("conflict.enum.processingRaw")],
+      ["PROCESSING", t("conflict.enum.processingProcessing")],
+      ["RESOLVED", t("conflict.enum.processingResolved")],
+      ["UNRESOLVED", t("conflict.enum.processingUnresolved")],
+      ["DELETED", t("conflict.enum.processingDeleted")],
     ],
   };
   if (enumValues[field])
     return (
       <SelectField
-        ariaLabel={`自定义${fieldNames[field] ?? "值"}`}
-        label={fieldNames[field] ?? "值"}
+        ariaLabel={t("conflict.customAria", { field: label })}
+        label={label}
         value={typeof value === "string" ? value : enumValues[field]![0]![0]}
         onChange={onChange}
-        options={enumValues[field]!.map(([option, label]) => ({
+        options={enumValues[field]!.map(([option, optionLabel]) => ({
           value: option,
-          label,
+          label: optionLabel,
         }))}
       />
     );
@@ -188,8 +224,8 @@ function ExplicitValueEditor({
     return (
       <DateTimeField
         mode="date"
-        label={fieldNames[field] ?? "日期"}
-        ariaLabel={`自定义${fieldNames[field]}`}
+        label={label || t("conflict.dateLabel")}
+        ariaLabel={t("conflict.customAria", { field: label })}
         value={typeof value === "string" ? value.slice(0, 10) : ""}
         onChange={onChange}
       />
@@ -198,8 +234,10 @@ function ExplicitValueEditor({
     return (
       <DateTimeField
         mode="datetime"
-        label={fieldNames[field] ?? "时间"}
-        ariaLabel={`自定义${fieldNames[field] ?? "时间"}`}
+        label={label || t("conflict.timeLabel")}
+        ariaLabel={t("conflict.customAria", {
+          field: label || t("conflict.timeLabel"),
+        })}
         value={
           typeof value === "string" && value
             ? value.replace("Z", "").slice(0, 16)
@@ -215,7 +253,9 @@ function ExplicitValueEditor({
     field === "detail" || field === "content" ? "textarea" : "input";
   return (
     <Input
-      aria-label={`自定义${fieldNames[field] ?? "值"}`}
+      aria-label={t("conflict.customAria", {
+        field: label || t("conflict.valueLabel"),
+      })}
       value={typeof value === "string" ? value : ""}
       onChange={(event) =>
         onChange(
@@ -243,6 +283,7 @@ function ConflictChoice({
     resolution: ConflictResolution,
   ) => Promise<void>;
 }) {
+  const t = useT();
   const { conflict, current_entity: current } = detail;
   const [choices, setChoices] = useState<Record<string, FieldChoice>>({});
   const [explicitValues, setExplicitValues] = useState<Record<string, unknown>>(
@@ -250,20 +291,9 @@ function ConflictChoice({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const objectName =
-    conflict.entity_type === "ITEM"
-      ? "事项"
-      : conflict.entity_type === "COURSE_INFORMATION"
-        ? "课程信息"
-        : conflict.entity_type === "COURSE_SCHEDULE_COLLECTION"
-          ? "课程安排"
-          : conflict.entity_type === "SEMESTER_WEEK_COLLECTION"
-            ? "学期周设置"
-            : conflict.entity_type === "COURSE"
-              ? "课程"
-              : conflict.entity_type === "SEMESTER"
-                ? "学期"
-                : "原始记录";
+  const objectName = t(
+    entityKeys[conflict.entity_type] ?? "conflict.entity.rawCapture",
+  );
   const name = String(
     current.title ??
       current.content ??
@@ -298,7 +328,7 @@ function ConflictChoice({
         field_resolutions: values,
       });
     } catch {
-      setError("未能保存选择。内容可能已变化，请重新加载后再选择。");
+      setError(t("conflict.saveFailed"));
     } finally {
       setBusy(false);
     }
@@ -306,18 +336,14 @@ function ConflictChoice({
   return (
     <article className={`conflict-choice ${busy ? "resolving" : ""}`}>
       <p className="eyebrow">{objectName}</p>
-      <h3>{current.deleted_at ? `已删除 · ${name}` : name}</h3>
-      {Boolean(current.deleted_at) && (
-        <p>这条记录已在另一设备删除。确认后会保留删除状态。</p>
-      )}
-      {fields.includes("collection") && (
-        <p>
-          整组内容在不同设备上被修改。选择一组后会整体保存，不会混合两边的部分记录。
-        </p>
-      )}
+      <h3>
+        {current.deleted_at ? t("conflict.deletedTitle", { name }) : name}
+      </h3>
+      {Boolean(current.deleted_at) && <p>{t("conflict.deletedNotice")}</p>}
+      {fields.includes("collection") && <p>{t("conflict.collectionNotice")}</p>}
       {fields.map((field) => (
         <fieldset key={field} className="conflict-field">
-          <legend>{fieldNames[field] ?? field}</legend>
+          <legend>{fieldName(t, field)}</legend>
           <label>
             <input
               type="radio"
@@ -326,9 +352,10 @@ function ConflictChoice({
               disabled={Boolean(current.deleted_at)}
               onChange={() => setChoices({ ...choices, [field]: "LOCAL" })}
             />
-            <span>本机记录</span>
+            <span>{t("conflict.localValue")}</span>
             <strong>
               {displayValue(
+                t,
                 field,
                 conflict.local_version[field],
                 courses,
@@ -346,9 +373,9 @@ function ConflictChoice({
               checked={choices[field] === "REMOTE"}
               onChange={() => setChoices({ ...choices, [field]: "REMOTE" })}
             />
-            <span>已同步记录</span>
+            <span>{t("conflict.remoteValue")}</span>
             <strong>
-              {displayValue(field, current[field], courses, semesters)}
+              {displayValue(t, field, current[field], courses, semesters)}
             </strong>
             {field === "collection" && (
               <CollectionValue value={current[field]} />
@@ -371,7 +398,7 @@ function ConflictChoice({
                       });
                   }}
                 />
-                <span>自定义值</span>
+                <span>{t("conflict.explicitValue")}</span>
                 {choices[field] === "EXPLICIT" && (
                   <ExplicitValueEditor
                     field={field}
@@ -400,7 +427,7 @@ function ConflictChoice({
         }
         onClick={() => void submit()}
       >
-        {busy ? "正在保存…" : "保留所选内容"}
+        {busy ? t("common.saving") : t("conflict.keepSelected")}
       </button>
       {error && <p role="alert">{error}</p>}
     </article>
@@ -424,17 +451,18 @@ export function ConflictPanel({
   ) => Promise<void>;
   defaultExpanded?: boolean;
 }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(defaultExpanded);
   if (conflicts.length === 0) return null;
   return (
     <section
       className={`attention-panel conflict-panel ${expanded ? "expanded" : ""}`}
-      aria-label="需要选择的同步内容"
+      aria-label={t("conflict.panelTitle")}
     >
       <AttentionSummary
         eyebrow="SYNC DECISION"
-        title="需要选择保留的内容"
-        description="同一处内容在不同设备上被修改。"
+        title={t("conflict.title")}
+        description={t("conflict.description")}
         count={conflicts.length}
         expanded={expanded}
         tone="conflict"
@@ -442,9 +470,7 @@ export function ConflictPanel({
       />
       {expanded && (
         <div className="attention-body">
-          <p className="attention-intro">
-            只列出真正冲突的字段。逐项选择后，两端会继续使用同一个对象。
-          </p>
+          <p className="attention-intro">{t("conflict.intro")}</p>
           {conflicts.map((detail) => (
             <ConflictChoice
               key={detail.conflict.id}

@@ -43,6 +43,7 @@ import {
 } from "./authSync.js";
 import { ConflictPanel } from "./ConflictPanel.js";
 import { AccountControl } from "./AccountControl.js";
+import { LanguageSwitcher } from "./LanguageSwitcher.js";
 import type { ConflictDetail } from "./syncTransport.js";
 import { CalendarView } from "./CalendarView.js";
 import { CourseIndex } from "./CourseIndex.js";
@@ -95,8 +96,10 @@ import { toUserMessage } from "./errors.js";
 import type { AiTaskKind } from "./aiTaskStore.js";
 import { apiBase, isAndroid, isTauri } from "./apiBase.js";
 import WindowTitleBar from "./WindowTitleBar.js";
+import { useT } from "./i18n/index.js";
 
 export function App() {
+  const t = useT();
   const [page, setPage] = useState<PrimaryPage>("overview");
   /** Bumped to reopen the import panel when a finished AI task is clicked. */
   const [importOpenSignal, setImportOpenSignal] = useState(0);
@@ -332,7 +335,7 @@ export function App() {
       getItem: (itemId) => localRepository.getItem(itemId),
       notice: (title) =>
         showFeedback({
-          message: `提醒：${title}`,
+          message: t("app.toastReminderPrefix", { title }),
           duration: motionDuration.feedback,
         }),
     });
@@ -451,7 +454,7 @@ export function App() {
         () => {
           void refresh();
         },
-        () => setError("本机记录已关联另一账户，请使用原账户。"),
+        () => setError(t("app.ownerMismatch")),
         setSyncConflicts,
         setSyncIssues,
         setSyncStatus,
@@ -527,7 +530,7 @@ export function App() {
       );
       if (courseId)
         showFeedback({
-          message: "✓ 已记录",
+          message: t("app.toastRecorded"),
           duration: motionDuration.feedback,
         });
       void daymark
@@ -535,7 +538,7 @@ export function App() {
         .then(refresh)
         .catch((cause: unknown) => setError(toUserMessage(cause)));
     } catch (cause) {
-      setError(`记录未能保存在本机：${toUserMessage(cause)}`);
+      setError(t("app.toastSaveFailed", { error: toUserMessage(cause) }));
       throw cause;
     }
   }
@@ -574,7 +577,7 @@ export function App() {
       setPendingMoveIds((ids) => new Set(ids).add(item.id));
       replaceItemLocally(completed);
       showFeedback({
-        message: "✓ 已标记为完成",
+        message: t("app.toastCompleted"),
         duration: motionDuration.feedback,
         action: async () => {
           clearMotionTimer(completionTimersRef, item.id);
@@ -623,7 +626,7 @@ export function App() {
       clearMotionTimer(deletionTimersRef, item.id);
       setPendingDeleteIds((ids) => new Set(ids).add(item.id));
       showFeedback({
-        message: `已删除“${item.title}”`,
+        message: t("app.toastDeletedTitle", { title: item.title }),
         duration: motionDuration.feedback,
         action: async () => {
           clearMotionTimer(deletionTimersRef, item.id);
@@ -707,7 +710,7 @@ export function App() {
     setCurrentCourseId(null);
     setShowCourseDelete(false);
     setSelectedItem(null);
-    showFeedback({ message: "课程已删除", duration: 4000 });
+    showFeedback({ message: t("app.toastCourseDeleted"), duration: 4000 });
   }
 
   async function deleteSemester(id: string) {
@@ -721,7 +724,9 @@ export function App() {
       }
       await refresh();
       showFeedback({
-        message: `学期已删除（${result.course_count} 门课程）`,
+        message: t("app.toastSemesterDeleted", {
+          count: result.course_count,
+        }),
         duration: 4000,
       });
     } catch (cause) {
@@ -798,7 +803,7 @@ export function App() {
     retryAuthenticatedSync();
     if (result.undo)
       showFeedback({
-        message: "已删除事项",
+        message: t("app.toastItemDeleted"),
         duration: 5000,
         action: async () => {
           await daymark.undoDelete(result.undo!.itemId, result.undo!.token);
@@ -843,13 +848,13 @@ export function App() {
 
   async function retrySyncIssue(mutationId: string) {
     setSyncIssues(await retryActionRequiredIssue(mutationId));
-    showFeedback({ message: "已重新提交当前内容", duration: 3500 });
+    showFeedback({ message: t("app.toastResubmitted"), duration: 3500 });
     await refresh();
   }
 
   async function abandonSyncIssue(mutationId: string) {
     setSyncIssues(await abandonActionRequiredIssue(mutationId));
-    showFeedback({ message: "正在恢复已同步状态", duration: 3500 });
+    showFeedback({ message: t("app.toastRestoring"), duration: 3500 });
     await refresh();
   }
 
@@ -941,12 +946,16 @@ export function App() {
       {/* First-launch permission guide — Android only, renders null elsewhere. */}
       <FirstLaunchGuide />
       {updateReady ? (
-        <div className="update-dialog" role="dialog" aria-label="更新已下载">
-          <p className="update-dialog-title">新版本已下载完成</p>
-          <p className="update-dialog-notes">点“立即安装”进入系统安装页。</p>
+        <div
+          className="update-dialog"
+          role="dialog"
+          aria-label={t("app.updateReadyTitle")}
+        >
+          <p className="update-dialog-title">{t("app.updateReadyBody")}</p>
+          <p className="update-dialog-notes">{t("app.updateReadyHint")}</p>
           <div className="update-dialog-actions">
             <button type="button" onClick={() => setUpdateReady(false)}>
-              稍后
+              {t("common.later")}
             </button>
             <button
               type="button"
@@ -955,11 +964,12 @@ export function App() {
                 void openReadyUpdate().finally(() => setUpdateReady(false));
               }}
             >
-              立即安装
+              {t("app.installNow")}
             </button>
           </div>
         </div>
       ) : null}
+      <LanguageSwitcher variant="compact" />
       <AccountControl
         online={online}
         status={syncStatus}
@@ -973,8 +983,8 @@ export function App() {
           <div className="connection-status" role="status">
             <span aria-hidden="true" />
             <div>
-              <strong>当前离线</strong>
-              <small>新记录会先保存在本机，联网后继续同步。</small>
+              <strong>{t("app.offlineTitle")}</strong>
+              <small>{t("app.offlineBody")}</small>
             </div>
           </div>
         )}
@@ -996,8 +1006,8 @@ export function App() {
           <section className="surface-state loading-state" aria-busy="true">
             <span className="loading-mark" aria-hidden="true" />
             <div>
-              <h1>正在读取本机记录</h1>
-              <p>课程、事项与原始记录会从本地数据库恢复。</p>
+              <h1>{t("app.loadingTitle")}</h1>
+              <p>{t("app.loadingBody")}</p>
             </div>
           </section>
         )}
@@ -1009,10 +1019,8 @@ export function App() {
             <header className="page-header">
               <div className="page-title-block">
                 <p className="eyebrow">ITEMS</p>
-                <h1>事项总览</h1>
-                <p className="page-deck">
-                  按课程与时间，核对还需要处理的事项。
-                </p>
+                <h1>{t("app.overviewTitle")}</h1>
+                <p className="page-deck">{t("app.overviewDeck")}</p>
               </div>
               <div className="page-header-tools">
                 <GlobalSearchButton onOpen={openSearch} />
@@ -1029,15 +1037,15 @@ export function App() {
             {pendingQuestions.length > 0 && (
               <section
                 className={`attention-panel ambiguity-panel ${pendingExpanded ? "expanded" : ""}`}
-                aria-label="待确认的记录"
+                aria-label={t("app.needsContextTitle")}
               >
                 <AttentionSummary
                   eyebrow="NEEDS CONTEXT"
-                  title="待确认的记录"
+                  title={t("app.needsContextTitle")}
                   description={
                     pendingQuestions.length === 1
-                      ? "这条输入需要一次语义判断。"
-                      : "逐条处理，不影响继续记录。"
+                      ? t("app.needsContextOne")
+                      : t("app.needsContextMany")
                   }
                   count={pendingQuestions.length}
                   expanded={pendingExpanded}
@@ -1111,15 +1119,15 @@ export function App() {
                       setShowCourseDelete(false);
                     }}
                   >
-                    <span aria-hidden="true">←</span> 全部课程
+                    <span aria-hidden="true">←</span> {t("app.backToCourses")}
                   </button>
                 )}
                 <p className="eyebrow">COURSES</p>
-                <h1>{activeCourse?.name ?? "课程"}</h1>
+                <h1>{activeCourse?.name ?? t("nav.courses")}</h1>
                 <p className="page-deck">
                   {activeCourse
-                    ? `${activeCourseSemester?.name ?? "无学期归属"} · ${incompleteCounts[activeCourse.id] ?? 0} 项未完成`
-                    : "按课程查看事项，并保存长期有效的课程信息。"}
+                    ? `${activeCourseSemester?.name ?? t("app.noSemester")} · ${t("app.openCount", { count: incompleteCounts[activeCourse.id] ?? 0 })}`
+                    : t("app.coursesDeck")}
                 </p>
               </div>
               <div className="page-header-tools">
@@ -1139,7 +1147,7 @@ export function App() {
                       className="text-button danger"
                       onClick={() => setShowCourseDelete(true)}
                     >
-                      删除课程
+                      {t("app.deleteCourse")}
                     </button>
                   </div>
                 )}
@@ -1158,7 +1166,7 @@ export function App() {
                 <div
                   className="course-tabs"
                   role="tablist"
-                  aria-label="课程内容"
+                  aria-label={t("app.courseContent")}
                 >
                   <button
                     type="button"
@@ -1167,7 +1175,7 @@ export function App() {
                     className={courseTab === "items" ? "selected" : ""}
                     onClick={() => setCourseTab("items")}
                   >
-                    事项
+                    {t("app.tabItems")}
                   </button>
                   <button
                     type="button"
@@ -1176,7 +1184,7 @@ export function App() {
                     className={courseTab === "information" ? "selected" : ""}
                     onClick={() => setCourseTab("information")}
                   >
-                    课程信息
+                    {t("app.tabInformation")}
                   </button>
                   <button
                     type="button"
@@ -1185,7 +1193,7 @@ export function App() {
                     className={courseTab === "schedule" ? "selected" : ""}
                     onClick={() => setCourseTab("schedule")}
                   >
-                    课程安排
+                    {t("app.tabSchedule")}
                   </button>
                 </div>
                 <div key={courseTab} className="course-tab-content">
@@ -1200,10 +1208,10 @@ export function App() {
                           onChange={(event) =>
                             setCourseItemText(event.target.value)
                           }
-                          placeholder="添加这门课的事项……"
-                          aria-label="添加课程事项"
+                          placeholder={t("app.addItemPlaceholder")}
+                          aria-label={t("app.addCourseItem")}
                         />
-                        <button type="submit">添加事项</button>
+                        <button type="submit">{t("app.addItem")}</button>
                       </form>
                       <ItemList
                         items={courseItems}
@@ -1212,7 +1220,7 @@ export function App() {
                         pendingDeleteIds={pendingDeleteIds}
                         enteringItemIds={enteringItemIds}
                         selectedItemId={selectedItem?.id ?? null}
-                        emptyLabel="这门课还没有未完成事项"
+                        emptyLabel={t("app.emptyCourseItems")}
                         onOpen={(item) => void openItem(item)}
                         onComplete={(item) => void complete(item)}
                       />
@@ -1294,8 +1302,8 @@ export function App() {
             <header className="page-header">
               <div className="page-title-block">
                 <p className="eyebrow">CALENDAR</p>
-                <h1>日程</h1>
-                <p className="page-deck">按时间查看同一批课程事项。</p>
+                <h1>{t("app.calendarTitle")}</h1>
+                <p className="page-deck">{t("app.calendarDeck")}</p>
               </div>
               <div className="page-header-tools">
                 <GlobalSearchButton onOpen={openSearch} />

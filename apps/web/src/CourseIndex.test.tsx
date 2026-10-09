@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import type { Course, Semester } from "@daymark/domain";
 import { CourseIndex } from "./CourseIndex.js";
+import { I18nProvider } from "./i18n/index.js";
 
 const ownerId = "11111111-1111-4111-8111-111111111111";
 const semester: Semester = {
@@ -29,35 +30,37 @@ const course: Course = {
 
 it("presents courses as an index with incomplete counts and a quiet add entry", () => {
   const markup = renderToStaticMarkup(
-    <CourseIndex
-      courses={[course]}
-      targetSemesterId={semester.id}
-      semester={semester}
-      weeks={[]}
-      incompleteCounts={{ [course.id]: 3 }}
-      onOpen={() => undefined}
-      onFindCandidate={async () => null}
-      onCreateCourse={async () => undefined}
-      onCreateSemester={async () => undefined}
-      onReplaceWeeks={async () => undefined}
-      onDeleteSemester={async () => undefined}
-      courseImportAvailable={false}
-      onLoadPendingImports={async () => []}
-      onStartImport={async () => {
-        throw new Error("unused");
-      }}
-      onRetryImport={async () => {
-        throw new Error("unused");
-      }}
-      onResolveImport={async () => {
-        throw new Error("unused");
-      }}
-      onCommitImport={async () => {
-        throw new Error("unused");
-      }}
-      onImportCommitted={async () => undefined}
-      onDiscardImport={async () => undefined}
-    />,
+    <I18nProvider initialLocale="zh-CN">
+      <CourseIndex
+        courses={[course]}
+        targetSemesterId={semester.id}
+        semester={semester}
+        weeks={[]}
+        incompleteCounts={{ [course.id]: 3 }}
+        onOpen={() => undefined}
+        onFindCandidate={async () => null}
+        onCreateCourse={async () => undefined}
+        onCreateSemester={async () => undefined}
+        onReplaceWeeks={async () => undefined}
+        onDeleteSemester={async () => undefined}
+        courseImportAvailable={false}
+        onLoadPendingImports={async () => []}
+        onStartImport={async () => {
+          throw new Error("unused");
+        }}
+        onRetryImport={async () => {
+          throw new Error("unused");
+        }}
+        onResolveImport={async () => {
+          throw new Error("unused");
+        }}
+        onCommitImport={async () => {
+          throw new Error("unused");
+        }}
+        onImportCommitted={async () => undefined}
+        onDiscardImport={async () => undefined}
+      />
+    </I18nProvider>,
   );
   expect(markup).toContain("课程索引");
   expect(markup).toContain("环境经济学");
@@ -70,35 +73,37 @@ it("presents courses as an index with incomplete counts and a quiet add entry", 
 
 it("offers semester deletion only when a semester is actually selected", () => {
   const markup = renderToStaticMarkup(
-    <CourseIndex
-      courses={[]}
-      targetSemesterId={null}
-      semester={null}
-      weeks={[]}
-      incompleteCounts={{}}
-      onOpen={() => undefined}
-      onFindCandidate={async () => null}
-      onCreateCourse={async () => undefined}
-      onCreateSemester={async () => undefined}
-      onReplaceWeeks={async () => undefined}
-      onDeleteSemester={async () => undefined}
-      courseImportAvailable={false}
-      onLoadPendingImports={async () => []}
-      onStartImport={async () => {
-        throw new Error("unused");
-      }}
-      onRetryImport={async () => {
-        throw new Error("unused");
-      }}
-      onResolveImport={async () => {
-        throw new Error("unused");
-      }}
-      onCommitImport={async () => {
-        throw new Error("unused");
-      }}
-      onImportCommitted={async () => undefined}
-      onDiscardImport={async () => undefined}
-    />,
+    <I18nProvider initialLocale="zh-CN">
+      <CourseIndex
+        courses={[]}
+        targetSemesterId={null}
+        semester={null}
+        weeks={[]}
+        incompleteCounts={{}}
+        onOpen={() => undefined}
+        onFindCandidate={async () => null}
+        onCreateCourse={async () => undefined}
+        onCreateSemester={async () => undefined}
+        onReplaceWeeks={async () => undefined}
+        onDeleteSemester={async () => undefined}
+        courseImportAvailable={false}
+        onLoadPendingImports={async () => []}
+        onStartImport={async () => {
+          throw new Error("unused");
+        }}
+        onRetryImport={async () => {
+          throw new Error("unused");
+        }}
+        onResolveImport={async () => {
+          throw new Error("unused");
+        }}
+        onCommitImport={async () => {
+          throw new Error("unused");
+        }}
+        onImportCommitted={async () => undefined}
+        onDiscardImport={async () => undefined}
+      />
+    </I18nProvider>,
   );
   expect(markup).not.toContain("删除学期");
 });

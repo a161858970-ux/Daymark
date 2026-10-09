@@ -1,4 +1,8 @@
 import { useState } from "react";
+import { useI18n } from "./i18n/index.js";
+import { formatMonthDay } from "./i18n/format.js";
+import { getMessage } from "./i18n/messages/index.js";
+import type { Locale } from "./i18n/locale.js";
 import { DateTimeField } from "./DateTimeField.js";
 
 /** The four underlying fields, unchanged — presentation only. */
@@ -15,23 +19,35 @@ interface Props {
 }
 
 /** "2026-09-20T00:00" → "9月20日"; midnight reads as a date only. */
-export function formatStamp(local: string, forceTime = false): string {
+export function formatStamp(
+  local: string,
+  locale: Locale,
+  forceTime = false,
+): string {
   if (!local) return "";
   const [date = "", time = ""] = local.split("T");
-  const [, month = "0", day = "0"] = date.split("-");
-  const stamp = `${Number(month)}月${Number(day)}日`;
+  const [year = 0, month = 0, day = 0] = date.split("-").map(Number);
+  if (!year || !month || !day) return "";
+  const stamp = formatMonthDay(new Date(year, month - 1, day), locale);
   return time && (time !== "00:00" || forceTime) ? `${stamp} ${time}` : stamp;
 }
 
 /** 发生 is the one semantic that may be a point or a span. */
-export function formatOccurrence(start: string, end: string): string {
+export function formatOccurrence(
+  start: string,
+  end: string,
+  locale: Locale,
+): string {
   if (!start) return "";
-  if (!end) return `${formatStamp(start)} 发生`;
+  if (!end)
+    return getMessage(locale, "item.occurAt", {
+      value: formatStamp(start, locale),
+    });
   const sameDay = end.slice(0, 10) === start.slice(0, 10);
   const span = sameDay
-    ? `${formatStamp(start, true)}–${end.slice(11, 16)}`
-    : `${formatStamp(start)}–${formatStamp(end)}`;
-  return `${span} 发生`;
+    ? `${formatStamp(start, locale, true)}–${end.slice(11, 16)}`
+    : `${formatStamp(start, locale)}–${formatStamp(end, locale)}`;
+  return getMessage(locale, "item.occurAt", { value: span });
 }
 
 export interface TimeSummary {
@@ -40,22 +56,33 @@ export interface TimeSummary {
 }
 
 /** Natural-language lines for whichever semantics are actually set. */
-export function timeSummaries(value: TimeFields): TimeSummary[] {
+export function timeSummaries(
+  value: TimeFields,
+  locale: Locale,
+): TimeSummary[] {
   const summaries: TimeSummary[] = [];
   if (value.startAt)
     summaries.push({
       key: "startAt",
-      text: `开始于 ${formatStamp(value.startAt)}`,
+      text: getMessage(locale, "item.startAt", {
+        value: formatStamp(value.startAt, locale),
+      }),
     });
   if (value.occurrenceStartAt)
     summaries.push({
       key: "occurrenceStartAt",
-      text: formatOccurrence(value.occurrenceStartAt, value.occurrenceEndAt),
+      text: formatOccurrence(
+        value.occurrenceStartAt,
+        value.occurrenceEndAt,
+        locale,
+      ),
     });
   if (value.dueAt)
     summaries.push({
       key: "dueAt",
-      text: `截止于 ${formatStamp(value.dueAt)}`,
+      text: getMessage(locale, "item.dueAt", {
+        value: formatStamp(value.dueAt, locale),
+      }),
     });
   return summaries;
 }
@@ -71,8 +98,9 @@ export function timeSummaries(value: TimeFields): TimeSummary[] {
  * stays optional.
  */
 export function TimeBlock({ value, onChange }: Props) {
+  const { t, locale } = useI18n();
   const [open, setOpen] = useState(false);
-  const summaries = timeSummaries(value);
+  const summaries = timeSummaries(value, locale);
 
   const clearStart = () => onChange({ ...value, startAt: "" });
   const clearOccurrence = () =>
@@ -81,7 +109,7 @@ export function TimeBlock({ value, onChange }: Props) {
 
   return (
     <div className="time-block">
-      <p className="time-block-head">时间</p>
+      <p className="time-block-head">{t("item.timeLabel")}</p>
 
       {!open && summaries.length === 0 && (
         <button
@@ -89,7 +117,8 @@ export function TimeBlock({ value, onChange }: Props) {
           className="time-block-empty"
           onClick={() => setOpen(true)}
         >
-          时间未定<span>设置时间</span>
+          {t("item.timeUnset")}
+          <span>{t("item.setTime")}</span>
         </button>
       )}
 
@@ -105,7 +134,7 @@ export function TimeBlock({ value, onChange }: Props) {
             className="quiet-button time-block-edit"
             onClick={() => setOpen(true)}
           >
-            调整时间
+            {t("item.adjustTime")}
           </button>
         </>
       )}
@@ -113,11 +142,11 @@ export function TimeBlock({ value, onChange }: Props) {
       {open && (
         <div className="time-block-editor">
           <label className="time-block-row">
-            <span className="time-block-kind">开始</span>
+            <span className="time-block-kind">{t("item.start")}</span>
             <DateTimeField
               mode="datetime"
-              label="开始时间"
-              placeholder="从什么时候开始"
+              label={t("item.startTimeField")}
+              placeholder={t("item.startHint")}
               value={value.startAt}
               onChange={(next) => onChange({ ...value, startAt: next })}
             />
@@ -127,18 +156,20 @@ export function TimeBlock({ value, onChange }: Props) {
                 className="quiet-button"
                 onClick={clearStart}
               >
-                清除
+                {t("common.clear")}
               </button>
             )}
           </label>
 
           <label className="time-block-row">
-            <span className="time-block-kind">发生</span>
+            <span className="time-block-kind">{t("item.occur")}</span>
             <DateTimeField
               mode="datetime"
-              label="发生开始"
+              label={t("item.occurStartField")}
               placeholder={
-                value.occurrenceStartAt ? "发生开始" : "事情什么时候发生"
+                value.occurrenceStartAt
+                  ? t("item.occurStartField")
+                  : t("item.occurHint")
               }
               value={value.occurrenceStartAt}
               onChange={(next) =>
@@ -152,8 +183,8 @@ export function TimeBlock({ value, onChange }: Props) {
             {value.occurrenceStartAt && (
               <DateTimeField
                 mode="datetime"
-                label="发生结束"
-                placeholder="结束（可选）"
+                label={t("item.occurEnd")}
+                placeholder={t("item.occurEndLabel")}
                 value={value.occurrenceEndAt}
                 onChange={(next) =>
                   onChange({ ...value, occurrenceEndAt: next })
@@ -166,23 +197,23 @@ export function TimeBlock({ value, onChange }: Props) {
                 className="quiet-button"
                 onClick={clearOccurrence}
               >
-                清除
+                {t("common.clear")}
               </button>
             )}
           </label>
 
           <label className="time-block-row">
-            <span className="time-block-kind">截止</span>
+            <span className="time-block-kind">{t("item.due")}</span>
             <DateTimeField
               mode="datetime"
-              label="截止时间"
-              placeholder="最晚什么时候完成"
+              label={t("item.dueTimeField")}
+              placeholder={t("item.dueHint")}
               value={value.dueAt}
               onChange={(next) => onChange({ ...value, dueAt: next })}
             />
             {value.dueAt && (
               <button type="button" className="quiet-button" onClick={clearDue}>
-                清除
+                {t("common.clear")}
               </button>
             )}
           </label>
@@ -192,7 +223,7 @@ export function TimeBlock({ value, onChange }: Props) {
             className="quiet-button time-block-done"
             onClick={() => setOpen(false)}
           >
-            {summaries.length > 0 ? "完成" : "先不设置"}
+            {summaries.length > 0 ? t("item.finishTime") : t("item.skipTime")}
           </button>
         </div>
       )}

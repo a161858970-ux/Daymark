@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
+import { getMessage } from "./i18n/messages/index.js";
+import { readStoredLocale } from "./i18n/locale.js";
 
 export interface SelectOption {
   value: string;
@@ -181,7 +183,11 @@ export function SelectField({
             <div
               className="select-panel"
               role="listbox"
-              aria-label={label ?? ariaLabel ?? "选择"}
+              aria-label={
+                label ??
+                ariaLabel ??
+                getMessage(readStoredLocale(), "common.select")
+              }
               ref={panelRef}
               tabIndex={-1}
               onKeyDown={onPanelKeyDown}

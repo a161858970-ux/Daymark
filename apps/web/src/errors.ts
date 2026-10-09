@@ -5,59 +5,72 @@
  * the UI must still speak product language, so every surface maps a failure
  * through here before showing it. Internal concepts (mutation, row_version,
  * cursor, outbox, SQL, provider status codes) never reach the user.
+ *
+ * Locale is resolved outside React via the stored UI preference
+ * (`readStoredLocale`), which `I18nProvider.setLocale` keeps in sync.
+ * Engineering messages stay English; the UI shows localized product copy.
  */
+import { getMessage } from "./i18n/messages/index.js";
+import { readStoredLocale } from "./i18n/locale.js";
+
 const known: [RegExp, string][] = [
-  [/记录内容不能为空|Record cannot be empty/i, "记录内容不能为空。"],
-  [/Course context is unavailable/i, "课程信息已不可用，请重新选择课程。"],
-  [/Keeping one record requires an Item/i, "请先选择要处理的事项。"],
-  [/Raw capture has already been resolved/i, "这条记录已经处理过了。"],
-  [/Raw capture not found/i, "这条记录已经不存在了。"],
-  [/Course information cannot be empty/i, "课程信息内容不能为空。"],
-  [/Course information needs a course/i, "课程信息需要先选择课程。"],
+  [/记录内容不能为空|Record cannot be empty/i, "errors.emptyRecord"],
+  [/Course context is unavailable/i, "errors.courseContextUnavailable"],
+  [/Keeping one record requires an Item/i, "errors.needItem"],
+  [/Raw capture has already been resolved/i, "errors.alreadyResolved"],
+  [/Raw capture not found/i, "errors.notFoundRecord"],
+  [/Course information cannot be empty/i, "errors.emptyCourseInformation"],
+  [/Course information needs a course/i, "errors.courseInformationNeedsCourse"],
   [
     /Course not found|Item not found|Semester not found|not found/i,
-    "对象不存在或已被删除。",
+    "errors.objectMissing",
   ],
-  [/Split requires/i, "拆分需要至少两条内容。"],
-  [/Account sync is not configured/i, "尚未配置账户同步。"],
+  [/Split requires/i, "errors.splitNeedsTwo"],
+  [/Account sync is not configured/i, "errors.syncNotConfigured"],
+  // Domain-specific product nuances (kept under sync.* / errors.*).
+  [/Offline: connect before importing/i, "sync.err.offlineImport"],
+  [/Offline: note is saved locally/i, "sync.err.offlineCapture"],
+  [/Local changes are not synced yet/i, "sync.err.localChangesPending"],
+  [/AI unavailable; note saved locally/i, "sync.err.aiUnavailableSaved"],
+  [/Course import is unavailable/i, "sync.err.importUnavailable"],
+  [/Unsupported timetable file type/i, "sync.err.importBadType"],
+  [/No installable update/i, "sync.noInstallableUpdate"],
   [
-    /AI_UNAVAILABLE|Interpretation provider|智能整理/i,
-    "智能整理暂时不可用，请稍后重试。",
+    /AI_UNAVAILABLE|Interpretation provider|智能整理暂时不可用/i,
+    "errors.aiUnavailable",
   ],
-  [
-    /AI_INVALID_OUTPUT|无法可靠识别/i,
-    "无法可靠识别该文件，请重新上传清晰文件。",
-  ],
-  [/IMPORT_FAILED/i, "课程表导入未能完成，文件已保留，请重试。"],
+  [/AI_INVALID_OUTPUT|无法可靠识别/i, "errors.aiInvalidOutput"],
+  [/IMPORT_FAILED/i, "errors.importFailed"],
   // "Invalid import source" is a corrupt/misread payload, not a size
   // problem — mapping it to the size copy hid the real cause.
-  [/Invalid import source/i, "课程表文件读取异常，请重新选择一次。"],
   [
-    /Import source must be between 1 byte and 15 MB|15 MB/i,
-    "课程表文件需要在 15 MB 以内。",
+    /Invalid import source|Cannot read the timetable file/i,
+    "errors.importInvalidSource",
   ],
-  [/AUTH_REQUIRED|Authentication required|401/i, "请先登录后再试。"],
-  [/RATE_LIMITED|rate limit/i, "请求过于频繁，请稍后重试。"],
   [
-    /VERSION_CONFLICT|row version|If-Match/i,
-    "这条内容已在其他设备更新，请刷新后重试。",
+    /Import source must be between 1 byte and 15 MB|15 MB|exceeds 15 MB/i,
+    "errors.importTooLarge",
   ],
+  [/AUTH_REQUIRED|Authentication required|401/i, "errors.authRequired"],
+  [/RATE_LIMITED|rate limit/i, "errors.rateLimited"],
+  [/VERSION_CONFLICT|row version|If-Match/i, "errors.versionConflict"],
   [
     /fetch failed|Failed to fetch|NetworkError|network request|ECONNREFUSED|offline|离线/i,
-    "网络连接不可用，请稍后重试。",
+    "errors.network",
   ],
-  [/timeout|timed out/i, "请求超时，请稍后重试。"],
-  [/Permission|permission/i, "没有获得系统权限，请在系统设置中开启。"],
+  [/timeout|timed out/i, "errors.timeout"],
+  [/Permission|permission/i, "errors.permission"],
 ];
 
 /**
- * Returns product language for a failure. Chinese messages (already product
- * copy) pass through; anything unrecognised becomes a safe fallback.
+ * Returns product language for a failure in the active UI locale. Chinese
+ * messages (already product copy) pass through; anything unrecognised
+ * becomes a safe fallback. `fallback` may be a literal product string or
+ * omitted to use `errors.fallback`.
  */
-export function toUserMessage(
-  cause: unknown,
-  fallback = "操作未完成，请稍后重试。",
-): string {
+export function toUserMessage(cause: unknown, fallback?: string): string {
+  const locale = readStoredLocale();
+  const fallbackMessage = fallback ?? getMessage(locale, "errors.fallback");
   const raw =
     cause instanceof Error
       ? cause.message
@@ -65,9 +78,9 @@ export function toUserMessage(
         ? cause
         : String(cause ?? "");
   const cleaned = raw.replace(/^Error:\s*/, "").trim();
-  if (!cleaned) return fallback;
+  if (!cleaned) return fallbackMessage;
   if (/[一-鿿]/.test(cleaned)) return cleaned;
-  for (const [pattern, message] of known)
-    if (pattern.test(cleaned)) return message;
-  return fallback;
+  for (const [pattern, key] of known)
+    if (pattern.test(cleaned)) return getMessage(locale, key);
+  return fallbackMessage;
 }

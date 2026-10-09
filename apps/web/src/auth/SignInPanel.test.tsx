@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
+import { I18nProvider } from "../i18n/index.js";
 import { createAuthAdapter, type AuthClientLike } from "./adapter.js";
 import { AccountIdentities } from "./AccountIdentities.js";
 import { SignInPanel } from "./SignInPanel.js";
@@ -7,8 +8,12 @@ import { SignInPanel } from "./SignInPanel.js";
 /** Rendering only: no provider call is made, so a stub client is enough. */
 const adapter = createAuthAdapter({} as AuthClientLike);
 
+function render(node: React.ReactNode) {
+  return renderToStaticMarkup(<I18nProvider>{node}</I18nProvider>);
+}
+
 it("keeps phone OTP primary, Google secondary and e-mail tertiary", () => {
-  const markup = renderToStaticMarkup(<SignInPanel online adapter={adapter} />);
+  const markup = render(<SignInPanel online adapter={adapter} />);
   const phoneIndex = markup.indexOf('id="auth-phone"');
   const googleIndex = markup.indexOf("使用 Google 登录");
   const emailSwitchIndex = markup.indexOf("使用邮箱登录");
@@ -21,13 +26,13 @@ it("keeps phone OTP primary, Google secondary and e-mail tertiary", () => {
 });
 
 it("explains the disabled state when account sync is not configured", () => {
-  const markup = renderToStaticMarkup(<SignInPanel online adapter={null} />);
+  const markup = render(<SignInPanel online adapter={null} />);
   expect(markup).toContain("账户登录尚未启用");
   expect(markup).not.toContain("获取验证码");
 });
 
 it("lists every login method with its binding status for a signed-in account", () => {
-  const markup = renderToStaticMarkup(
+  const markup = render(
     <AccountIdentities
       online
       adapter={adapter}
@@ -53,7 +58,7 @@ it("lists every login method with its binding status for a signed-in account", (
 });
 
 it("shows one China phone field with no country picker or +86 prefix", () => {
-  const markup = renderToStaticMarkup(<SignInPanel online adapter={adapter} />);
+  const markup = render(<SignInPanel online adapter={adapter} />);
   expect(markup).toContain('id="auth-phone"');
   expect(markup).toContain('placeholder="11 位手机号"');
   expect(markup).not.toContain("国家 / 地区");
@@ -62,7 +67,7 @@ it("shows one China phone field with no country picker or +86 prefix", () => {
 });
 
 it("renders nothing for the identity section while signed out", () => {
-  const markup = renderToStaticMarkup(
+  const markup = render(
     <AccountIdentities online adapter={adapter} account={null} />,
   );
   expect(markup).toBe("");

@@ -17,25 +17,35 @@ import {
 import { AccountIdentities } from "./auth/AccountIdentities.js";
 import { SignInPanel } from "./auth/SignInPanel.js";
 import { motionDuration, useExitTransition } from "./motion.js";
+import { useI18n, useT, type Translate } from "./i18n/index.js";
 
-const labels: Record<AuthenticatedSyncState, string> = {
-  LOCAL_ONLY: "仅本机",
-  SIGNED_OUT: "连接同步",
-  OFFLINE: "当前离线",
-  SYNCING: "正在同步",
-  UP_TO_DATE: "已同步",
-  NEEDS_ATTENTION: "需要检查",
-  ERROR: "稍后重试",
+const stateKeys: Record<AuthenticatedSyncState, string> = {
+  LOCAL_ONLY: "account.localOnly",
+  SIGNED_OUT: "account.signedOut",
+  OFFLINE: "account.offline",
+  SYNCING: "account.syncing",
+  UP_TO_DATE: "account.upToDate",
+  NEEDS_ATTENTION: "account.needsAttention",
+  ERROR: "account.error",
 };
 
-function checkedTime(value: string | null): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+function stateDetail(
+  t: Translate,
+  state: AuthenticatedSyncState,
+  attentionCount: number,
+  lastChecked: string | null,
+): string {
+  if (state === "LOCAL_ONLY") return t("account.localOnlyDetail");
+  if (state === "OFFLINE") return t("account.offlineDetail");
+  if (state === "NEEDS_ATTENTION")
+    return t("account.attentionDetail", { count: attentionCount || 1 });
+  if (state === "SYNCING") return t("account.syncingDetail");
+  if (state === "UP_TO_DATE")
+    return lastChecked
+      ? t("account.checkedAt", { time: lastChecked })
+      : t("account.checked");
+  if (state === "ERROR") return t("account.errorDetail");
+  return t("account.signedOutDetail");
 }
 
 export function SyncStateSummary({
@@ -49,33 +59,20 @@ export function SyncStateSummary({
   lastChecked: string | null;
   onOpenRepair?: () => void;
 }) {
+  const t = useT();
   return (
     <div className={`sync-state-summary state-${state.toLowerCase()}`}>
       <span className="sync-status-dot" aria-hidden="true" />
       <div>
-        <strong>{labels[state]}</strong>
-        <small>
-          {state === "LOCAL_ONLY"
-            ? "记录保存在当前设备。"
-            : state === "OFFLINE"
-              ? "新记录会先保存在本机。"
-              : state === "NEEDS_ATTENTION"
-                ? `${attentionCount || 1} 条记录需要处理。`
-                : state === "SYNCING"
-                  ? "正在安静地核对更改。"
-                  : state === "UP_TO_DATE"
-                    ? `${lastChecked ? `${lastChecked} 核对` : "记录已核对"}。`
-                    : state === "ERROR"
-                      ? "本机记录安全保留，稍后可重试。"
-                      : "登录后可在其他设备读取记录。"}
-        </small>
+        <strong>{t(stateKeys[state])}</strong>
+        <small>{stateDetail(t, state, attentionCount, lastChecked)}</small>
         {state === "NEEDS_ATTENTION" && onOpenRepair && (
           <button
             type="button"
             className="sync-summary-action"
             onClick={onOpenRepair}
           >
-            查看并处理 →
+            {t("account.openRepair")}
           </button>
         )}
       </div>
@@ -100,6 +97,8 @@ export function AccountControl({
    * must always have a way out). */
   onOpenRepair?: () => void;
 }) {
+  const t = useT();
+  const { formatTime } = useI18n();
   const [open, setOpen] = useState(false);
   const [account, setAccount] = useState<AuthAccount | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -145,7 +144,7 @@ export function AccountControl({
       getStartupRedirectError() ??
       readAuthRedirectError(window.location.search);
     if (!redirectError) return;
-    setMessage(redirectError);
+    setMessage(t(redirectError));
     clearAuthRedirect();
     // The failure lands on a freshly loaded page (the panel is closed), so
     // open it — otherwise the user sees a silent reload.
@@ -177,16 +176,16 @@ export function AccountControl({
     : attentionCount > 0
       ? "NEEDS_ATTENTION"
       : status.state;
-  const lastChecked = checkedTime(status.checked_at);
+  const lastChecked = status.checked_at ? formatTime(status.checked_at) : null;
 
   async function signOut() {
     setBusy(true);
     setMessage(null);
     try {
       await authAdapter!.signOut();
-      setMessage("已退出账户。当前设备上的记录仍可查看。");
+      setMessage(t("account.signedOutToast"));
     } catch {
-      setMessage("暂时无法退出账户，请稍后再试。");
+      setMessage(t("account.signOutFailed"));
     } finally {
       setBusy(false);
     }
@@ -209,27 +208,29 @@ export function AccountControl({
         }}
       >
         <span className="sync-status-dot" aria-hidden="true" />
-        <span>{labels[effectiveState]}</span>
+        <span>{t(stateKeys[effectiveState])}</span>
         {attentionCount > 0 && (
-          <b aria-label={`${attentionCount} 条需要检查`}>{attentionCount}</b>
+          <b aria-label={t("account.attentionAria", { count: attentionCount })}>
+            {attentionCount}
+          </b>
         )}
       </button>
       {open && (
         <section
           className={`account-popover ${exiting ? "closing" : ""}`}
-          aria-label="账户与同步"
+          aria-label={t("account.title")}
         >
           <header>
             <div>
-              <p className="eyebrow">ACCOUNT &amp; SYNC</p>
+              <p className="eyebrow">{t("account.eyebrow")}</p>
               <h2 ref={headingRef} tabIndex={-1}>
-                账户与同步
+                {t("account.title")}
               </h2>
             </div>
             <button
               type="button"
               className="detail-close"
-              aria-label="关闭账户与同步"
+              aria-label={t("account.closeTitle")}
               onClick={() => closePopover(true)}
             >
               ×
@@ -245,13 +246,11 @@ export function AccountControl({
             }}
           />
           {!authClient || !authAdapter ? (
-            <p className="account-note">
-              账户同步尚未启用；快速记录、课程与日程仍可离线使用。
-            </p>
+            <p className="account-note">{t("account.syncUnavailable")}</p>
           ) : account ? (
             <>
               <p className="account-email">
-                {account.email ?? account.phone ?? "已登录账户"}
+                {account.email ?? account.phone ?? t("account.signedInAs")}
               </p>
               <AccountIdentities
                 online={online}
@@ -264,14 +263,14 @@ export function AccountControl({
                   disabled={busy || !online}
                   onClick={retryAuthenticatedSync}
                 >
-                  立即核对
+                  {t("account.checkNow")}
                 </button>
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => void signOut()}
                 >
-                  退出账户
+                  {t("account.signOut")}
                 </button>
               </div>
             </>

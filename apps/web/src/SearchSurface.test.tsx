@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import type { Course, CourseInformation, Item } from "@daymark/domain";
+import { I18nProvider } from "./i18n/index.js";
 import { SearchResultGroups, SearchSurface } from "./SearchSurface.js";
 
 const base = {
@@ -41,17 +42,19 @@ const information: CourseInformation = {
 
 it("groups matching canonical objects and keeps completion meaning visible", () => {
   const markup = renderToStaticMarkup(
-    <SearchResultGroups
-      results={{
-        items: [item],
-        courses: [course],
-        courseInformation: [information],
-      }}
-      courses={[course]}
-      onOpenItem={() => undefined}
-      onOpenCourse={() => undefined}
-      onOpenInformation={() => undefined}
-    />,
+    <I18nProvider initialLocale="zh-CN">
+      <SearchResultGroups
+        results={{
+          items: [item],
+          courses: [course],
+          courseInformation: [information],
+        }}
+        courses={[course]}
+        onOpenItem={() => undefined}
+        onOpenCourse={() => undefined}
+        onOpenInformation={() => undefined}
+      />
+    </I18nProvider>,
   );
   expect(markup).toContain("事项");
   expect(markup).toContain("课程信息");
@@ -62,15 +65,17 @@ it("groups matching canonical objects and keeps completion meaning visible", () 
 
 it("exposes one modal global search surface rather than a navigation page", () => {
   const markup = renderToStaticMarkup(
-    <SearchSurface
-      items={[item]}
-      courses={[course]}
-      courseInformation={[information]}
-      onClose={() => undefined}
-      onOpenItem={() => undefined}
-      onOpenCourse={() => undefined}
-      onOpenInformation={() => undefined}
-    />,
+    <I18nProvider initialLocale="zh-CN">
+      <SearchSurface
+        items={[item]}
+        courses={[course]}
+        courseInformation={[information]}
+        onClose={() => undefined}
+        onOpenItem={() => undefined}
+        onOpenCourse={() => undefined}
+        onOpenInformation={() => undefined}
+      />
+    </I18nProvider>,
   );
   expect(markup).toContain('role="dialog"');
   expect(markup).toContain('aria-modal="true"');

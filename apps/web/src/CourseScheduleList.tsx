@@ -2,11 +2,12 @@ import { useState, type FormEvent } from "react";
 import type { CourseSchedule } from "@daymark/domain";
 import { DateTimeField } from "./DateTimeField.js";
 import { SelectField } from "./SelectField.js";
+import { useI18n, useT } from "./i18n/index.js";
 import { toUserMessage } from "./errors.js";
 import {
+  scheduleLabelsFor,
   scheduleSummary,
   summaryParts,
-  weekdays,
   type ScheduleFields,
 } from "./scheduleSummary.js";
 
@@ -49,6 +50,9 @@ export function buildScheduleReplace(
 }
 
 export function CourseScheduleList({ schedules, onReplace }: Props) {
+  const t = useT();
+  const { locale } = useI18n();
+  const labels = scheduleLabelsFor(locale);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [weekday, setWeekday] = useState(1);
   const [startTime, setStartTime] = useState("");
@@ -92,11 +96,11 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
     // Times are optional now, but only as a pair: one-sided rows are invalid
     // in the database, so reject them here with a readable message.
     if (Boolean(startTime) !== Boolean(endTime)) {
-      setError("开始与结束时间必须同时填写，或同时留空。");
+      setError(t("course.timePairRequired"));
       return;
     }
     if (startTime && endTime && startTime >= endTime) {
-      setError("结束时间必须晚于开始时间。");
+      setError(t("course.timeOrderInvalid"));
       return;
     }
     try {
@@ -128,10 +132,11 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
   }
 
   return (
-    <section className="schedule-section" aria-label="课程安排">
-      <p className="section-note">
-        课程安排只为课程提供上下文，不会成为日程事项。
-      </p>
+    <section
+      className="schedule-section"
+      aria-label={t("common.courseSchedule")}
+    >
+      <p className="section-note">{t("course.scheduleNote")}</p>
       <ul className="schedule-list">
         {schedules.map((value) => (
           <li
@@ -139,24 +144,26 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
             className={value.id === editingId ? "is-editing" : undefined}
           >
             <span>
-              <strong>{summaryParts(fields(value)).weekday}</strong>{" "}
-              {summaryParts(fields(value)).rest}
+              <strong>{summaryParts(fields(value), labels).weekday}</strong>{" "}
+              {summaryParts(fields(value), labels).rest}
             </span>
             <span className="row-actions">
               <button
                 type="button"
                 className="quiet-button"
-                aria-label={`编辑 ${scheduleSummary(fields(value))}`}
+                aria-label={t("course.editScheduleRow", {
+                  summary: scheduleSummary(fields(value), labels),
+                })}
                 onClick={() => startEdit(value)}
               >
-                编辑
+                {t("common.edit")}
               </button>
               <button
                 type="button"
                 className="quiet-button"
                 onClick={() => void remove(value.id)}
               >
-                移除
+                {t("common.remove")}
               </button>
             </span>
           </li>
@@ -165,48 +172,50 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
       <form className="schedule-form" onSubmit={(event) => void submit(event)}>
         {editing && (
           <p className="schedule-editing-note">
-            正在修改：{scheduleSummary(fields(editing))}
+            {t("course.editingSchedule", {
+              summary: scheduleSummary(fields(editing), labels),
+            })}
           </p>
         )}
         <label>
-          星期
+          {t("common.weekday")}
           <SelectField
             value={String(weekday)}
             onChange={(next) => setWeekday(Number(next))}
-            ariaLabel="课程安排星期"
-            label="星期"
-            options={weekdays.map((name, index) => ({
+            ariaLabel={t("course.scheduleWeekdayAria")}
+            label={t("common.weekday")}
+            options={labels.weekdays.map((name, index) => ({
               value: String(index + 1),
               label: name,
             }))}
           />
         </label>
         <label>
-          开始
+          {t("common.start")}
           <DateTimeField
             mode="time"
-            label="课程安排开始时间"
-            ariaLabel="课程安排开始时间"
-            placeholder="暂无时间"
+            label={t("course.scheduleStartAria")}
+            ariaLabel={t("course.scheduleStartAria")}
+            placeholder={t("course.noTimeYet")}
             value={startTime}
             onChange={setStartTime}
           />
         </label>
         <label>
-          结束
+          {t("common.end")}
           <DateTimeField
             mode="time"
-            label="课程安排结束时间"
-            ariaLabel="课程安排结束时间"
-            placeholder="暂无时间"
+            label={t("course.scheduleEndAria")}
+            ariaLabel={t("course.scheduleEndAria")}
+            placeholder={t("course.noTimeYet")}
             value={endTime}
             onChange={setEndTime}
           />
         </label>
         <label>
-          起始周
+          {t("course.fromWeek")}
           <input
-            aria-label="课程安排起始周"
+            aria-label={t("course.scheduleFromWeekAria")}
             type="number"
             min="1"
             value={weekStart}
@@ -214,9 +223,9 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
           />
         </label>
         <label>
-          结束周
+          {t("course.toWeek")}
           <input
-            aria-label="课程安排结束周"
+            aria-label={t("course.scheduleToWeekAria")}
             type="number"
             min="1"
             value={weekEnd}
@@ -224,25 +233,27 @@ export function CourseScheduleList({ schedules, onReplace }: Props) {
           />
         </label>
         <label>
-          地点
+          {t("common.location")}
           <input
-            aria-label="课程安排地点"
+            aria-label={t("course.scheduleClassroomAria")}
             value={classroom}
             onChange={(event) => setClassroom(event.target.value)}
           />
         </label>
         <label>
-          阶段
+          {t("course.stage")}
           <input
-            aria-label="课程安排阶段"
+            aria-label={t("course.scheduleStageAria")}
             value={stageLabel}
             onChange={(event) => setStageLabel(event.target.value)}
           />
         </label>
-        <button type="submit">{editing ? "保存修改" : "添加安排"}</button>
+        <button type="submit">
+          {editing ? t("course.saveChanges") : t("course.addSchedule")}
+        </button>
         {editing && (
           <button type="button" className="quiet-button" onClick={resetForm}>
-            取消
+            {t("common.cancel")}
           </button>
         )}
       </form>

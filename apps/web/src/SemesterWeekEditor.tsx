@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Semester, SemesterWeek } from "@daymark/domain";
 import { SelectField } from "./SelectField.js";
+import { useI18n, useT } from "./i18n/index.js";
 import { toUserMessage } from "./errors.js";
 import {
   addDays,
@@ -8,7 +9,6 @@ import {
   anchorOf,
   applyWeekSelection,
   monthKey,
-  monthLabel,
   naturalWeeksBetween,
   projectedWeekNumber,
   projectedWeeks,
@@ -17,11 +17,11 @@ import {
   type WeekRange,
 } from "./semesterWeeks.js";
 import {
-  WEEK_START_OPTIONS,
   loadWeekStart,
   readLocalWeekStart,
   saveWeekStart,
   weekStartLabel,
+  weekStartOptionLabels,
 } from "./weekStart.js";
 
 export type { WeekFields };
@@ -49,6 +49,8 @@ export function SemesterWeekEditor({
   onReplace,
   initialWeekStart,
 }: Props) {
+  const t = useT();
+  const { locale, formatYearMonth } = useI18n();
   const [weekStart, setWeekStart] = useState<number>(
     initialWeekStart ?? readLocalWeekStart(),
   );
@@ -125,10 +127,10 @@ export function SemesterWeekEditor({
       );
       setStatus(
         selection.length > 1
-          ? `已补齐第${first}周 – 第${last}周`
+          ? t("course.weeksFilled", { from: first, to: last })
           : updates
-            ? `已更新第${first}周`
-            : `已添加第${first}周`,
+            ? t("course.weekUpdated", { week: first })
+            : t("course.weekAdded", { week: first }),
       );
       setError(null);
     } catch (cause) {
@@ -156,46 +158,52 @@ export function SemesterWeekEditor({
   }
 
   return (
-    <section className="semester-weeks" aria-label={`${semester.name}周次设置`}>
-      <h2>{semester.name} · 周次</h2>
-      <p className="section-note">
-        一周按公历自然周计算，起始日可在下方切换（默认周一）。选择日期行即可绑定周次，
-        不需要手动填写起止日期。
-      </p>
+    <section
+      className="semester-weeks"
+      aria-label={t("course.weekSettingsAria", { name: semester.name })}
+    >
+      <h2>{t("course.weekSettingsTitle", { name: semester.name })}</h2>
+      <p className="section-note">{t("course.weekSettingsNote")}</p>
       <ul className="schedule-list">
         {weeks.map((week) => (
           <li key={week.id}>
             <span>
-              第{week.week_number}周 · {week.start_date} 至 {week.end_date}
+              {t("course.weekRow", {
+                week: week.week_number,
+                start: week.start_date,
+                end: week.end_date,
+              })}
             </span>
             <button
               type="button"
               className="quiet-button"
               onClick={() => void remove(week.id)}
             >
-              移除
+              {t("common.remove")}
             </button>
           </li>
         ))}
       </ul>
 
       <div className="week-start-row">
-        <label htmlFor="week-start">一周起始日</label>
+        <label htmlFor="week-start">{t("course.weekStartDay")}</label>
         <SelectField
           id="week-start"
-          ariaLabel="一周起始日"
-          label="一周起始日"
+          ariaLabel={t("course.weekStartDay")}
+          label={t("course.weekStartDay")}
           value={String(weekStart)}
           onChange={(next) => {
             const value = Number(next);
             setWeekStart(value);
             void saveWeekStart(value);
             setStatus(
-              `已将一周起始日设为${weekStartLabel(value)}；已存在的周次日期不会自动改变。`,
+              t("course.weekStartChanged", {
+                day: weekStartLabel(value, locale),
+              }),
             );
             setError(null);
           }}
-          options={WEEK_START_OPTIONS.map((option) => ({
+          options={weekStartOptionLabels(locale).map((option) => ({
             value: String(option.value),
             label: option.label,
           }))}
@@ -204,37 +212,43 @@ export function SemesterWeekEditor({
 
       {anchor && !anchorMatchesCalendar(anchor, weekStart) && (
         <p className="week-calendar-warning" role="alert">
-          已选的第{anchor.week_number}周从 {anchor.start_date} 开始， 与当前「
-          {weekStartLabel(weekStart)}起始」的日历不一致，因此推算已暂停。
-          如需按新起始日推算，请移除现有周次后重新选择第一周。
+          {t("course.weekCalendarMismatch", {
+            week: anchor.week_number,
+            start: anchor.start_date,
+            day: weekStartLabel(weekStart, locale),
+          })}
         </p>
       )}
 
       {!anchor && (
         <div className="week-bootstrap" role="note">
-          <strong>先确定第一周</strong>
+          <strong>{t("course.firstWeekTitle")}</strong>
           <p>
-            这个学期还没有周次。第一周从哪一天开始只有你知道 —— 请点击下方对应的
-            那一周（周一至周日）把它选为第 1
-            周；选定之后才会出现后续周次的自动推算。
+            {t("course.firstWeekNote", {
+              from: weekStartLabel(1, locale),
+              to: weekStartLabel(0, locale),
+              week: 1,
+            })}
           </p>
         </div>
       )}
       {anchor && (
         <p className="week-anchor-note">
-          已确定第{anchor.week_number}周为 {anchor.start_date}{" "}
-          起的一周；下方每行都标出推算周次， 点选可自动补齐中间缺少的周。
+          {t("course.anchorNote", {
+            week: anchor.week_number,
+            start: anchor.start_date,
+          })}
         </p>
       )}
 
       <div className="week-picker">
         {anchor && (
           <label className="week-picker-control">
-            周次
+            {t("common.weeks")}
             <input
               type="number"
               min="1"
-              aria-label="学期周次"
+              aria-label={t("course.semesterWeekAria")}
               placeholder={nextNumber}
               value={weekNumber}
               onChange={(event) => setWeekNumber(event.target.value)}
@@ -244,7 +258,15 @@ export function SemesterWeekEditor({
 
         {grouped.map(([key, list]) => (
           <div key={key} className="week-month">
-            <p className="week-month-label">{monthLabel(key)}</p>
+            <p className="week-month-label">
+              {formatYearMonth(
+                new Date(
+                  Number(key.slice(0, 4)),
+                  Number(key.slice(5, 7)) - 1,
+                  1,
+                ),
+              )}
+            </p>
             <ul className="week-rows">
               {list.map((range) => {
                 const projected = anchor
@@ -267,17 +289,28 @@ export function SemesterWeekEditor({
                       <span className="week-row-range">
                         {shortRange(range)}
                       </span>
-                      <strong className="week-row-number">第{number}周</strong>
+                      <strong className="week-row-number">
+                        {t("common.weekPrefix", { week: number })}
+                      </strong>
                       {!anchor ? (
-                        <em className="week-row-anchor">选为第1周</em>
+                        <em className="week-row-anchor">
+                          {t("course.chooseFirstWeek", { week: 1 })}
+                        </em>
                       ) : projected !== null ? (
-                        <em className="week-row-projected">推算</em>
+                        <em className="week-row-projected">
+                          {t("course.projectedBadge")}
+                        </em>
                       ) : (
-                        <em className="week-row-manual">按左侧周次</em>
+                        <em className="week-row-manual">
+                          {t("course.manualBadge")}
+                        </em>
                       )}
-                      {fillSize > 1 && (
+                      {fillSize > 1 && projected !== null && (
                         <small className="week-row-fill">
-                          点选补齐第{anchor!.week_number}–第{projected}周
+                          {t("course.fillWeeks", {
+                            from: anchor!.week_number,
+                            to: projected,
+                          })}
                         </small>
                       )}
                     </button>

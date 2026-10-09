@@ -4,7 +4,14 @@
  * Raw provider messages never reach the UI (no internal implementation
  * leakage). Unknown codes fall back to a per-operation message so a new
  * provider error cannot break the surface.
+ *
+ * Engineering codes stay stable; product copy is resolved from `auth.err.*`
+ * message keys at access time using the active UI locale (works outside
+ * React via `readStoredLocale`).
  */
+
+import { getMessage } from "../i18n/messages/index.js";
+import { readStoredLocale } from "../i18n/locale.js";
 
 export const SMS_PROVIDER_NOT_CONFIGURED = "SMS_PROVIDER_NOT_CONFIGURED";
 
@@ -20,16 +27,31 @@ export type AuthOperation =
   | "SIGN_OUT"
   | "SESSION";
 
+function resolveMessage(messageKey: string): string {
+  return getMessage(readStoredLocale(), messageKey);
+}
+
 export class AuthUiError extends Error {
   readonly code: string;
 
   readonly operation: AuthOperation;
 
-  constructor(code: string, operation: AuthOperation, message: string) {
-    super(message);
+  /** Catalog key under `auth.*` — resolved to product copy on access. */
+  readonly messageKey: string;
+
+  constructor(code: string, operation: AuthOperation, messageKey: string) {
+    // No own `message` own-property: the getter below must win so the
+    // copy tracks a language switch instead of freezing at throw time.
+    super();
     this.name = "AuthUiError";
     this.code = code;
     this.operation = operation;
+    this.messageKey = messageKey;
+  }
+
+  /** Product copy in the active UI locale. */
+  get message(): string {
+    return resolveMessage(this.messageKey);
   }
 }
 
@@ -41,50 +63,48 @@ interface AuthErrorLike {
 
 /** Fallbacks when the provider returns an error code we do not know yet. */
 const FALLBACKS: Record<AuthOperation, string> = {
-  SEND_EMAIL_OTP: "暂时无法发送邮箱验证码，请稍后再试。",
-  SEND_PHONE_OTP: "暂时无法发送短信验证码，请稍后再试。",
-  VERIFY_OTP: "验证码不正确或已过期，请重新获取。",
-  SIGN_IN: "登录未成功，请检查账号信息后重试。",
-  SIGN_UP: "注册未成功，请稍后再试。",
-  LINK_IDENTITY: "该登录方式暂时无法绑定。",
-  UNLINK_IDENTITY: "暂时无法解除绑定。",
-  PASSWORD: "密码操作未成功，请稍后再试。",
-  SIGN_OUT: "暂时无法退出账户，请稍后再试。",
-  SESSION: "登录状态已过期，请重新登录。",
+  SEND_EMAIL_OTP: "auth.err.sendEmailOtp",
+  SEND_PHONE_OTP: "auth.err.sendPhoneOtp",
+  VERIFY_OTP: "auth.err.invalidOtp",
+  SIGN_IN: "auth.err.signIn",
+  SIGN_UP: "auth.err.signUp",
+  LINK_IDENTITY: "auth.err.linkIdentity",
+  UNLINK_IDENTITY: "auth.err.unlinkIdentity",
+  PASSWORD: "auth.err.password",
+  SIGN_OUT: "auth.err.signOut",
+  SESSION: "auth.err.session",
 };
 
 const BY_CODE: Record<string, (operation: AuthOperation) => string> = {
-  OTP_EXPIRED: () => "验证码已过期，请重新获取。",
-  OTP_ALREADY_USED: () => "验证码已失效，请重新获取。",
+  OTP_EXPIRED: () => "auth.err.otpExpired",
+  OTP_ALREADY_USED: () => "auth.err.otpAlreadyUsed",
   INVALID_CREDENTIALS: (operation) =>
     operation === "VERIFY_OTP"
-      ? "验证码不正确或已过期，请重新获取。"
-      : "账号或密码不正确。",
-  EMAIL_NOT_CONFIRMED: () => "请先完成邮箱验证后再登录。",
-  USER_ALREADY_EXISTS: () => "该邮箱已注册，请直接登录。",
-  USER_NOT_FOUND: () => "账号不存在，请先创建账户。",
-  WEAK_PASSWORD: () => "密码强度不足，请更换更复杂的密码。",
-  IDENTITY_ALREADY_EXISTS: () => "该登录方式已经关联其他账号。",
-  PROVIDER_ALREADY_EXISTS: () => "该登录方式已经关联其他账号。",
-  NOT_AUTHENTICATED: () => "请先登录账户后再操作。",
-  SESSION_NOT_FOUND: () => "登录状态已过期，请重新登录。",
-  REFRESH_TOKEN_NOT_FOUND: () => "登录状态已过期，请重新登录。",
-  SESSION_EXPIRED: () => "登录状态已过期，请重新登录。",
+      ? "auth.err.invalidOtp"
+      : "auth.err.invalidCredentials",
+  EMAIL_NOT_CONFIRMED: () => "auth.err.emailNotConfirmed",
+  USER_ALREADY_EXISTS: () => "auth.err.userAlreadyExists",
+  USER_NOT_FOUND: () => "auth.err.userNotFound",
+  WEAK_PASSWORD: () => "auth.err.weakPassword",
+  IDENTITY_ALREADY_EXISTS: () => "auth.err.identityAlreadyExists",
+  PROVIDER_ALREADY_EXISTS: () => "auth.err.identityAlreadyExists",
+  NOT_AUTHENTICATED: () => "auth.err.notAuthenticated",
+  SESSION_NOT_FOUND: () => "auth.err.sessionExpired",
+  REFRESH_TOKEN_NOT_FOUND: () => "auth.err.sessionExpired",
+  SESSION_EXPIRED: () => "auth.err.sessionExpired",
   VALIDATION_FAILED: (operation) =>
     operation === "UNLINK_IDENTITY"
-      ? "至少保留一种登录方式，无法解除最后的绑定。"
-      : "输入有误，请检查后重试。",
-  RATE_LIMIT: () => "操作过于频繁，请稍后再试。",
-  OVERDUE_SMS_SEND_RATE_LIMIT: () => "短信发送过于频繁，请稍后再试。",
-  SMS_SEND_RATE_LIMIT: () => "短信发送过于频繁，请稍后再试。",
-  EMAIL_RATE_LIMIT_EXCEEDED: () => "邮件发送过于频繁，请稍后再试。",
-  OVERDUE_EMAIL_SEND_RATE_LIMIT: () => "邮件发送过于频繁，请稍后再试。",
-  SIGNUP_DISABLED: () => "当前项目暂未开放注册。",
-  PROVIDER_DISABLED: () => "该登录方式暂时不可用。",
-  MANUAL_LINKING_DISABLED: () =>
-    "身份绑定尚未开启：请在 Supabase 项目设置中启用 Enable Manual Linking。",
-  SMS_PROVIDER_NOT_CONFIGURED: () =>
-    "短信通道尚未配置（SMS_PROVIDER_NOT_CONFIGURED）；请先配置 SMS Provider 或改用邮箱登录。",
+      ? "auth.err.keepLastIdentity"
+      : "auth.err.validation",
+  RATE_LIMIT: () => "auth.err.rateLimit",
+  OVERDUE_SMS_SEND_RATE_LIMIT: () => "auth.err.smsRateLimit",
+  SMS_SEND_RATE_LIMIT: () => "auth.err.smsRateLimit",
+  EMAIL_RATE_LIMIT_EXCEEDED: () => "auth.err.emailRateLimit",
+  OVERDUE_EMAIL_SEND_RATE_LIMIT: () => "auth.err.emailRateLimit",
+  SIGNUP_DISABLED: () => "auth.err.signupDisabled",
+  PROVIDER_DISABLED: () => "auth.err.providerDisabled",
+  MANUAL_LINKING_DISABLED: () => "auth.err.manualLinkingDisabled",
+  SMS_PROVIDER_NOT_CONFIGURED: () => "auth.err.smsProviderNotConfigured",
 };
 
 function codeOf(error: unknown): string | null {

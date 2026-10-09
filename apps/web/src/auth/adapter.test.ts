@@ -643,7 +643,7 @@ describe("Auth Identity", () => {
     const user = fake.finishGoogleOAuth({ email: EMAIL });
     expect((await adapter.getAccount())?.userId).toBe(user.id);
     expect(readAuthRedirectError("?error=identity_already_exists")).toBe(
-      "该登录方式已经关联其他账号。",
+      "auth.err.identityAlreadyExists",
     );
   });
 
@@ -1078,25 +1078,25 @@ describe("OTP", () => {
 describe("OAuth redirect failures", () => {
   it("reads identity_already_exists from the query string", () => {
     expect(readAuthRedirectError("?error=identity_already_exists")).toBe(
-      "该登录方式已经关联其他账号。",
+      "auth.err.identityAlreadyExists",
     );
     expect(readAuthRedirectError("?error_code=identity_already_exists")).toBe(
-      "该登录方式已经关联其他账号。",
+      "auth.err.identityAlreadyExists",
     );
   });
 
   it("reads failures from the hash fragment too", () => {
     expect(redirectErrorMessage("", "#error=identity_already_exists")).toBe(
-      "该登录方式已经关联其他账号。",
+      "auth.err.identityAlreadyExists",
     );
     expect(
       redirectErrorMessage(
         "?code=pkce-value",
         "#error_code=identity_already_exists",
       ),
-    ).toBe("该登录方式已经关联其他账号。");
+    ).toBe("auth.err.identityAlreadyExists");
     expect(redirectErrorMessage("", "#error=access_denied")).toBe(
-      "登录未完成，请重试。",
+      "auth.err.signInIncomplete",
     );
   });
 

@@ -6,6 +6,7 @@ import {
   type CSSProperties,
 } from "react";
 import type { CalendarWeekRow, Item } from "@daymark/domain";
+import { useI18n } from "./i18n/index.js";
 import { motionDuration } from "./motion.js";
 
 interface Props {
@@ -18,7 +19,6 @@ interface Props {
   onOpen(item: Item): void;
 }
 
-const weekdays = ["一", "二", "三", "四", "五", "六", "日"];
 const monthSegmentLimit = 4;
 
 export function calendarPositionSignatures(weeks: CalendarWeekRow[]) {
@@ -46,6 +46,8 @@ export function CalendarGrid({
   onSelectDate,
   onOpen,
 }: Props) {
+  const { t, weekdayLabels } = useI18n();
+  const weekdays = weekdayLabels("short");
   const itemById = useMemo(
     () => new Map(items.map((item) => [item.id, item])),
     [items],
@@ -87,7 +89,7 @@ export function CalendarGrid({
     <div className={`calendar-grid mode-${mode}`}>
       <div className="calendar-weekdays" aria-hidden="true">
         {weekdays.map((day) => (
-          <span key={day}>周{day}</span>
+          <span key={day}>{day}</span>
         ))}
       </div>
       {weeks.map((week) => {
@@ -100,7 +102,9 @@ export function CalendarGrid({
           <div className="calendar-week-row" key={week.start_date}>
             <div className="calendar-week-meta">
               {week.semester_week ? (
-                <span>第 {week.semester_week} 周</span>
+                <span>
+                  {t("calendar.weekNumber", { week: week.semester_week })}
+                </span>
               ) : (
                 <span aria-hidden="true">&nbsp;</span>
               )}
@@ -126,7 +130,7 @@ export function CalendarGrid({
                     ]
                       .filter(Boolean)
                       .join(" ")}
-                    aria-label={`${day.date}，${count ? `${count} 项事项` : "没有事项"}${selectedDate === day.date ? "，已选择" : ""}`}
+                    aria-label={`${day.date}${count ? t("calendar.itemCount", { count }) : t("calendar.noneAria")}${selectedDate === day.date ? t("calendar.selectedSuffix") : ""}`}
                     aria-current={today === day.date ? "date" : undefined}
                     onClick={() => onSelectDate(day.date)}
                   >
@@ -170,7 +174,7 @@ export function CalendarGrid({
                       style={style}
                       onClick={() => onOpen(item)}
                       title={item.title}
-                      aria-label={`${item.title}${item.status === "COMPLETE" ? "，已完成" : ""}`}
+                      aria-label={`${item.title}${item.status === "COMPLETE" ? t("calendar.completedAria") : ""}`}
                     >
                       <span
                         className="calendar-segment-status"
@@ -186,7 +190,7 @@ export function CalendarGrid({
             )}
             {overflow > 0 && (
               <p className="calendar-week-overflow">
-                另有 {overflow} 项，选择日期查看
+                {t("calendar.moreItems", { count: overflow })}
               </p>
             )}
           </div>

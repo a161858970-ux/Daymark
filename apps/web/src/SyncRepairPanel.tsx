@@ -2,47 +2,54 @@ import { useEffect, useState } from "react";
 import type { ActionRequiredSyncIssue } from "@daymark/application";
 import type { Course } from "@daymark/domain";
 import { AttentionSummary } from "./AttentionSummary.js";
+import { useT, type Translate } from "./i18n/index.js";
 
-const reasons: Record<string, string> = {
-  VALIDATION_ERROR: "这次修改未通过同步校验。请检查本机内容后重新提交。",
-  IDEMPOTENCY_REPLAY:
-    "这次提交与先前使用的提交标识不一致。可以用新的提交标识重交当前内容。",
-  NOT_FOUND: "已同步端找不到对应记录。请检查本机内容，或明确采用已同步状态。",
-  FORBIDDEN:
-    "这项操作已经不再允许，例如删除撤销期限已经结束。可以明确采用已同步状态。",
-};
+function reasonKey(code: string): string {
+  if (code === "VALIDATION_ERROR") return "sync.reason.validation";
+  if (code === "IDEMPOTENCY_REPLAY") return "sync.reason.idempotency";
+  if (code === "NOT_FOUND") return "sync.reason.notFound";
+  if (code === "FORBIDDEN") return "sync.reason.forbidden";
+  return "sync.genericReason";
+}
 
-function objectType(issue: ActionRequiredSyncIssue): string {
+function objectType(t: Translate, issue: ActionRequiredSyncIssue): string {
   const labels: Record<string, string> = {
-    ITEM: "事项",
-    COURSE_INFORMATION: "课程信息",
-    RAW_CAPTURE: "原始记录",
-    COURSE: "课程",
-    SEMESTER: "学期",
-    COURSE_SCHEDULE_COLLECTION: "课程安排",
-    SEMESTER_WEEK_COLLECTION: "学期周设置",
-    ITEM_ASSOCIATION: "事项关联",
-    COURSE_SCHEDULE: "课程安排",
-    SEMESTER_WEEK: "学期周设置",
+    ITEM: "sync.entity.item",
+    COURSE_INFORMATION: "sync.entity.courseInformation",
+    RAW_CAPTURE: "sync.entity.rawCapture",
+    COURSE: "sync.entity.course",
+    SEMESTER: "sync.entity.semester",
+    COURSE_SCHEDULE_COLLECTION: "sync.entity.courseSchedule",
+    SEMESTER_WEEK_COLLECTION: "sync.entity.semesterWeeks",
+    ITEM_ASSOCIATION: "sync.entity.itemAssociation",
+    COURSE_SCHEDULE: "sync.entity.courseScheduleOne",
+    SEMESTER_WEEK: "sync.entity.semesterWeekOne",
   };
-  return labels[issue.mutation.entity_type] ?? "记录";
+  return t(labels[issue.mutation.entity_type] ?? "sync.objectFallback");
 }
 
-function userFacingReason(issue: ActionRequiredSyncIssue): string {
+function userFacingReason(
+  t: Translate,
+  issue: ActionRequiredSyncIssue,
+): string {
   if (issue.mutation.last_error?.includes("Legacy collection change"))
-    return "这项整组设置来自旧版本，系统无法安全确认它的完整上下文。请查看相关设置后重新保存，或明确采用已同步状态。";
-  return reasons[issue.error_code] ?? "这条记录需要检查后才能继续同步。";
+    return t("sync.legacyCollection");
+  return t(reasonKey(issue.error_code));
 }
 
-function objectName(issue: ActionRequiredSyncIssue, courses: Course[]): string {
+function objectName(
+  t: Translate,
+  issue: ActionRequiredSyncIssue,
+  courses: Course[],
+): string {
   const value = issue.local_object;
   if (issue.mutation.entity_type === "COURSE_SCHEDULE_COLLECTION")
     return (
       courses.find((course) => course.id === issue.mutation.entity_id)?.name ??
-      "课程安排"
+      t("sync.entity.courseSchedule")
     );
   const name = value?.title ?? value?.content ?? value?.name ?? value?.raw_text;
-  return typeof name === "string" && name.trim() ? name : objectType(issue);
+  return typeof name === "string" && name.trim() ? name : objectType(t, issue);
 }
 
 function RepairIssue({
@@ -58,6 +65,7 @@ function RepairIssue({
   onRetry: (mutationId: string) => Promise<void>;
   onAbandon: (mutationId: string) => Promise<void>;
 }) {
+  const t = useT();
   const [confirmAbandon, setConfirmAbandon] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +75,7 @@ function RepairIssue({
     try {
       await action();
     } catch {
-      setError("未能处理这条记录。请检查记录内容或稍后重试。");
+      setError(t("sync.actionFailed"));
     } finally {
       setBusy(false);
     }
@@ -76,12 +84,12 @@ function RepairIssue({
     <article
       className={`conflict-choice sync-repair-choice ${busy ? "resolving" : ""}`}
     >
-      <p className="eyebrow">{objectType(issue)}</p>
-      <h3>{objectName(issue, courses)}</h3>
-      <p>{userFacingReason(issue)}</p>
+      <p className="eyebrow">{objectType(t, issue)}</p>
+      <h3>{objectName(t, issue, courses)}</h3>
+      <p>{userFacingReason(t, issue)}</p>
       <div className="sync-repair-actions">
         <button type="button" disabled={busy} onClick={() => onInspect(issue)}>
-          查看记录
+          {t("sync.inspect")}
         </button>
         {issue.can_retry && (
           <button
@@ -89,7 +97,7 @@ function RepairIssue({
             disabled={busy}
             onClick={() => void run(() => onRetry(issue.mutation.mutation_id))}
           >
-            {busy ? "正在处理…" : "重新提交当前内容"}
+            {busy ? t("common.processing") : t("sync.retrySubmit")}
           </button>
         )}
         {issue.can_abandon && !confirmAbandon && (
@@ -99,15 +107,13 @@ function RepairIssue({
             disabled={busy}
             onClick={() => setConfirmAbandon(true)}
           >
-            采用已同步状态
+            {t("sync.abandon")}
           </button>
         )}
       </div>
       {confirmAbandon && (
         <div className="sync-repair-confirm">
-          <p>
-            本次本机修改将被明确放弃；系统随后重新读取已同步内容。原始记录不会被静默删除。
-          </p>
+          <p>{t("sync.abandonNotice")}</p>
           <button
             type="button"
             disabled={busy}
@@ -115,7 +121,7 @@ function RepairIssue({
               void run(() => onAbandon(issue.mutation.mutation_id))
             }
           >
-            确认采用已同步状态
+            {t("sync.abandonConfirm")}
           </button>
           <button
             type="button"
@@ -123,7 +129,7 @@ function RepairIssue({
             disabled={busy}
             onClick={() => setConfirmAbandon(false)}
           >
-            取消
+            {t("common.cancel")}
           </button>
         </div>
       )}
@@ -150,6 +156,7 @@ export function SyncRepairPanel({
   /** Bumped by the account panel's "查看并处理" so the exit opens itself. */
   openSignal?: number;
 }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(defaultExpanded || openSignal > 0);
   useEffect(() => {
     if (openSignal > 0) setExpanded(true);
@@ -158,12 +165,12 @@ export function SyncRepairPanel({
   return (
     <section
       className={`attention-panel sync-repair-panel ${expanded ? "expanded" : ""}`}
-      aria-label="需要检查的同步记录"
+      aria-label={t("sync.repairTitle")}
     >
       <AttentionSummary
-        eyebrow="SYNC RECOVERY"
-        title="有记录需要检查"
-        description="本机内容仍然保留。"
+        eyebrow={t("sync.repairEyebrow")}
+        title={t("sync.repairHeading")}
+        description={t("sync.repairDescription")}
         count={issues.length}
         expanded={expanded}
         tone="repair"
@@ -171,9 +178,7 @@ export function SyncRepairPanel({
       />
       {expanded && (
         <div className="attention-body">
-          <p className="attention-intro">
-            查看当前记录后重新提交，或明确采用已经同步的状态。
-          </p>
+          <p className="attention-intro">{t("sync.repairIntro")}</p>
           {issues.map((issue) => (
             <RepairIssue
               key={issue.mutation.mutation_id}

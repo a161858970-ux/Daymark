@@ -5,18 +5,19 @@ import {
   subscribeAiTasks,
   type AiTaskKind,
 } from "./aiTaskStore.js";
+import { useT } from "./i18n/index.js";
 
-const completedLabels: Record<AiTaskKind, string> = {
-  "course-import": "课表识别完成，点击查看",
-  "course-commit": "课程建立完成，点击查看",
-  capture: "智能整理完成，点击查看",
+const completedKeys: Record<AiTaskKind, string> = {
+  "course-import": "sync.ai.importDone",
+  "course-commit": "sync.ai.commitDone",
+  capture: "sync.ai.captureDone",
 };
 
 /** A failed wave still needs the click-through — the panel there shows why it failed. */
-const failedLabels: Record<AiTaskKind, string> = {
-  "course-import": "课表识别失败，点击查看",
-  "course-commit": "课程建立失败，点击查看",
-  capture: "智能整理失败，点击查看",
+const failedKeys: Record<AiTaskKind, string> = {
+  "course-import": "sync.ai.importFailed",
+  "course-commit": "sync.ai.commitFailed",
+  capture: "sync.ai.captureFailed",
 };
 
 /** Import results matter more, so when a wave mixed kinds it wins the hint. */
@@ -33,6 +34,7 @@ function pickCompleted(completed: AiTaskKind[]): AiTaskKind {
  * opens the page that holds the result.
  */
 export function AiTaskProgress({ onOpen }: { onOpen(kind: AiTaskKind): void }) {
+  const t = useT();
   const { active, completed, failed } = useSyncExternalStore(
     subscribeAiTasks,
     getAiTaskSnapshot,
@@ -48,7 +50,7 @@ export function AiTaskProgress({ onOpen }: { onOpen(kind: AiTaskKind): void }) {
         data-phase="running"
         data-active-tasks={active}
       >
-        <p className="ai-task-progress-label">AI 正在后台处理中</p>
+        <p className="ai-task-progress-label">{t("sync.aiRunning")}</p>
         <div className="ai-task-progress-track" aria-hidden="true">
           <span className="ai-task-progress-bar bar-one" />
           <span className="ai-task-progress-bar bar-two" />
@@ -73,7 +75,7 @@ export function AiTaskProgress({ onOpen }: { onOpen(kind: AiTaskKind): void }) {
         }}
       >
         <span className="ai-task-progress-label">
-          {didFail ? failedLabels[kind] : completedLabels[kind]}
+          {t(didFail ? failedKeys[kind] : completedKeys[kind])}
         </span>
         <span className="ai-task-progress-track" aria-hidden="true">
           <span className="ai-task-progress-bar bar-one" />

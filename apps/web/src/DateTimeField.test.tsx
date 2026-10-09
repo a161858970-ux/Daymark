@@ -10,17 +10,20 @@ import {
   splitValue,
   withTimeChange,
 } from "./DateTimeField.js";
+import { I18nProvider } from "./i18n/index.js";
 
 it("renders a read-only trigger instead of a native date/time control", () => {
   const markup = renderToStaticMarkup(
-    <DateTimeField
-      mode="datetime"
-      label="开始时间"
-      ariaLabel="开始时间"
-      required
-      value="2026-10-01T15:42"
-      onChange={() => undefined}
-    />,
+    <I18nProvider initialLocale="zh-CN">
+      <DateTimeField
+        mode="datetime"
+        label="开始时间"
+        ariaLabel="开始时间"
+        required
+        value="2026-10-01T15:42"
+        onChange={() => undefined}
+      />
+    </I18nProvider>,
   );
   // Native controls would drag in the browser's own panel.
   expect(markup).not.toContain('type="date"');

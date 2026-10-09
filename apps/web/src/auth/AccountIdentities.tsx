@@ -6,6 +6,7 @@ import {
 } from "./phone.js";
 import type { AuthAccount, AuthIdentityView, AuthAdapter } from "./adapter.js";
 import { AuthUiError } from "./errors.js";
+import { useT } from "../i18n/index.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -35,6 +36,7 @@ export function AccountIdentities({
   adapter: AuthAdapter | null;
   account: AuthAccount | null;
 }) {
+  const t = useT();
   const [identities, setIdentities] = useState<AuthIdentityView[] | null>(
     () => (account ? identityCache.get(account.userId) : undefined) ?? null,
   );
@@ -79,7 +81,9 @@ export function AccountIdentities({
   function fail(error: unknown) {
     setIsError(true);
     setMessage(
-      error instanceof AuthUiError ? error.message : "操作未成功，请稍后再试。",
+      error instanceof AuthUiError
+        ? t(error.messageKey)
+        : t("auth.actionFailed"),
     );
   }
 
@@ -114,13 +118,13 @@ export function AccountIdentities({
     const normalized = normalizePhone(phone, countryCode);
     if (!normalized) {
       setIsError(true);
-      setMessage("请输入有效的手机号。");
+      setMessage(t("auth.invalidPhone"));
       return;
     }
     void (async () => {
       const sent = await run(
         () => adapter!.linkPhone(normalized),
-        "验证码已发送；输入后即可绑定该手机号。",
+        t("auth.linkPhoneCodeSent"),
       );
       if (sent) {
         setPhone(normalized);
@@ -135,7 +139,7 @@ export function AccountIdentities({
     void (async () => {
       const done = await run(
         () => adapter!.verifyLinkPhone(phone, code.trim()),
-        "手机号已绑定。",
+        t("auth.phoneLinked"),
       );
       if (done) {
         await refresh();
@@ -149,13 +153,13 @@ export function AccountIdentities({
     const value = email.trim();
     if (!EMAIL_PATTERN.test(value)) {
       setIsError(true);
-      setMessage("请输入有效的邮箱地址。");
+      setMessage(t("auth.invalidEmail"));
       return;
     }
     void (async () => {
       const sent = await run(
         () => adapter!.linkEmail(value),
-        "验证码已发送；输入后即可绑定该邮箱。",
+        t("auth.linkEmailCodeSent"),
       );
       if (sent) {
         setForm("email-code");
@@ -169,7 +173,7 @@ export function AccountIdentities({
     void (async () => {
       const done = await run(
         () => adapter!.verifyLinkEmail(email.trim(), code.trim()),
-        "邮箱已绑定。",
+        t("auth.emailLinked"),
       );
       if (done) {
         await refresh();
@@ -183,7 +187,7 @@ export function AccountIdentities({
     void (async () => {
       const done = await run(
         () => adapter!.setPassword(password),
-        "密码已设置。",
+        t("auth.passwordSet"),
       );
       if (done) closeForm();
     })();
@@ -191,7 +195,10 @@ export function AccountIdentities({
 
   function unlink(provider: string) {
     void (async () => {
-      const done = await run(() => adapter!.unlink(provider), "已解除绑定。");
+      const done = await run(
+        () => adapter!.unlink(provider),
+        t("auth.unlinked"),
+      );
       if (done) await refresh();
     })();
   }
@@ -215,70 +222,66 @@ export function AccountIdentities({
         type="button"
         className="quiet-button"
         disabled={busy || !unlinkAllowed}
-        title={
-          unlinkAllowed
-            ? "解除绑定"
-            : "至少保留一种登录方式，无法解除最后的绑定"
-        }
+        title={unlinkAllowed ? t("auth.unlink") : t("auth.keepLastIdentity")}
         onClick={() => unlink(provider)}
       >
-        解除绑定
+        {t("auth.unlink")}
       </button>
     );
 
   return (
     <div className="identity-list">
-      <p className="eyebrow">登录方式</p>
+      <p className="eyebrow">{t("auth.identitiesTitle")}</p>
 
       <section className="identity-row">
         <div>
-          <strong>手机号</strong>
+          <strong>{t("auth.phoneLabel")}</strong>
           <small>
             {!loaded
-              ? "读取中…"
+              ? t("auth.loading")
               : phoneIdentity
-                ? `${formatPhoneDisplay(phoneIdentity.label ?? account.phone ?? "")} · ${phoneIdentity.verified ? "已验证" : "未验证"}`
-                : "未绑定"}
+                ? `${formatPhoneDisplay(phoneIdentity.label ?? account.phone ?? "")} · ${phoneIdentity.verified ? t("auth.verified") : t("auth.unverified")}`
+                : t("auth.notLinked")}
           </small>
         </div>
         <div className="identity-actions">
-          {loaded && !phoneIdentity && bindButton("phone", "绑定手机号")}
+          {loaded && !phoneIdentity && bindButton("phone", t("auth.linkPhone"))}
           {loaded &&
             phoneIdentity &&
             !phoneIdentity.verified &&
-            bindButton("phone", "完成验证")}
+            bindButton("phone", t("auth.completeVerification"))}
           {unlinkButton("phone", Boolean(phoneIdentity))}
         </div>
         {form === "phone" && (
           <form onSubmit={submitBindPhone}>
-            <label htmlFor="identity-phone">手机号</label>
+            <label htmlFor="identity-phone">{t("auth.phoneLabel")}</label>
             <input
               id="identity-phone"
               type="tel"
               inputMode="tel"
               autoComplete="tel-national"
-              placeholder="11 位手机号"
+              placeholder={t("auth.phonePlaceholder")}
               required
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
             />
             <div className="identity-form-actions">
               <button type="submit" disabled={busy || !online}>
-                {busy ? "正在发送…" : "发送验证码"}
+                {busy ? t("auth.sending") : t("auth.sendCode")}
               </button>
               <button
                 type="button"
                 className="quiet-button"
                 onClick={closeForm}
               >
-                取消
+                {t("common.cancel")}
               </button>
             </div>
           </form>
         )}
         {form === "phone-code" && (
           <form onSubmit={submitVerifyPhone}>
-            <label htmlFor="identity-phone-code">短信验证码</label>
+            <label htmlFor="identity-phone-code">{t("auth.smsCode")}</label>
             <input
               id="identity-phone-code"
               inputMode="numeric"
@@ -290,14 +293,14 @@ export function AccountIdentities({
             />
             <div className="identity-form-actions">
               <button type="submit" disabled={busy || !online || !code}>
-                {busy ? "正在验证…" : "确认绑定"}
+                {busy ? t("auth.verifying") : t("auth.confirmLink")}
               </button>
               <button
                 type="button"
                 className="quiet-button"
                 onClick={closeForm}
               >
-                取消
+                {t("common.cancel")}
               </button>
             </div>
           </form>
@@ -306,26 +309,26 @@ export function AccountIdentities({
 
       <section className="identity-row">
         <div>
-          <strong>邮箱</strong>
+          <strong>{t("auth.emailLabel")}</strong>
           <small>
             {!loaded
-              ? "读取中…"
+              ? t("auth.loading")
               : emailIdentity
-                ? `${emailIdentity.label ?? account.email ?? ""} · ${emailIdentity.verified ? "已验证" : "未验证"}`
-                : "未绑定"}
+                ? `${emailIdentity.label ?? account.email ?? ""} · ${emailIdentity.verified ? t("auth.verified") : t("auth.unverified")}`
+                : t("auth.notLinked")}
           </small>
         </div>
         <div className="identity-actions">
-          {loaded && !emailIdentity && bindButton("email", "绑定邮箱")}
+          {loaded && !emailIdentity && bindButton("email", t("auth.linkEmail"))}
           {loaded &&
             emailIdentity &&
             !emailIdentity.verified &&
-            bindButton("email", "完成验证")}
+            bindButton("email", t("auth.completeVerification"))}
           {unlinkButton("email", Boolean(emailIdentity))}
         </div>
         {form === "email" && (
           <form onSubmit={submitBindEmail}>
-            <label htmlFor="identity-email">邮箱</label>
+            <label htmlFor="identity-email">{t("auth.emailLabel")}</label>
             <input
               id="identity-email"
               type="email"
@@ -336,21 +339,21 @@ export function AccountIdentities({
             />
             <div className="identity-form-actions">
               <button type="submit" disabled={busy || !online}>
-                {busy ? "正在发送…" : "发送验证码"}
+                {busy ? t("auth.sending") : t("auth.sendCode")}
               </button>
               <button
                 type="button"
                 className="quiet-button"
                 onClick={closeForm}
               >
-                取消
+                {t("common.cancel")}
               </button>
             </div>
           </form>
         )}
         {form === "email-code" && (
           <form onSubmit={submitVerifyEmail}>
-            <label htmlFor="identity-email-code">邮箱验证码</label>
+            <label htmlFor="identity-email-code">{t("auth.emailCode")}</label>
             <input
               id="identity-email-code"
               inputMode="numeric"
@@ -362,14 +365,14 @@ export function AccountIdentities({
             />
             <div className="identity-form-actions">
               <button type="submit" disabled={busy || !online || !code}>
-                {busy ? "正在验证…" : "确认绑定"}
+                {busy ? t("auth.verifying") : t("auth.confirmLink")}
               </button>
               <button
                 type="button"
                 className="quiet-button"
                 onClick={closeForm}
               >
-                取消
+                {t("common.cancel")}
               </button>
             </div>
           </form>
@@ -380,7 +383,11 @@ export function AccountIdentities({
         <div>
           <strong>Google</strong>
           <small>
-            {!loaded ? "读取中…" : googleIdentity ? "已绑定" : "未绑定"}
+            {!loaded
+              ? t("auth.loading")
+              : googleIdentity
+                ? t("auth.linked")
+                : t("auth.notLinked")}
           </small>
         </div>
         <div className="identity-actions">
@@ -389,10 +396,10 @@ export function AccountIdentities({
               type="button"
               disabled={busy || !online}
               onClick={() =>
-                void run(() => adapter!.linkGoogle(), "正在前往 Google…")
+                void run(() => adapter!.linkGoogle(), t("auth.goingToGoogle"))
               }
             >
-              绑定 Google
+              {t("auth.linkGoogle")}
             </button>
           )}
           {unlinkButton("google", Boolean(googleIdentity))}
@@ -401,8 +408,12 @@ export function AccountIdentities({
 
       <section className="identity-row">
         <div>
-          <strong>密码</strong>
-          <small>{passwordSet ? "已设置" : "未设置（本机判断）"}</small>
+          <strong>{t("auth.passwordLabel")}</strong>
+          <small>
+            {passwordSet
+              ? t("auth.passwordSetStatus")
+              : t("auth.passwordNotSet")}
+          </small>
         </div>
         <div className="identity-actions">
           <button
@@ -413,7 +424,7 @@ export function AccountIdentities({
               setMessage(null);
             }}
           >
-            {passwordSet ? "修改密码" : "设置密码"}
+            {passwordSet ? t("auth.changePassword") : t("auth.setPassword")}
           </button>
           <button
             type="button"
@@ -422,17 +433,17 @@ export function AccountIdentities({
             onClick={() =>
               void run(
                 () => adapter!.requestPasswordReset(account.email ?? ""),
-                "重置邮件已发送；按邮件指引即可设置新密码。",
+                t("auth.resetEmailSent"),
               )
             }
           >
-            忘记密码
+            {t("auth.forgotPassword")}
           </button>
         </div>
         {form === "password" && (
           <form onSubmit={submitPassword}>
             <label htmlFor="identity-password">
-              {passwordSet ? "新密码" : "密码"}
+              {passwordSet ? t("auth.newPassword") : t("auth.passwordLabel")}
             </label>
             <input
               id="identity-password"
@@ -445,14 +456,14 @@ export function AccountIdentities({
             />
             <div className="identity-form-actions">
               <button type="submit" disabled={busy || !online}>
-                {busy ? "正在保存…" : "保存"}
+                {busy ? t("common.saving") : t("common.save")}
               </button>
               <button
                 type="button"
                 className="quiet-button"
                 onClick={closeForm}
               >
-                取消
+                {t("common.cancel")}
               </button>
             </div>
           </form>

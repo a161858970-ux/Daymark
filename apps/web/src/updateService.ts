@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { sendNotification } from "@tauri-apps/plugin-notification";
 import { cacheDir, join } from "@tauri-apps/api/path";
 import { isAndroid, isTauri } from "./apiBase.js";
+import { getMessage } from "./i18n/messages/index.js";
+import { readStoredLocale } from "./i18n/locale.js";
 
 /**
  * Update check with a platform split:
@@ -114,7 +116,12 @@ export async function installUpdate(info: UpdateInfo): Promise<void> {
       return;
     }
   }
-  throw new Error("没有可安装的更新");
+  throw new Error("No installable update");
+}
+
+/** Localized copy for shell notifications (outside React). */
+function notice(key: string, params?: Record<string, string | number>): string {
+  return getMessage(readStoredLocale(), key, params);
 }
 
 /** Release the desktop plugin handle when the user declines. */
@@ -164,8 +171,8 @@ async function watchUpdateDownload(id: string): Promise<void> {
 async function announceUpdateFailed(): Promise<void> {
   try {
     await sendNotification({
-      title: "拾序更新",
-      body: "新版本下载不完整或失败，请打开应用重试。",
+      title: notice("sync.notifyUpdateTitle"),
+      body: notice("sync.notifyUpdateFailedBody"),
       extra: { kind: "update_failed" },
     });
   } catch {
@@ -193,8 +200,8 @@ async function announceUpdateReady(): Promise<void> {
   }
   try {
     await sendNotification({
-      title: "拾序更新已就绪",
-      body: "新版本已下载完成，点按安装。",
+      title: notice("sync.notifyUpdateReadyTitle"),
+      body: notice("sync.notifyUpdateReadyBody"),
       extra: { kind: "update_install" },
     });
   } catch {
@@ -218,8 +225,10 @@ export async function openReadyUpdate(): Promise<void> {
   } catch (cause) {
     try {
       await sendNotification({
-        title: "拾序更新",
-        body: `安装页启动失败：${cause instanceof Error ? cause.message : String(cause)}`,
+        title: notice("sync.notifyUpdateTitle"),
+        body: notice("sync.notifyInstallFailedBody", {
+          error: cause instanceof Error ? cause.message : String(cause),
+        }),
         extra: { kind: "update_failed" },
       });
     } catch {

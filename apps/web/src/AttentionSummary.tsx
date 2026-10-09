@@ -1,3 +1,6 @@
+import { getMessage } from "./i18n/messages/index.js";
+import { readStoredLocale } from "./i18n/locale.js";
+
 export type AttentionTone = "ambiguity" | "conflict" | "repair";
 
 export function AttentionSummary({
@@ -30,7 +33,12 @@ export function AttentionSummary({
         <strong>{title}</strong>
         <small>{description}</small>
       </span>
-      <span className="attention-count" aria-label={`${count} 条`}>
+      <span
+        className="attention-count"
+        aria-label={getMessage(readStoredLocale(), "common.countRecords", {
+          count,
+        })}
+      >
         {count}
       </span>
       <span className="attention-chevron" aria-hidden="true">

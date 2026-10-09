@@ -1,6 +1,7 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isAndroid, isTauri } from "./apiBase.js";
+import { useT } from "./i18n/index.js";
 
 /**
  * Packaged-shell chrome. The OS window frame is removed
@@ -10,6 +11,7 @@ import { isAndroid, isTauri } from "./apiBase.js";
  * browser build it renders nothing at all.
  */
 export default function WindowTitleBar() {
+  const t = useT();
   const [enabled] = useState(() => isTauri() && !isAndroid());
   useEffect(() => {
     if (!enabled) return;
@@ -33,18 +35,18 @@ export default function WindowTitleBar() {
     <div
       className="window-titlebar"
       role="toolbar"
-      aria-label="窗口控制"
+      aria-label={t("sync.shell.windowControls")}
       onMouseDown={onStripDown}
       onDoubleClick={onStripDouble}
     >
       <div className="titlebar-label">
         <img src="/daymark-icon.png" alt="" />
-        <span>拾序</span>
+        <span>{t("common.brandName")}</span>
       </div>
       <div className="window-controls">
         <button
           type="button"
-          aria-label="最小化"
+          aria-label={t("sync.shell.minimize")}
           onClick={() => void win.minimize()}
         >
           <svg viewBox="0 0 11 11" aria-hidden="true">
@@ -53,7 +55,7 @@ export default function WindowTitleBar() {
         </button>
         <button
           type="button"
-          aria-label="最大化"
+          aria-label={t("sync.shell.maximize")}
           onClick={() => void win.toggleMaximize()}
         >
           <svg viewBox="0 0 11 11" aria-hidden="true">
@@ -70,7 +72,7 @@ export default function WindowTitleBar() {
         </button>
         <button
           type="button"
-          aria-label="关闭"
+          aria-label={t("common.close")}
           className="window-control-close"
           onClick={() => void win.close()}
         >

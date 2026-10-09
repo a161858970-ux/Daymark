@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Course, Item } from "@daymark/domain";
+import { useI18n } from "./i18n/index.js";
 import { changedItemFields } from "./itemEditDiff.js";
 import { SelectField } from "./SelectField.js";
 import { TimeBlock } from "./TimeBlock.js";
@@ -36,6 +37,7 @@ export function ItemEditForm({
   onSaved,
   onCancel,
 }: Props) {
+  const t = useI18n().t;
   const titleInputRef = useRef<HTMLInputElement>(null);
   // The row can change underneath (another device synced) while this form is
   // open; dirty state is therefore measured against the item as opened.
@@ -90,17 +92,17 @@ export function ItemEditForm({
   return (
     <form
       className="detail-form"
-      aria-label={`编辑 ${item.title}`}
+      aria-label={t("item.editAria", { title: item.title })}
       onSubmit={(event) => void save(event)}
     >
       <div className="detail-mode-heading">
         <p className="eyebrow">EDIT ITEM</p>
-        <h2 id={headingId}>编辑事项</h2>
-        <p>在当前详情空间中修改已保存的信息。</p>
+        <h2 id={headingId}>{t("item.editTitle")}</h2>
+        <p>{t("item.editDeck")}</p>
       </div>
       <div className="detail-form-grid">
         <label className="detail-field-wide">
-          事项标题
+          {t("item.titleLabel")}
           <input
             ref={titleInputRef}
             value={title}
@@ -109,13 +111,13 @@ export function ItemEditForm({
           />
         </label>
         <label>
-          课程
+          {t("item.courseLabel")}
           <SelectField
             value={courseId}
             onChange={setCourseId}
-            label="课程"
+            label={t("item.courseLabel")}
             options={[
-              { value: "", label: "无课程" },
+              { value: "", label: t("item.noCourse") },
               ...courses.map((course) => ({
                 value: course.id,
                 label: course.name,
@@ -124,17 +126,17 @@ export function ItemEditForm({
           />
         </label>
         <label>
-          提醒等级
+          {t("item.reminderLevel")}
           <SelectField
             value={reminderLevel}
             onChange={(next) =>
               setReminderLevel(next as Item["reminder_level"])
             }
-            label="提醒等级"
+            label={t("item.reminderLevel")}
             options={[
-              { value: "OFF", label: "关闭" },
-              { value: "NORMAL", label: "普通" },
-              { value: "HIGH", label: "高" },
+              { value: "OFF", label: t("item.reminderOff") },
+              { value: "NORMAL", label: t("item.reminderNormal") },
+              { value: "HIGH", label: t("item.reminderHigh") },
             ]}
           />
         </label>
@@ -153,7 +155,7 @@ export function ItemEditForm({
           }}
         />
         <label className="detail-field-wide">
-          补充内容
+          {t("item.detailField")}
           <textarea
             value={detail}
             onChange={(event) => setDetail(event.target.value)}
@@ -161,9 +163,9 @@ export function ItemEditForm({
         </label>
       </div>
       <div className="detail-actions detail-edit-actions">
-        <button type="submit">保存修改</button>
+        <button type="submit">{t("item.saveChanges")}</button>
         <button type="button" className="quiet-button" onClick={onCancel}>
-          取消
+          {t("common.cancel")}
         </button>
       </div>
     </form>

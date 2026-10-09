@@ -16,7 +16,7 @@ async function responseData<T>(response: Response): Promise<T> {
     error?: { message?: string };
   };
   if (!response.ok || body.data === undefined)
-    throw new Error(body.error?.message ?? "课程表导入暂时不可用。");
+    throw new Error(body.error?.message ?? "Course import is unavailable");
   return body.data;
 }
 
@@ -41,22 +41,24 @@ function fileSourceType(file: File): CourseImportSourceType {
   if (file.type === "application/pdf") return "PDF";
   if (["image/jpeg", "image/png", "image/webp"].includes(file.type))
     return "IMAGE";
-  throw new Error("请选择 PDF、PNG、JPEG 或 WebP 课程表文件。");
+  throw new Error("Unsupported timetable file type");
 }
 
 async function fileBase64(file: File): Promise<string> {
   // Distinguish the two failures: an empty read is a stale/unreadable file
   // (the file input was reset while the token fetch was still in flight),
   // not an oversized one — collapsing them made both say "15 MB".
-  if (!file.size) throw new Error("无法读取该课程表文件，请重新选择一次。");
-  if (file.size > 15 * 1024 * 1024) throw new Error("课程表文件需小于 15 MB。");
+  if (!file.size)
+    throw new Error("Cannot read the timetable file; pick it again");
+  if (file.size > 15 * 1024 * 1024)
+    throw new Error("Timetable file exceeds 15 MB");
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error("无法读取课程表文件。"));
+    reader.onerror = () => reject(new Error("Cannot read the timetable file"));
     reader.onload = () => {
       const value = String(reader.result);
       const separator = value.indexOf(",");
-      if (separator < 0) reject(new Error("无法读取课程表文件。"));
+      if (separator < 0) reject(new Error("Cannot read the timetable file"));
       else resolve(value.slice(separator + 1));
     };
     reader.readAsDataURL(file);

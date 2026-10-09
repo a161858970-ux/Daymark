@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useT } from "./i18n/index.js";
 import { motionDuration } from "./motion.js";
 
 type SaveState = "IDLE" | "SAVING" | "SAVED" | "ERROR";
@@ -8,6 +9,7 @@ export function QuickCapture({
 }: {
   onSave: (text: string) => Promise<void>;
 }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   const [text, setText] = useState("");
   const [lastSavedText, setLastSavedText] = useState("");
@@ -74,14 +76,14 @@ export function QuickCapture({
   }
 
   const buttonLabel = !expanded
-    ? "打开快速记录"
+    ? t("capture.open")
     : saveState === "SAVING"
-      ? "正在保存记录"
+      ? t("capture.saving")
       : saveState === "SAVED"
-        ? "记录已保存"
+        ? t("capture.saved")
         : saveState === "ERROR"
-          ? "重试保存记录"
-          : "保存记录";
+          ? t("capture.retrySave")
+          : t("capture.save");
 
   return (
     <div
@@ -89,7 +91,7 @@ export function QuickCapture({
       className={`quick-capture ${expanded ? "expanded" : ""} ${saveState.toLowerCase()}`}
     >
       <form
-        aria-label="快速记录"
+        aria-label={t("capture.title")}
         aria-busy={saveState === "SAVING"}
         onSubmit={(event) => void submit(event)}
       >
@@ -105,8 +107,8 @@ export function QuickCapture({
               if (saveState === "ERROR" || saveState === "SAVED")
                 setSaveState("IDLE");
             }}
-            placeholder="记录一件事……"
-            aria-label="快速记录内容"
+            placeholder={t("capture.placeholder")}
+            aria-label={t("capture.label")}
           />
         </span>
         <button
@@ -126,14 +128,14 @@ export function QuickCapture({
         </button>
       </form>
       <span className="quick-capture-feedback" aria-hidden="true">
-        <strong>✓ 已记录</strong>
+        <strong>{t("capture.toast")}</strong>
         <span>{lastSavedText}</span>
       </span>
       <span className="sr-only" aria-live="polite">
         {saveState === "SAVED"
-          ? "已记录，可以继续输入下一条"
+          ? t("capture.ariaSaved")
           : saveState === "ERROR"
-            ? "未能保存在本机，请重试"
+            ? t("capture.ariaFailed")
             : ""}
       </span>
     </div>

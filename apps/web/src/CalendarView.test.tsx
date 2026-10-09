@@ -7,6 +7,7 @@ import {
   calendarItemTimeLabel,
 } from "./CalendarDayView.js";
 import { CalendarGrid, calendarPositionSignatures } from "./CalendarGrid.js";
+import { I18nProvider } from "./i18n/index.js";
 
 const ownerId = "22222222-2222-4222-8222-222222222222";
 const course: Course = {
@@ -82,15 +83,17 @@ const week: CalendarWeekRow = {
 
 it("renders one continuous range and makes the whole mobile date the drill-down target", () => {
   const markup = renderToStaticMarkup(
-    <CalendarGrid
-      weeks={[week]}
-      items={[range, point]}
-      mode="month"
-      today="2026-09-24"
-      selectedDate="2026-09-22"
-      onSelectDate={() => undefined}
-      onOpen={() => undefined}
-    />,
+    <I18nProvider initialLocale="zh-CN">
+      <CalendarGrid
+        weeks={[week]}
+        items={[range, point]}
+        mode="month"
+        today="2026-09-24"
+        selectedDate="2026-09-22"
+        onSelectDate={() => undefined}
+        onOpen={() => undefined}
+      />
+    </I18nProvider>,
   );
   expect(markup).toContain('aria-label="2026-09-22，2 项事项，已选择"');
   expect(markup).toContain('aria-current="date"');
@@ -99,20 +102,24 @@ it("renders one continuous range and makes the whole mobile date the drill-down 
 });
 
 it("presents day items with time, course, and non-color completion meaning", () => {
-  expect(calendarDayHeading("2026-09-24")).toBe("9月24日 · 星期四");
-  expect(calendarItemTimeLabel(range, "2026-09-24", "UTC")).toContain(
+  expect(calendarDayHeading("2026-09-24", "zh-CN")).toBe("9月24日 · 星期四");
+  expect(calendarItemTimeLabel(range, "2026-09-24", "UTC", "zh-CN")).toContain(
     "持续事项",
   );
-  expect(calendarItemTimeLabel(point, "2026-09-22", "UTC")).toBe("截止 18:00");
+  expect(calendarItemTimeLabel(point, "2026-09-22", "UTC", "zh-CN")).toBe(
+    "截止 18:00",
+  );
   const markup = renderToStaticMarkup(
-    <CalendarDayView
-      date="2026-09-24"
-      items={[range]}
-      courses={[course]}
-      timeZone="UTC"
-      onOpen={() => undefined}
-      onBack={() => undefined}
-    />,
+    <I18nProvider initialLocale="zh-CN">
+      <CalendarDayView
+        date="2026-09-24"
+        items={[range]}
+        courses={[course]}
+        timeZone="UTC"
+        onOpen={() => undefined}
+        onBack={() => undefined}
+      />
+    </I18nProvider>,
   );
   expect(markup).toContain("9月24日 · 星期四");
   expect(markup).toContain("环境经济学 · 已完成");

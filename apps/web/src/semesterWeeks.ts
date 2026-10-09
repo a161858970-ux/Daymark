@@ -13,6 +13,8 @@
  * a date by a day.
  */
 
+import { readStoredLocale } from "./i18n/locale.js";
+
 export type DateOnly = string;
 
 export interface WeekFields {
@@ -158,7 +160,11 @@ export function monthKey(range: WeekRange): string {
   return range.start_date.slice(0, 7);
 }
 
-export function monthLabel(key: string): string {
-  const [year, month] = key.split("-");
-  return `${year} 年 ${Number(month)} 月`;
+export function monthLabel(key: string, locale = readStoredLocale()): string {
+  const [year = "0", month = "1"] = key.split("-");
+  const date = new Date(Number(year), Number(month) - 1, 1);
+  return new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "long",
+  }).format(date);
 }

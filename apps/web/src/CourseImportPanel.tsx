@@ -9,6 +9,7 @@ import {
   getCommittingJobId,
   subscribeCourseCommit,
 } from "./courseCommitStore.js";
+import { useI18n, useT, type Translate, weekdayLabels } from "./i18n/index.js";
 import { toUserMessage } from "./errors.js";
 
 interface Props {
@@ -29,11 +30,15 @@ interface Props {
 
 function scheduleLabel(
   schedule: CourseImportJob["courses"][number]["schedules"][number],
+  t: Translate,
+  weekdays: readonly string[],
 ) {
-  const weekdays = ["一", "二", "三", "四", "五", "六", "日"];
   const week =
     schedule.week_start && schedule.week_end
-      ? ` · 第 ${schedule.week_start}–${schedule.week_end} 周`
+      ? ` · ${t("course.importWeekSpan", {
+          from: schedule.week_start,
+          to: schedule.week_end,
+        })}`
       : "";
   const place = schedule.classroom ? ` · ${schedule.classroom}` : "";
   // No clock time in the source: show the period label (节次) instead of
@@ -41,8 +46,8 @@ function scheduleLabel(
   const timePart =
     schedule.start_time && schedule.end_time
       ? `${schedule.start_time.slice(0, 5)}–${schedule.end_time.slice(0, 5)}`
-      : schedule.stage_label?.trim() || "时间待定";
-  return `周${weekdays[schedule.weekday - 1]} ${timePart}${week}${place}`;
+      : schedule.stage_label?.trim() || t("course.timePending");
+  return `${weekdays[schedule.weekday - 1]} ${timePart}${week}${place}`;
 }
 
 export function CourseImportReview({
@@ -58,19 +63,24 @@ export function CourseImportReview({
   onCommit(): void;
   onDiscard(): void;
 }) {
+  const t = useT();
+  const { locale } = useI18n();
+  const weekdays = weekdayLabels(locale);
   return (
     <div className="course-import-review">
       <div className="course-import-summary">
-        <p className="section-kicker">识别预览</p>
-        <strong>{job.courses.length} 门课程</strong>
-        <span>确认课程与时间后再写入；这里不会生成事项。</span>
+        <p className="section-kicker">{t("course.importPreview")}</p>
+        <strong>
+          {t("course.importCourseCount", { count: job.courses.length })}
+        </strong>
+        <span>{t("course.importReviewNote")}</span>
       </div>
       <ol className="course-import-courses">
         {job.courses.map((course) => (
           <li key={course.name}>
             <div className="course-import-course-copy">
               <strong>{course.name}</strong>
-              <span>{course.instructor ?? "教师未识别"}</span>
+              <span>{course.instructor ?? t("course.instructorUnknown")}</span>
             </div>
             {course.schedules.length ? (
               <ul className="course-import-schedules">
@@ -78,17 +88,19 @@ export function CourseImportReview({
                   <li
                     key={`${schedule.weekday}:${schedule.start_time ?? "none"}:${index}`}
                   >
-                    {scheduleLabel(schedule)}
+                    {scheduleLabel(schedule, t, weekdays)}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="course-import-no-schedule">未识别到课程时间</p>
+              <p className="course-import-no-schedule">
+                {t("course.noScheduleDetected")}
+              </p>
             )}
             {course.duplicate_candidates.length > 0 && (
               <fieldset className="course-import-duplicate">
-                <legend>上一学期有严格同名课程，这是同一门课程吗？</legend>
-                <p>确认相同后只继承课程信息，不复制历史事项或旧课表。</p>
+                <legend>{t("course.importDuplicateLegend")}</legend>
+                <p>{t("course.importDuplicateNote")}</p>
                 <div>
                   {course.duplicate_candidates.map((candidate) => (
                     <button
@@ -109,7 +121,7 @@ export function CourseImportReview({
                         })
                       }
                     >
-                      是同一门，继承课程信息
+                      {t("course.importSameCourse")}
                     </button>
                   ))}
                   <button
@@ -127,7 +139,7 @@ export function CourseImportReview({
                       })
                     }
                   >
-                    不是，作为新课程
+                    {t("course.importNewCourse")}
                   </button>
                 </div>
               </fieldset>
@@ -143,10 +155,10 @@ export function CourseImportReview({
           onClick={onCommit}
         >
           {job.status === "NEEDS_RESOLUTION"
-            ? "请先确认同名课程"
+            ? t("course.importNeedsResolution")
             : busy
-              ? "正在建立课程…"
-              : "确认并建立课程"}
+              ? t("course.importCreating")
+              : t("course.importCommit")}
         </button>
         <button
           type="button"
@@ -154,7 +166,7 @@ export function CourseImportReview({
           disabled={busy}
           onClick={onDiscard}
         >
-          放弃本次识别
+          {t("course.importDiscard")}
         </button>
       </div>
     </div>
@@ -162,27 +174,31 @@ export function CourseImportReview({
 }
 
 /**
- * A failed import must state its exact stored reason (timeout, unreadable
- * file, no courses…); older rows without a message fall back to the generic
- * hint. Nothing is written on failure, so "no courses" is always accurate.
- */
-/**
  * Success copy for a commit. A true reuse (same file already imported and
  * every original course still alive) created nothing — claiming
  * "已建立 22 门课程" there sent the user looking for courses that were
  * never written.
  */
-export function committedMessage(result: CourseImportCommitResult): string {
+export function committedMessage(
+  result: CourseImportCommitResult,
+  t: Translate,
+): string {
   return result.reused_existing_import
-    ? `本学期已导入过这份课程表，未重复建立（${result.course_ids.length} 门课程已在列表中）。`
-    : `已建立 ${result.course_ids.length} 门课程。`;
+    ? t("course.importReused", { count: result.course_ids.length })
+    : t("course.importCreated", { count: result.course_ids.length });
 }
 
-export function importFailureNote(job: CourseImportJob | null): string | null {
+/**
+ * A failed import must state its exact stored reason (timeout, unreadable
+ * file, no courses…); older rows without a message fall back to the generic
+ * hint. Nothing is written on failure, so "no courses" is always accurate.
+ */
+export function importFailureNote(
+  job: CourseImportJob | null,
+  t: Translate,
+): string | null {
   if (!job || job.status !== "FAILED") return null;
-  return (
-    job.error_message ?? "上次识别没有写入任何课程，可以重新选择更清晰的文件。"
-  );
+  return job.error_message ?? t("course.importFailedHint");
 }
 
 export function CourseImportPanel({
@@ -197,6 +213,7 @@ export function CourseImportPanel({
   onCommitted,
   onDiscard,
 }: Props) {
+  const t = useT();
   const [job, setJob] = useState<CourseImportJob | null>(null);
   const [loading, setLoading] = useState(available && Boolean(semester));
   const [error, setError] = useState<string | null>(null);
@@ -276,7 +293,7 @@ export function CourseImportPanel({
     try {
       await onDiscard(job.id);
       setJob(null);
-      setSuccess("已放弃本次识别，未写入任何课程。");
+      setSuccess(t("course.importDiscarded"));
     } catch (cause) {
       setError(toUserMessage(cause));
     } finally {
@@ -292,7 +309,7 @@ export function CourseImportPanel({
       const result = await onCommit(job.id);
       await onCommitted(result);
       setJob(null);
-      setSuccess(committedMessage(result));
+      setSuccess(committedMessage(result, t));
     } catch (cause) {
       setError(toUserMessage(cause));
     } finally {
@@ -304,37 +321,41 @@ export function CourseImportPanel({
     <section className="course-import-panel inline-reveal" aria-live="polite">
       <div className="course-import-heading">
         <div>
-          <p className="section-kicker">COURSE IMPORT</p>
-          <h3>导入课程表</h3>
+          <p className="section-kicker">{t("course.importKicker")}</p>
+          <h3>{t("course.importTimetable")}</h3>
           <p>
             {semester
-              ? `导入到 ${semester.name}。识别结果会先供你核对。`
-              : "先创建学期，再导入该学期的课程表。"}
+              ? t("course.importIntoSemester", { name: semester.name })
+              : t("course.importNeedSemester")}
           </p>
         </div>
         <button type="button" className="quiet-button" onClick={onClose}>
-          收起
+          {t("common.collapse")}
         </button>
       </div>
       {!available && (
-        <p className="course-import-note">
-          课程表解析需要已配置并登录的同步账户；你仍可手动添加课程。
-        </p>
+        <p className="course-import-note">{t("course.importUnavailable")}</p>
       )}
       {available && !semester && (
-        <p className="course-import-note">请先使用下方“创建学期”。</p>
+        <p className="course-import-note">
+          {t("course.importCreateSemesterFirst")}
+        </p>
       )}
       {available && semester && (
         <>
           <label className="course-import-file">
-            <span>{job ? "重新选择课程表文件" : "选择课程表文件"}</span>
-            <small>PDF、PNG、JPEG 或 WebP，最大 15 MB</small>
+            <span>
+              {job
+                ? t("course.importReselectFile")
+                : t("course.importSelectFile")}
+            </span>
+            <small>{t("course.importFileHint")}</small>
             <span className="course-import-file-row">
               <input
                 type="file"
                 accept="application/pdf,image/png,image/jpeg,image/webp"
                 disabled={loading || committing}
-                aria-label="选择课程表文件"
+                aria-label={t("course.importSelectFile")}
                 onChange={(event) => {
                   const input = event.currentTarget;
                   setFileName(input.files?.[0]?.name ?? null);
@@ -351,17 +372,19 @@ export function CourseImportPanel({
                 className={`course-import-file-button${loading ? " is-disabled" : ""}`}
                 aria-hidden="true"
               >
-                选择文件
+                {t("course.importChooseFile")}
               </span>
               <span className="course-import-file-name">
-                {fileName ?? "未选择文件"}
+                {fileName ?? t("course.importNoFile")}
               </span>
             </span>
           </label>
-          {loading && <p className="course-import-progress">正在处理…</p>}
-          {importFailureNote(job) && (
+          {loading && (
+            <p className="course-import-progress">{t("common.processing")}</p>
+          )}
+          {importFailureNote(job, t) && (
             <p className="course-import-note" role="alert">
-              {importFailureNote(job)}
+              {importFailureNote(job, t)}
             </p>
           )}
           {job && job.courses.length > 0 && (

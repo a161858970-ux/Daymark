@@ -1,5 +1,6 @@
 import type { Semester } from "@daymark/domain";
 import { SelectField } from "./SelectField.js";
+import { useT } from "./i18n/index.js";
 
 interface Props {
   semesters: Semester[];
@@ -8,16 +9,17 @@ interface Props {
 }
 
 export function SemesterSwitcher({ semesters, selectedId, onChange }: Props) {
+  const t = useT();
   if (semesters.length === 0) return null;
   return (
     <label className="semester-switcher">
-      学期视角
+      {t("course.semesterPerspective")}
       <SelectField
         value={selectedId ?? ""}
         onChange={(next) => onChange(next || null)}
-        label="学期视角"
+        label={t("course.semesterPerspective")}
         options={[
-          { value: "", label: "当前" },
+          { value: "", label: t("course.current") },
           ...semesters.map((semester) => ({
             value: semester.id,
             label: semester.name,

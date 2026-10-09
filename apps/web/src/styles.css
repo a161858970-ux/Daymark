@@ -3099,6 +3099,108 @@ h2 {
 .state-syncing .sync-status-dot {
   background: #6b887c;
 }
+/* Language switcher — same material as .account-popover / nav utility. */
+.language-switcher {
+  position: relative;
+}
+.language-switcher-nav {
+  margin-top: 8px;
+}
+.language-trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  background: transparent;
+  color: #5b6560;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    color var(--motion-fast) ease-out,
+    background-color var(--motion-fast) ease-out,
+    transform var(--motion-fast) ease-out;
+}
+.language-trigger:hover {
+  background: rgb(255 255 255 / 42%);
+  color: var(--accent-strong);
+}
+.language-trigger:active {
+  transform: translateY(1px);
+}
+.language-switcher-compact {
+  display: flex;
+  justify-content: flex-end;
+}
+.language-switcher-compact .language-trigger {
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-medium);
+  background: rgb(255 255 255 / 42%);
+  box-shadow: 0 5px 20px rgb(45 59 51 / 6%);
+}
+.language-menu {
+  position: absolute;
+  z-index: 30;
+  min-width: 168px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-medium);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-soft);
+  animation: account-popover-in var(--motion-medium) ease-out both;
+}
+.language-switcher-nav .language-menu {
+  left: 0;
+  bottom: calc(100% + 8px);
+}
+.language-switcher-compact .language-menu {
+  right: 0;
+  top: calc(100% + 8px);
+}
+.language-menu.closing {
+  pointer-events: none;
+  animation: account-popover-out var(--motion-short) ease-in both;
+}
+.language-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.language-menu button:hover,
+.language-menu button.selected {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.language-option-check {
+  width: 1em;
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+@media (max-width: 767px) {
+  .language-switcher-compact {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 18px);
+    right: calc(clamp(18px, 5vw, 28px) + 52px);
+    z-index: 13;
+  }
+}
 .account-popover {
   position: absolute;
   left: 0;

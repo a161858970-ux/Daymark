@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { TimeWheel } from "./TimeWheel.js";
+import {
+  getMessage,
+  readStoredLocale,
+  useI18n,
+  weekdayLabelsSundayFirst,
+  type Locale,
+} from "./i18n/index.js";
 
 export type DateTimeMode = "date" | "datetime" | "time";
 
@@ -15,19 +22,29 @@ interface Props {
   placeholder?: string;
 }
 
-const WEEKDAY_LABEL = ["日", "一", "二", "三", "四", "五", "六"];
-const WEEKDAY_HEADING = ["一", "二", "三", "四", "五", "六", "日"];
-
 const pad = (value: number) => String(value).padStart(2, "0");
 
 function isoDay(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-export function dayLabel(iso: string): string {
+export function dayLabel(
+  iso: string,
+  locale: Locale = readStoredLocale(),
+): string {
   const [year = 0, month = 0, day = 0] = iso.split("-").map(Number);
-  const weekday = WEEKDAY_LABEL[new Date(year, month - 1, day).getDay()] ?? "";
-  return `${month}月${day}日 周${weekday}`;
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) return "";
+  const weekday =
+    weekdayLabelsSundayFirst(locale, "short")[date.getDay()] ?? "";
+  const monthDay = new Intl.DateTimeFormat(locale, {
+    month: "long",
+    day: "numeric",
+  }).format(date);
+  return getMessage(locale, "common.dayLabel", {
+    date: monthDay,
+    weekday,
+  });
 }
 
 /** Display text for the read-only trigger (empty → placeholder). */
@@ -35,12 +52,15 @@ export function displayValue(
   value: string,
   mode: DateTimeMode,
   placeholder: string,
+  locale: Locale = readStoredLocale(),
 ): string {
   if (!value) return placeholder;
   if (mode === "time") return value;
-  if (mode === "date") return dayLabel(value);
+  if (mode === "date") return dayLabel(value, locale);
   const [day = "", time = ""] = value.split("T");
-  return time ? `${dayLabel(day)} ${time.slice(0, 5)}` : dayLabel(day);
+  return time
+    ? `${dayLabel(day, locale)} ${time.slice(0, 5)}`
+    : dayLabel(day, locale);
 }
 
 /** Splits the stored local string into panel state (date + time). */
@@ -137,21 +157,6 @@ function shiftCursor(cursor: Draft["cursor"], delta: number): Draft["cursor"] {
   return { year: next.getFullYear(), month: next.getMonth() };
 }
 
-const MONTH_NAMES = [
-  "1月",
-  "2月",
-  "3月",
-  "4月",
-  "5月",
-  "6月",
-  "7月",
-  "8月",
-  "9月",
-  "10月",
-  "11月",
-  "12月",
-];
-
 /**
  * In-app date/time picker. Native controls would drag in the browser's own
  * panel (desktop) or the platform picker (mobile), neither of which matches
@@ -172,6 +177,7 @@ export function DateTimeField({
   required,
   placeholder,
 }: Props) {
+  const { t, locale, monthLabel } = useI18n();
   const wrapRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -185,10 +191,10 @@ export function DateTimeField({
   const resolvedPlaceholder =
     placeholder ??
     (mode === "time"
-      ? "选择时间"
+      ? t("common.pickTime")
       : mode === "date"
-        ? "选择日期"
-        : "选择日期时间");
+        ? t("common.pickDate")
+        : t("common.pickDateTime"));
 
   function close(restoreFocus = false) {
     setOpen(false);
@@ -347,7 +353,7 @@ export function DateTimeField({
         aria-label={ariaLabel}
         aria-haspopup="dialog"
         aria-expanded={open}
-        value={displayValue(value, mode, resolvedPlaceholder)}
+        value={displayValue(value, mode, resolvedPlaceholder, locale)}
         onClick={() => (open ? close() : openPanel())}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "Enter") {
@@ -364,7 +370,7 @@ export function DateTimeField({
             <div
               className="datetime-panel"
               role="dialog"
-              aria-label={`${label}选择`}
+              aria-label={t("common.pickAria", { label })}
               tabIndex={-1}
               ref={panelRef}
               onKeyDown={(event) => {
@@ -377,7 +383,7 @@ export function DateTimeField({
               <div className="datetime-nav">
                 <button
                   type="button"
-                  aria-label="上一月"
+                  aria-label={t("common.prevMonth")}
                   onClick={() =>
                     setDraft((current) => ({
                       ...current,
@@ -400,11 +406,14 @@ export function DateTimeField({
                   </svg>
                 </button>
                 <strong>
-                  {draft.cursor.year}年{MONTH_NAMES[draft.cursor.month]}
+                  {t("common.yearMonth", {
+                    year: draft.cursor.year,
+                    month: monthLabel(draft.cursor.month),
+                  })}
                 </strong>
                 <button
                   type="button"
-                  aria-label="下一月"
+                  aria-label={t("common.nextMonth")}
                   onClick={() =>
                     setDraft((current) => ({
                       ...current,
@@ -441,11 +450,11 @@ export function DateTimeField({
                     }));
                   }}
                 >
-                  今天
+                  {t("common.today")}
                 </button>
               </div>
               <div className="datetime-weekdays" aria-hidden="true">
-                {WEEKDAY_HEADING.map((name) => (
+                {weekdayLabelsSundayFirst(locale, "short").map((name) => (
                   <span key={name}>{name}</span>
                 ))}
               </div>
@@ -458,7 +467,7 @@ export function DateTimeField({
                     data-index={index}
                     data-outside={cell.outside || undefined}
                     data-today={cell.iso === todayIso || undefined}
-                    aria-label={dayLabel(cell.iso)}
+                    aria-label={dayLabel(cell.iso, locale)}
                     aria-pressed={cell.iso === draft.day}
                     aria-current={cell.iso === todayIso ? "date" : undefined}
                     onClick={() => pickDay(cell.iso)}
@@ -477,8 +486,8 @@ export function DateTimeField({
                         `${String(hour).padStart(2, "0")}:${draft.time.slice(3, 5)}`,
                       )
                     }
-                    label="时"
-                    ariaLabel="小时"
+                    label={t("common.hourLabel")}
+                    ariaLabel={t("common.hourAria")}
                   />
                   <TimeWheel
                     count={60}
@@ -488,8 +497,8 @@ export function DateTimeField({
                         `${draft.time.slice(0, 2)}:${String(minute).padStart(2, "0")}`,
                       )
                     }
-                    label="分"
-                    ariaLabel="分钟"
+                    label={t("common.minuteLabel")}
+                    ariaLabel={t("common.minuteAria")}
                   />
                 </div>
               ) : null}
@@ -502,7 +511,7 @@ export function DateTimeField({
                     close(true);
                   }}
                 >
-                  清除
+                  {t("common.clear")}
                 </button>
                 <span className="datetime-footer-actions">
                   {mode !== "date" ? (
@@ -522,7 +531,7 @@ export function DateTimeField({
                         }));
                       }}
                     >
-                      现在
+                      {t("common.now")}
                     </button>
                   ) : null}
                   <button
@@ -530,14 +539,14 @@ export function DateTimeField({
                     className="datetime-quiet"
                     onClick={() => close(true)}
                   >
-                    取消
+                    {t("common.cancel")}
                   </button>
                   <button
                     type="button"
                     className="datetime-confirm"
                     onClick={commit}
                   >
-                    确定
+                    {t("common.ok")}
                   </button>
                 </span>
               </div>

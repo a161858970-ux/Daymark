@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Course, Item } from "@daymark/domain";
+import { useT } from "./i18n/index.js";
 import { toUserMessage } from "./errors.js";
 
 type Strategy = "DELETE_ASSOCIATED_ITEMS" | "UNLINK_ASSOCIATED_ITEMS";
@@ -17,6 +18,7 @@ export function CourseDeleteConfirmation({
   onCancel,
   onConfirm,
 }: Props) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,9 +35,12 @@ export function CourseDeleteConfirmation({
   }
 
   return (
-    <section className="course-delete-confirmation" aria-label="删除课程确认">
-      <h2>删除“{course.name}”</h2>
-      <p>这门课程关联 {items.length} 条事项。请选择这些事项的处理方式：</p>
+    <section
+      className="course-delete-confirmation"
+      aria-label={t("course.deleteConfirmTitle")}
+    >
+      <h2>{t("course.deleteCourseTitle", { name: course.name })}</h2>
+      <p>{t("course.deleteLinkedItems", { count: items.length })}</p>
       {items.length > 0 && (
         <ul>
           {items.map((item) => (
@@ -49,7 +54,7 @@ export function CourseDeleteConfirmation({
           disabled={busy}
           onClick={() => void confirm("UNLINK_ASSOCIATED_ITEMS")}
         >
-          删除课程，保留无课程事项
+          {t("course.deleteKeepTasks")}
         </button>
         <button
           type="button"
@@ -57,7 +62,7 @@ export function CourseDeleteConfirmation({
           className="danger"
           onClick={() => void confirm("DELETE_ASSOCIATED_ITEMS")}
         >
-          删除课程及以上事项
+          {t("course.deleteWithTasks")}
         </button>
         <button
           type="button"
@@ -65,7 +70,7 @@ export function CourseDeleteConfirmation({
           className="quiet-button"
           onClick={onCancel}
         >
-          取消
+          {t("common.cancel")}
         </button>
       </div>
       {error && (

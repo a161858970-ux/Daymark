@@ -1,4 +1,6 @@
 import { GlobalSearchButton } from "./SearchSurface.js";
+import { LanguageSwitcher } from "./LanguageSwitcher.js";
+import { useT } from "./i18n/index.js";
 
 export type PrimaryPage = "overview" | "courses" | "calendar";
 
@@ -26,13 +28,6 @@ function NavigationIcon({ page }: { page: PrimaryPage }) {
   );
 }
 
-const destinations: { page: PrimaryPage; label: string; shortLabel: string }[] =
-  [
-    { page: "overview", label: "事项总览", shortLabel: "事项" },
-    { page: "courses", label: "课程", shortLabel: "课程" },
-    { page: "calendar", label: "日程", shortLabel: "日程" },
-  ];
-
 export function AppNavigation({
   page,
   onNavigate,
@@ -42,16 +37,39 @@ export function AppNavigation({
   onNavigate(page: PrimaryPage): void;
   onSearch(): void;
 }) {
+  const t = useT();
+  const destinations: {
+    page: PrimaryPage;
+    label: string;
+    shortLabel: string;
+  }[] = [
+    {
+      page: "overview",
+      label: t("nav.overview"),
+      shortLabel: t("nav.overviewShort"),
+    },
+    {
+      page: "courses",
+      label: t("nav.courses"),
+      shortLabel: t("nav.coursesShort"),
+    },
+    {
+      page: "calendar",
+      label: t("nav.calendar"),
+      shortLabel: t("nav.calendarShort"),
+    },
+  ];
+
   return (
-    <nav className="main-nav" aria-label="主导航">
-      <div className="brand" aria-label="拾序">
+    <nav className="main-nav" aria-label={t("nav.primary")}>
+      <div className="brand" aria-label={t("common.brandName")}>
         <span className="brand-mark" aria-hidden="true">
           <i />
           <i />
         </span>
         <span>
-          <strong>拾序</strong>
-          <small>DAYMARK</small>
+          <strong>{t("common.brandName")}</strong>
+          <small>{t("common.brandLatin")}</small>
         </span>
       </div>
       <div className="nav-primary">
@@ -79,10 +97,11 @@ export function AppNavigation({
         <GlobalSearchButton
           onOpen={onSearch}
           className="nav-search-trigger"
-          label="搜索记录"
+          label={t("nav.search")}
         />
+        <LanguageSwitcher variant="nav" />
       </div>
-      <p className="nav-note">记录课程里的事项、信息与上下文。</p>
+      <p className="nav-note">{t("nav.note")}</p>
     </nav>
   );
 }

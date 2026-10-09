@@ -6,6 +6,10 @@ import {
   committedMessage,
   importFailureNote,
 } from "./CourseImportPanel.js";
+import { getMessage, I18nProvider, type MessageParams } from "./i18n/index.js";
+
+const t = (key: string, params?: MessageParams) =>
+  getMessage("zh-CN", key, params);
 
 const job: CourseImportJob = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -47,13 +51,15 @@ const job: CourseImportJob = {
 
 it("keeps import as a reviewable Course flow with an explicit duplicate decision", () => {
   const markup = renderToStaticMarkup(
-    <CourseImportReview
-      job={job}
-      busy={false}
-      onResolve={() => undefined}
-      onCommit={() => undefined}
-      onDiscard={() => undefined}
-    />,
+    <I18nProvider initialLocale="zh-CN">
+      <CourseImportReview
+        job={job}
+        busy={false}
+        onResolve={() => undefined}
+        onCommit={() => undefined}
+        onDiscard={() => undefined}
+      />
+    </I18nProvider>,
   );
   expect(markup).toContain("识别预览");
   expect(markup).toContain("环境经济学");
@@ -89,13 +95,15 @@ it("shows the period label instead of a clock time when the source has none", ()
     ],
   };
   const markup = renderToStaticMarkup(
-    <CourseImportReview
-      job={undated}
-      busy={false}
-      onResolve={() => undefined}
-      onCommit={() => undefined}
-      onDiscard={() => undefined}
-    />,
+    <I18nProvider initialLocale="zh-CN">
+      <CourseImportReview
+        job={undated}
+        busy={false}
+        onResolve={() => undefined}
+        onCommit={() => undefined}
+        onDiscard={() => undefined}
+      />
+    </I18nProvider>,
   );
   expect(markup).toContain("周三 12-13节 · 第 1–16 周");
   expect(markup).not.toContain("--");
@@ -107,26 +115,32 @@ it("shows the stored failure reason for a failed import instead of a generic hin
     status: "FAILED",
     error_message: "识别服务响应超时，文件已保留，请稍后再试。",
   };
-  expect(importFailureNote(failed)).toBe(
+  expect(importFailureNote(failed, t)).toBe(
     "识别服务响应超时，文件已保留，请稍后再试。",
   );
   // Older rows without a stored message still get an accurate fallback.
-  expect(importFailureNote({ ...failed, error_message: null })).toBe(
+  expect(importFailureNote({ ...failed, error_message: null }, t)).toBe(
     "上次识别没有写入任何课程，可以重新选择更清晰的文件。",
   );
   // Anything that is not FAILED shows no failure note at all.
-  expect(importFailureNote(job)).toBeNull();
-  expect(importFailureNote(null)).toBeNull();
+  expect(importFailureNote(job, t)).toBeNull();
+  expect(importFailureNote(null, t)).toBeNull();
 });
 
 it("tells the truth about what a commit did", () => {
   expect(
-    committedMessage({ course_ids: ["a", "b"], reused_existing_import: false }),
+    committedMessage(
+      { course_ids: ["a", "b"], reused_existing_import: false },
+      t,
+    ),
   ).toBe("已建立 2 门课程。");
-  const reused = committedMessage({
-    course_ids: ["a", "b"],
-    reused_existing_import: true,
-  });
+  const reused = committedMessage(
+    {
+      course_ids: ["a", "b"],
+      reused_existing_import: true,
+    },
+    t,
+  );
   expect(reused).toContain("未重复建立");
   expect(reused).not.toContain("已建立 2");
 });

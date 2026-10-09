@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { DEFAULT_PHONE_COUNTRY, normalizePhone } from "./phone.js";
 import type { AuthAccount, AuthAdapter } from "./adapter.js";
 import { AuthUiError } from "./errors.js";
+import { useT } from "../i18n/index.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESEND_COUNTDOWN_MS = 60_000;
@@ -25,6 +26,7 @@ export function SignInPanel({
   adapter: AuthAdapter | null;
   onSignedIn?: (account: AuthAccount) => void;
 }) {
+  const t = useT();
   const [channel, setChannel] = useState<Channel>("phone");
   const [phoneStep, setPhoneStep] = useState<PhoneStep>("number");
   const [emailStep, setEmailStep] = useState<EmailStep>(null);
@@ -56,19 +58,15 @@ export function SignInPanel({
   );
 
   if (!adapter) {
-    return (
-      <p className="account-note">
-        账户登录尚未启用；快速记录、课程与日程仍可离线使用。
-      </p>
-    );
+    return <p className="account-note">{t("auth.signInUnavailable")}</p>;
   }
 
   function fail(error: unknown) {
     setIsError(true);
     setMessage(
       error instanceof AuthUiError
-        ? error.message
-        : "登录暂时不可用，请稍后再试。",
+        ? t(error.messageKey)
+        : t("auth.signInFailed"),
     );
   }
 
@@ -125,13 +123,13 @@ export function SignInPanel({
     const normalized = normalizePhone(phone, countryCode);
     if (!normalized) {
       setIsError(true);
-      setMessage("请输入有效的手机号。");
+      setMessage(t("auth.invalidPhone"));
       return;
     }
     void (async () => {
       const sent = await run(
         () => adapter!.sendPhoneOtp(normalized),
-        "验证码已发送到你的手机。",
+        t("auth.otpSentPhone"),
       );
       if (sent) {
         setPhoneStep("code");
@@ -147,7 +145,7 @@ export function SignInPanel({
     if (!normalized) return;
     void signedIn(
       () => adapter!.verifyPhoneOtp(normalized, code.trim()),
-      "已登录。",
+      t("auth.signedIn"),
     );
   }
 
@@ -156,19 +154,19 @@ export function SignInPanel({
     const normalized = normalizePhone(phone, countryCode);
     if (!normalized) {
       setIsError(true);
-      setMessage("请输入有效的手机号。");
+      setMessage(t("auth.invalidPhone"));
       return;
     }
     void (async () => {
       if (passwordAction === "sign_up")
         await signedIn(
           () => adapter!.signUpPhonePassword(normalized, password),
-          "账户已创建并登录。",
+          t("auth.accountCreated"),
         );
       else
         await signedIn(
           () => adapter!.signInPhonePassword(normalized, password),
-          "已登录。",
+          t("auth.signedIn"),
         );
     })();
   }
@@ -178,13 +176,13 @@ export function SignInPanel({
     const value = email.trim();
     if (!EMAIL_PATTERN.test(value)) {
       setIsError(true);
-      setMessage("请输入有效的邮箱地址。");
+      setMessage(t("auth.invalidEmail"));
       return;
     }
     void (async () => {
       const sent = await run(
         () => adapter!.sendEmailOtp(value),
-        "验证码已发送到你的邮箱。",
+        t("auth.otpSentEmail"),
       );
       if (sent) {
         setEmailStep("code-entry");
@@ -198,7 +196,7 @@ export function SignInPanel({
     event.preventDefault();
     void signedIn(
       () => adapter!.verifyEmailOtp(email.trim(), code.trim()),
-      "已登录。",
+      t("auth.signedIn"),
     );
   }
 
@@ -206,7 +204,7 @@ export function SignInPanel({
     event.preventDefault();
     void signedIn(
       () => adapter!.completePasswordRecovery(email.trim(), code.trim()),
-      "身份已验证；请在登录方式中设置新密码。",
+      t("auth.recoveryVerified"),
     );
   }
 
@@ -215,14 +213,14 @@ export function SignInPanel({
     const value = email.trim();
     if (!EMAIL_PATTERN.test(value)) {
       setIsError(true);
-      setMessage("请输入有效的邮箱地址。");
+      setMessage(t("auth.invalidEmail"));
       return;
     }
     if (passwordAction === "reset") {
       void (async () => {
         const sent = await run(
           () => adapter!.requestPasswordReset(value),
-          "重置邮件已发送；请输入邮件中的验证码。",
+          t("auth.resetSent"),
         );
         if (sent) {
           setResetSent(true);
@@ -235,12 +233,12 @@ export function SignInPanel({
       if (passwordAction === "sign_up")
         await signedIn(
           () => adapter!.signUpEmailPassword(value, password),
-          "账户已创建并登录。",
+          t("auth.accountCreated"),
         );
       else
         await signedIn(
           () => adapter!.signInEmailPassword(value, password),
-          "已登录。",
+          t("auth.signedIn"),
         );
     })();
   }
@@ -252,19 +250,19 @@ export function SignInPanel({
       if (!normalized) return;
       void run(
         () => adapter!.sendPhoneOtp(normalized),
-        "验证码已重新发送。",
+        t("auth.otpResent"),
       ).then((sent) => sent && startResendCountdown());
     } else {
       void run(
         () => adapter!.sendEmailOtp(email.trim()),
-        "验证码已重新发送。",
+        t("auth.otpResent"),
       ).then((sent) => sent && startResendCountdown());
     }
   }
 
   const codeField = (
     <label htmlFor="auth-code">
-      验证码
+      {t("auth.codeLabel")}
       <input
         id="auth-code"
         inputMode="numeric"
@@ -284,13 +282,13 @@ export function SignInPanel({
       disabled={busy || resending || !online}
       onClick={resend}
     >
-      {resending ? "稍后可重发" : "重新发送验证码"}
+      {resending ? t("auth.resendLater") : t("auth.resendCode")}
     </button>
   );
 
   const passwordField = (
     <label htmlFor="auth-password">
-      密码
+      {t("auth.passwordLabel")}
       <input
         id="auth-password"
         type="password"
@@ -317,7 +315,7 @@ export function SignInPanel({
           setMessage(null);
         }}
       >
-        使用邮箱登录
+        {t("auth.useEmail")}
       </button>
     ) : (
       <button
@@ -329,7 +327,7 @@ export function SignInPanel({
           setMessage(null);
         }}
       >
-        使用手机号登录
+        {t("auth.usePhone")}
       </button>
     );
 
@@ -339,19 +337,19 @@ export function SignInPanel({
         credentialMode === "otp" ? (
           phoneStep === "number" ? (
             <form onSubmit={submitPhoneNumber}>
-              <label htmlFor="auth-phone">手机号</label>
+              <label htmlFor="auth-phone">{t("auth.phoneLabel")}</label>
               <input
                 id="auth-phone"
                 type="tel"
                 inputMode="tel"
                 autoComplete="tel-national"
-                placeholder="11 位手机号"
+                placeholder={t("auth.phonePlaceholder")}
                 required
                 value={phone}
                 onChange={(event) => setPhone(event.target.value)}
               />
               <button type="submit" disabled={busy || !online}>
-                {busy ? "正在发送…" : "获取验证码"}
+                {busy ? t("auth.sending") : t("auth.getCode")}
               </button>
             </form>
           ) : (
@@ -359,7 +357,7 @@ export function SignInPanel({
               {codeField}
               <div className="auth-actions">
                 <button type="submit" disabled={busy || !online || !code}>
-                  {busy ? "正在登录…" : "登录"}
+                  {busy ? t("auth.signingIn") : t("auth.signIn")}
                 </button>
                 {resendButton}
               </div>
@@ -371,7 +369,7 @@ export function SignInPanel({
                   setMessage(null);
                 }}
               >
-                换一个手机号
+                {t("auth.changePhone")}
               </button>
             </form>
           )
@@ -387,10 +385,10 @@ export function SignInPanel({
             <div className="auth-actions">
               <button type="submit" disabled={busy || !online}>
                 {busy
-                  ? "正在处理…"
+                  ? t("common.processing")
                   : passwordAction === "sign_up"
-                    ? "创建账户并登录"
-                    : "登录"}
+                    ? t("auth.createAndSignIn")
+                    : t("auth.signIn")}
               </button>
               <button
                 type="button"
@@ -401,18 +399,22 @@ export function SignInPanel({
                   )
                 }
               >
-                {passwordAction === "sign_in" ? "创建账户" : "已有账户，登录"}
+                {passwordAction === "sign_in"
+                  ? t("auth.createAccount")
+                  : t("auth.haveAccountSignIn")}
               </button>
             </div>
           </form>
         )
       ) : emailStep === "code-entry" ? (
         <form onSubmit={submitEmailCode}>
-          <p className="account-note">验证码已发送至 {email.trim()}</p>
+          <p className="account-note">
+            {t("auth.otpSentTo", { email: email.trim() })}
+          </p>
           {codeField}
           <div className="auth-actions">
             <button type="submit" disabled={busy || !online || !code}>
-              {busy ? "正在登录…" : "登录"}
+              {busy ? t("auth.signingIn") : t("auth.signIn")}
             </button>
             {resendButton}
           </div>
@@ -424,12 +426,12 @@ export function SignInPanel({
               setMessage(null);
             }}
           >
-            换一个邮箱
+            {t("auth.changeEmail")}
           </button>
         </form>
       ) : credentialMode === "otp" ? (
         <form onSubmit={submitEmailOtp}>
-          <label htmlFor="auth-email">邮箱</label>
+          <label htmlFor="auth-email">{t("auth.emailLabel")}</label>
           <input
             id="auth-email"
             type="email"
@@ -439,16 +441,18 @@ export function SignInPanel({
             onChange={(event) => setEmail(event.target.value)}
           />
           <button type="submit" disabled={busy || !online}>
-            {busy ? "正在发送…" : "发送邮箱验证码"}
+            {busy ? t("auth.sending") : t("auth.sendEmailCode")}
           </button>
         </form>
       ) : passwordAction === "reset" && resetSent ? (
         <form onSubmit={submitRecovery}>
-          <p className="account-note">验证码已发送至 {email.trim()}</p>
+          <p className="account-note">
+            {t("auth.otpSentTo", { email: email.trim() })}
+          </p>
           {codeField}
           <div className="auth-actions">
             <button type="submit" disabled={busy || !online || !code}>
-              {busy ? "正在验证…" : "完成验证"}
+              {busy ? t("auth.verifying") : t("auth.completeVerification")}
             </button>
             <button
               type="button"
@@ -458,13 +462,13 @@ export function SignInPanel({
                 setMessage(null);
               }}
             >
-              重新发送
+              {t("auth.resend")}
             </button>
           </div>
         </form>
       ) : (
         <form onSubmit={submitEmailPassword}>
-          <label htmlFor="auth-email">邮箱</label>
+          <label htmlFor="auth-email">{t("auth.emailLabel")}</label>
           <input
             id="auth-email"
             type="email"
@@ -477,12 +481,12 @@ export function SignInPanel({
           <div className="auth-actions">
             <button type="submit" disabled={busy || !online}>
               {busy
-                ? "正在处理…"
+                ? t("common.processing")
                 : passwordAction === "reset"
-                  ? "发送重置邮件"
+                  ? t("auth.sendResetEmail")
                   : passwordAction === "sign_up"
-                    ? "创建账户并登录"
-                    : "登录"}
+                    ? t("auth.createAndSignIn")
+                    : t("auth.signIn")}
             </button>
             <button
               type="button"
@@ -498,10 +502,10 @@ export function SignInPanel({
               }
             >
               {passwordAction === "sign_in"
-                ? "创建账户"
+                ? t("auth.createAccount")
                 : passwordAction === "sign_up"
-                  ? "忘记密码"
-                  : "返回登录"}
+                  ? t("auth.forgotPassword")
+                  : t("auth.backToSignIn")}
             </button>
           </div>
         </form>
@@ -513,10 +517,10 @@ export function SignInPanel({
           className="google-sign-in"
           disabled={busy || !online}
           onClick={() =>
-            void run(() => adapter.signInGoogle(), "正在前往 Google…")
+            void run(() => adapter.signInGoogle(), t("auth.goingToGoogle"))
           }
         >
-          使用 Google 登录
+          {t("auth.signInWithGoogle")}
         </button>
         {channelSwitch}
         {channel === "email" && (
@@ -531,8 +535,8 @@ export function SignInPanel({
             }}
           >
             {credentialMode === "otp"
-              ? "使用邮箱密码登录"
-              : "使用邮箱验证码登录"}
+              ? t("auth.useEmailPassword")
+              : t("auth.useEmailOtp")}
           </button>
         )}
         {channel === "phone" && credentialMode === "otp" && (
@@ -544,7 +548,7 @@ export function SignInPanel({
               setMessage(null);
             }}
           >
-            使用手机号密码登录
+            {t("auth.usePhonePassword")}
           </button>
         )}
         {channel === "phone" && credentialMode === "password" && (
@@ -557,7 +561,7 @@ export function SignInPanel({
               setMessage(null);
             }}
           >
-            使用手机号验证码登录
+            {t("auth.usePhoneOtp")}
           </button>
         )}
       </div>

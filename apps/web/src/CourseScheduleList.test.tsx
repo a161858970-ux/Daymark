@@ -5,6 +5,7 @@ import {
   CourseScheduleList,
   buildScheduleReplace,
 } from "./CourseScheduleList.js";
+import { I18nProvider } from "./i18n/index.js";
 
 const first: CourseSchedule = {
   id: "33333333-3333-4333-8333-333333333333",
@@ -44,7 +45,9 @@ const entry = {
 
 it("offers an edit and a remove action for every existing schedule", () => {
   const markup = renderToStaticMarkup(
-    <CourseScheduleList schedules={[first]} onReplace={async () => {}} />,
+    <I18nProvider initialLocale="zh-CN">
+      <CourseScheduleList schedules={[first]} onReplace={async () => {}} />
+    </I18nProvider>,
   );
   expect(markup).toContain("周一 08:00–09:30 · 101");
   expect(markup).toContain("编辑");
@@ -102,7 +105,9 @@ it("shows the period label and a time placeholder for an undated row", () => {
     stage_label: "12-13节",
   };
   const markup = renderToStaticMarkup(
-    <CourseScheduleList schedules={[undated]} onReplace={async () => {}} />,
+    <I18nProvider initialLocale="zh-CN">
+      <CourseScheduleList schedules={[undated]} onReplace={async () => {}} />
+    </I18nProvider>,
   );
   expect(markup).toContain("</strong> 12-13节");
   expect(markup).toContain("暂无时间");

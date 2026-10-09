@@ -5,6 +5,7 @@ import type {
   ItemAssociation,
   RawCapture,
 } from "@daymark/domain";
+import { useT } from "./i18n/index.js";
 import { ItemEditForm, type EditableItemFields } from "./ItemEditForm.js";
 import { ItemDetailView } from "./ItemDetailView.js";
 import { motionDuration, useExitTransition } from "./motion.js";
@@ -61,6 +62,7 @@ export function ItemDetail({
   onAssociate,
   onRemoveAssociation,
 }: Props) {
+  const t = useT();
   const headingId = useId();
   const panelRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -197,13 +199,13 @@ export function ItemDetail({
       >
         <span className="sheet-handle" aria-hidden="true" />
         <div className="detail-top">
-          <span>事项详情</span>
+          <span>{t("item.detailTitle")}</span>
           <button
             ref={closeButtonRef}
             type="button"
             className="detail-close"
             onClick={beginExit}
-            aria-label="关闭事项详情"
+            aria-label={t("item.closeDetail")}
           >
             ×
           </button>

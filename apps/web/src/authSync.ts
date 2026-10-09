@@ -42,12 +42,13 @@ export async function currentAccessToken(): Promise<string | null> {
 export type { CaptureInterpretation } from "@daymark/contracts";
 
 export async function synchronizeAuthenticatedData(): Promise<string> {
-  if (!authClient) throw new Error("请先配置账户同步，再导入课程表。");
-  if (!navigator.onLine) throw new Error("当前离线；请联网后再导入课程表。");
+  if (!authClient) throw new Error("Account sync is not configured");
+  if (!navigator.onLine)
+    throw new Error("Offline: connect before importing a timetable");
   if (activeRun) await activeRun;
   const { data, error } = await authClient.auth.getSession();
   if (error || !data.session)
-    throw error ?? new Error("请先登录账户，再导入课程表。");
+    throw error ?? new Error("Authentication required");
   await localRepository.activateOwner(data.session.user.id);
   const token = data.session.access_token;
   const operation = createSyncWorker(async () => token).runOnce();
@@ -60,8 +61,7 @@ export async function synchronizeAuthenticatedData(): Promise<string> {
       activeRun = null;
     });
   const result = await operation;
-  if (result.stopped)
-    throw new Error("本机更改尚未同步完成；请先处理同步状态。");
+  if (result.stopped) throw new Error("Local changes are not synced yet");
   return token;
 }
 
@@ -71,9 +71,8 @@ export async function requestCaptureInterpretation(
   currentCourseId: string | null,
   candidateCourseIds: string[],
 ): Promise<CaptureInterpretation> {
-  if (!authClient) throw new Error("请先配置账户同步，再使用智能整理。");
-  if (!navigator.onLine)
-    throw new Error("当前离线；记录已保存在本机，可稍后整理。");
+  if (!authClient) throw new Error("Account sync is not configured");
+  if (!navigator.onLine) throw new Error("Offline: note is saved locally");
   const token = await synchronizeAuthenticatedData();
   // From here the backend waits on the model; the widget covers that window
   // even when the user switches views while the answer is still coming.
@@ -123,7 +122,7 @@ async function runCaptureInterpretation(
   };
   if (!response.ok || !body.data)
     throw new Error(
-      body.error?.message ?? "智能整理暂时不可用；记录仍保存在本机。",
+      body.error?.message ?? "AI unavailable; note saved locally",
     );
   return interpretationSchema.parse(body.data.interpretation);
 }
@@ -245,7 +244,7 @@ export async function resolveSyncConflict(
   if (activeRun) await activeRun;
   const operation = (async () => {
     const transport = await authenticatedTransport();
-    if (!transport) throw new Error("请先登录账户，再处理同步冲突。");
+    if (!transport) throw new Error("Authentication required");
     let resolved;
     try {
       resolved = await transport.resolveConflict(

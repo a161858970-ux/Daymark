@@ -5,6 +5,7 @@ import {
   type ManualCaptureResolution,
 } from "@daymark/application";
 import type { Course, RawCapture } from "@daymark/domain";
+import { useT } from "./i18n/index.js";
 import { SelectField } from "./SelectField.js";
 import { TimeBlock } from "./TimeBlock.js";
 import { fromLocalInput, toLocalInput } from "./timeInputs.js";
@@ -27,10 +28,19 @@ interface Props {
   onDelete(): Promise<void>;
 }
 
-const unresolvedLabels: Record<string, string> = {
-  需要确认记录类型: "请确认它是事项，还是长期课程信息。",
-  需要确认时间语义: "时间会影响日程与提醒，请核对后保存。",
-  需要确认课程: "请确认它属于哪门课程。",
+/**
+ * `unresolved_reason` values are persisted Chinese keys from
+ * packages/application. Map them to message keys at this UI boundary only —
+ * persistence keeps the original values. Unknown reasons fall back to the
+ * raw stored string. User-entered capture text is never translated.
+ */
+const reasonMessageKeys: Record<string, string> = {
+  需要确认记录类型: "capture.reasonType",
+  需要确认时间语义: "capture.reasonTime",
+  需要确认所属课程: "capture.reasonCourse",
+  需要确认课程: "capture.reasonCourse",
+  需要确认记录上下文: "capture.reasonContext",
+  可能包含多个事项: "capture.reasonMulti",
 };
 
 export function PendingCapture({
@@ -43,6 +53,7 @@ export function PendingCapture({
   onDefer,
   onDelete,
 }: Props) {
+  const t = useT();
   const splitCandidates = preprocessCapture({
     rawText: capture.raw_text,
     source: capture.source,
@@ -70,11 +81,12 @@ export function PendingCapture({
     setError(null);
     try {
       const result = await onInterpret();
+      // `uncertainty` is model copy delivered as-is; only our fallbacks localize.
       setSuggestion(
         result.uncertainty ??
           (result.classification === "MULTI_ITEM_CANDIDATE"
-            ? "这条记录可能包含多个事项。"
-            : "请核对下面的内容。"),
+            ? t("capture.reasonMulti")
+            : t("capture.suggestReview")),
       );
       if (result.course_candidate) {
         const matches = courses.filter(
@@ -131,7 +143,7 @@ export function PendingCapture({
       return;
     }
     if (kind === "COURSE_INFORMATION" && !courseId) {
-      setError("课程信息需要选择一门课程。");
+      setError(t("capture.needCourse"));
       return;
     }
     setBusy(true);
@@ -158,6 +170,10 @@ export function PendingCapture({
     }
   }
 
+  const reasonKey = capture.unresolved_reason
+    ? reasonMessageKeys[capture.unresolved_reason]
+    : undefined;
+
   return (
     <article className={`pending-row ${busy ? "resolving" : ""}`}>
       <header className="pending-record-head">
@@ -165,9 +181,10 @@ export function PendingCapture({
         <h3>{capture.raw_text}</h3>
         <small>
           {capture.unresolved_reason
-            ? (unresolvedLabels[capture.unresolved_reason] ??
-              capture.unresolved_reason)
-            : "请核对这条原始记录。"}
+            ? reasonKey
+              ? t(reasonKey)
+              : capture.unresolved_reason
+            : t("capture.reviewOriginal")}
         </small>
       </header>
       {suggestion && (
@@ -177,14 +194,16 @@ export function PendingCapture({
       )}
       {!kind ? (
         <>
-          <p className="pending-question">这条记录是什么？</p>
+          <p className="pending-question">{t("capture.question")}</p>
           <div className="pending-actions">
             <button type="button" onClick={() => setKind("ITEM")}>
-              {splitTitles.length > 1 ? "保持一条事项" : "记为事项"}
+              {splitTitles.length > 1
+                ? t("capture.keepOne")
+                : t("capture.asItem")}
             </button>
             {splitTitles.length > 1 && (
               <button type="button" onClick={() => setKind("SPLIT")}>
-                拆为 {splitTitles.length} 条事项
+                {t("capture.splitItems", { count: splitTitles.length })}
               </button>
             )}
             <button
@@ -192,7 +211,7 @@ export function PendingCapture({
               className="quiet-button"
               onClick={() => setKind("COURSE_INFORMATION")}
             >
-              记为课程信息
+              {t("capture.asCourseInfo")}
             </button>
             {onInterpret && (
               <button
@@ -201,7 +220,7 @@ export function PendingCapture({
                 disabled={busy}
                 onClick={() => void interpret()}
               >
-                尝试智能整理
+                {t("capture.tryInterpret")}
               </button>
             )}
           </div>
@@ -214,7 +233,7 @@ export function PendingCapture({
           {kind === "SPLIT" ? (
             splitTitles.map((part, index) => (
               <label key={index}>
-                事项 {index + 1}
+                {t("capture.splitLabel", { index: index + 1 })}
                 <input
                   value={part}
                   onChange={(event) =>
@@ -230,7 +249,9 @@ export function PendingCapture({
             ))
           ) : (
             <label>
-              {kind === "ITEM" ? "事项标题" : "课程信息"}
+              {kind === "ITEM"
+                ? t("item.titleLabel")
+                : t("capture.courseInfoLabel")}
               <input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
@@ -239,16 +260,18 @@ export function PendingCapture({
             </label>
           )}
           <label>
-            课程
+            {t("item.courseLabel")}
             <SelectField
               value={courseId}
               onChange={setCourseId}
-              label="课程"
+              label={t("item.courseLabel")}
               options={[
                 {
                   value: "",
                   label:
-                    kind === "COURSE_INFORMATION" ? "请选择课程" : "无课程",
+                    kind === "COURSE_INFORMATION"
+                      ? t("capture.selectCourse")
+                      : t("item.noCourse"),
                 },
                 ...courses.map((course) => ({
                   value: course.id,
@@ -274,7 +297,7 @@ export function PendingCapture({
                 }}
               />
               <label>
-                补充内容
+                {t("item.detailField")}
                 <textarea
                   value={detail}
                   onChange={(event) => setDetail(event.target.value)}
@@ -284,14 +307,14 @@ export function PendingCapture({
           )}
           <div className="pending-actions">
             <button type="submit" disabled={busy}>
-              确认保存
+              {t("capture.confirmSave")}
             </button>
             <button
               type="button"
               className="quiet-button"
               onClick={() => setKind(null)}
             >
-              返回
+              {t("capture.back")}
             </button>
           </div>
         </form>
@@ -307,14 +330,14 @@ export function PendingCapture({
           className="text-button"
           onClick={() => void onDefer()}
         >
-          暂不处理
+          {t("capture.defer")}
         </button>
         <button
           type="button"
           className="text-button danger"
           onClick={() => void onDelete()}
         >
-          删除记录
+          {t("capture.delete")}
         </button>
       </div>
     </article>

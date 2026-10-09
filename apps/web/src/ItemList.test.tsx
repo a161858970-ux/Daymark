@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import type { Course, Item } from "@daymark/domain";
+import { I18nProvider } from "./i18n/index.js";
 import { ItemList } from "./ItemList.js";
 
 const course: Course = {
@@ -37,14 +38,16 @@ const item: Item = {
 
 it("keeps completion and item detail as separate targets", () => {
   const markup = renderToStaticMarkup(
-    <ItemList
-      items={[item]}
-      courses={[course]}
-      pendingMoveIds={new Set()}
-      selectedItemId={item.id}
-      onOpen={() => undefined}
-      onComplete={() => undefined}
-    />,
+    <I18nProvider>
+      <ItemList
+        items={[item]}
+        courses={[course]}
+        pendingMoveIds={new Set()}
+        selectedItemId={item.id}
+        onOpen={() => undefined}
+        onComplete={() => undefined}
+      />
+    </I18nProvider>,
   );
   expect(markup).toContain('aria-label="完成 提交课程报告"');
   expect(markup).toContain('class="item-body"');
@@ -54,24 +57,28 @@ it("keeps completion and item detail as separate targets", () => {
 
 it("exposes the short delete and same-identity re-entry motion states", () => {
   const deleting = renderToStaticMarkup(
-    <ItemList
-      items={[item]}
-      courses={[course]}
-      pendingMoveIds={new Set()}
-      pendingDeleteIds={new Set([item.id])}
-      onOpen={() => undefined}
-      onComplete={() => undefined}
-    />,
+    <I18nProvider>
+      <ItemList
+        items={[item]}
+        courses={[course]}
+        pendingMoveIds={new Set()}
+        pendingDeleteIds={new Set([item.id])}
+        onOpen={() => undefined}
+        onComplete={() => undefined}
+      />
+    </I18nProvider>,
   );
   const entering = renderToStaticMarkup(
-    <ItemList
-      items={[item]}
-      courses={[course]}
-      pendingMoveIds={new Set()}
-      enteringItemIds={new Set([item.id])}
-      onOpen={() => undefined}
-      onComplete={() => undefined}
-    />,
+    <I18nProvider>
+      <ItemList
+        items={[item]}
+        courses={[course]}
+        pendingMoveIds={new Set()}
+        enteringItemIds={new Set([item.id])}
+        onOpen={() => undefined}
+        onComplete={() => undefined}
+      />
+    </I18nProvider>,
   );
   expect(deleting).toContain("item-row deleting");
   expect(deleting).toContain("disabled");
@@ -87,13 +94,15 @@ it("keeps the completed section collapsed by default with a readable count", () 
     completed_at: "2026-09-24T09:00:00.000Z",
   };
   const markup = renderToStaticMarkup(
-    <ItemList
-      items={[item, completed]}
-      courses={[course]}
-      pendingMoveIds={new Set()}
-      onOpen={() => undefined}
-      onComplete={() => undefined}
-    />,
+    <I18nProvider>
+      <ItemList
+        items={[item, completed]}
+        courses={[course]}
+        pendingMoveIds={new Set()}
+        onOpen={() => undefined}
+        onComplete={() => undefined}
+      />
+    </I18nProvider>,
   );
   expect(markup).toContain("已完成 · 1");
   expect(markup).toContain('aria-expanded="false"');

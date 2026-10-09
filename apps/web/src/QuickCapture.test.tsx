@@ -1,10 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
+import { I18nProvider } from "./i18n/index.js";
 import { QuickCapture } from "./QuickCapture.js";
 
 it("keeps one morphing capture control with its input mounted", () => {
   const markup = renderToStaticMarkup(
-    <QuickCapture onSave={async () => undefined} />,
+    <I18nProvider initialLocale="zh-CN">
+      <QuickCapture onSave={async () => undefined} />
+    </I18nProvider>,
   );
   expect(markup).toContain('aria-label="快速记录"');
   expect(markup).toContain('aria-label="快速记录内容"');

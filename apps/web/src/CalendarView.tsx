@@ -7,6 +7,7 @@ import {
 import type { Course, Item, Semester, SemesterWeek } from "@daymark/domain";
 import { CalendarDayView } from "./CalendarDayView.js";
 import { CalendarGrid } from "./CalendarGrid.js";
+import { useI18n } from "./i18n/index.js";
 import { localDate } from "./timeInputs.js";
 
 interface Props {
@@ -20,21 +21,6 @@ interface Props {
 type CalendarMode = "month" | "week";
 type MotionDirection = "backward" | "forward" | "neutral";
 
-function monthTitle(year: number, month: number) {
-  return `${year} 年 ${month} 月`;
-}
-
-function weekTitle(start: string, end: string) {
-  const startDate = new Date(`${start}T12:00:00Z`);
-  const endDate = new Date(`${end}T12:00:00Z`);
-  const formatter = new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "UTC",
-    month: "short",
-    day: "numeric",
-  });
-  return `${formatter.format(startDate)} — ${formatter.format(endDate)}`;
-}
-
 export function CalendarView({
   items,
   courses,
@@ -42,6 +28,7 @@ export function CalendarView({
   semesterWeeks,
   onOpen,
 }: Props) {
+  const { t, formatYearMonth, formatTime } = useI18n();
   const today = localDate();
   const [visibleMonth, setVisibleMonth] = useState(() => ({
     year: Number(today.slice(0, 4)),
@@ -83,10 +70,22 @@ export function CalendarView({
     mode === "month"
       ? `month-${visibleMonth.year}-${visibleMonth.month}`
       : `week-${selectedWeek.start_date}`;
+  // Noon UTC keeps the calendar date stable across local time zones.
   const title =
     mode === "month"
-      ? monthTitle(visibleMonth.year, visibleMonth.month)
-      : weekTitle(selectedWeek.start_date, selectedWeek.end_date);
+      ? formatYearMonth(
+          new Date(Date.UTC(visibleMonth.year, visibleMonth.month - 1, 1, 12)),
+        )
+      : t("calendar.weekRange", {
+          from: formatTime(new Date(`${selectedWeek.start_date}T12:00:00Z`), {
+            month: "short",
+            day: "numeric",
+          }),
+          to: formatTime(new Date(`${selectedWeek.end_date}T12:00:00Z`), {
+            month: "short",
+            day: "numeric",
+          }),
+        });
 
   useEffect(() => {
     if (!showDay) return;
@@ -166,7 +165,7 @@ export function CalendarView({
   return (
     <section
       className={`calendar-view mode-${mode} ${showDay ? "day-open" : ""}`}
-      aria-label="事项日程"
+      aria-label={t("calendar.title")}
     >
       <div className="calendar-toolbar">
         <div className="calendar-title-block" aria-live="polite">
@@ -174,19 +173,28 @@ export function CalendarView({
             key={month.semester?.id ?? "no-semester"}
             className="calendar-context context-transition"
           >
-            当前学期：{month.semester?.name ?? "无"}
+            {t("calendar.currentSemester", {
+              name: month.semester?.name ?? t("calendar.noSemester"),
+            })}
           </p>
           <strong>{title}</strong>
         </div>
         <div className="calendar-toolbar-actions">
           <button type="button" className="calendar-today" onClick={goToday}>
-            今天
+            {t("calendar.today")}
           </button>
-          <div className="calendar-navigation" aria-label="切换日程范围">
+          <div
+            className="calendar-navigation"
+            aria-label={t("calendar.switchRange")}
+          >
             <button
               type="button"
               onClick={() => move(-1)}
-              aria-label={mode === "month" ? "上个月" : "上一周"}
+              aria-label={
+                mode === "month"
+                  ? t("calendar.prevMonth")
+                  : t("calendar.prevWeek")
+              }
             >
               <svg
                 viewBox="0 0 24 24"
@@ -205,7 +213,11 @@ export function CalendarView({
             <button
               type="button"
               onClick={() => move(1)}
-              aria-label={mode === "month" ? "下个月" : "下一周"}
+              aria-label={
+                mode === "month"
+                  ? t("calendar.nextMonth")
+                  : t("calendar.nextWeek")
+              }
             >
               <svg
                 viewBox="0 0 24 24"
@@ -225,7 +237,7 @@ export function CalendarView({
           <div
             className="calendar-mode-switch"
             role="tablist"
-            aria-label="日程视图"
+            aria-label={t("calendar.viewLabel")}
           >
             <button
               type="button"
@@ -234,7 +246,7 @@ export function CalendarView({
               className={mode === "month" ? "selected" : ""}
               onClick={() => selectMode("month")}
             >
-              月
+              {t("calendar.month")}
             </button>
             <button
               type="button"
@@ -243,7 +255,7 @@ export function CalendarView({
               className={mode === "week" ? "selected" : ""}
               onClick={() => selectMode("week")}
             >
-              周
+              {t("calendar.week")}
             </button>
           </div>
         </div>

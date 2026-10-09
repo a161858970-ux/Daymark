@@ -6,6 +6,7 @@ import {
   type DaymarkSearchResults,
   type Item,
 } from "@daymark/domain";
+import { useT } from "./i18n/index.js";
 import { motionDuration, useExitTransition } from "./motion.js";
 
 export function SearchGlyph() {
@@ -20,18 +21,19 @@ export function SearchGlyph() {
 export function GlobalSearchButton({
   onOpen,
   className = "search-shortcut",
-  label = "搜索",
+  label,
 }: {
   onOpen(): void;
   className?: string;
   label?: string;
 }) {
+  const t = useT();
   return (
     <button type="button" className={className} onClick={onOpen}>
       <span className="search-trigger-glyph">
         <SearchGlyph />
       </span>
-      <span>{label}</span>
+      <span>{label ?? t("search.defaultLabel")}</span>
     </button>
   );
 }
@@ -49,12 +51,13 @@ export function SearchResultGroups({
   onOpenCourse(course: Course): void;
   onOpenInformation(entry: CourseInformation): void;
 }) {
+  const t = useT();
   const courseById = new Map(courses.map((course) => [course.id, course]));
   return (
     <div className="search-result-groups">
       {results.items.length > 0 && (
         <section aria-labelledby="search-items-heading">
-          <h2 id="search-items-heading">事项</h2>
+          <h2 id="search-items-heading">{t("search.groupItems")}</h2>
           <ul>
             {results.items.map((item) => (
               <li key={item.id}>
@@ -69,9 +72,12 @@ export function SearchResultGroups({
                     <strong>{item.title}</strong>
                     <small>
                       {item.course_id
-                        ? (courseById.get(item.course_id)?.name ?? "课程已移除")
-                        : "无课程"}
-                      {item.status === "COMPLETE" ? " · 已完成" : ""}
+                        ? (courseById.get(item.course_id)?.name ??
+                          t("calendar.courseRemoved"))
+                        : t("item.noCourse")}
+                      {item.status === "COMPLETE"
+                        ? t("calendar.completedSuffix")
+                        : ""}
                     </small>
                   </span>
                   <span className="search-result-arrow" aria-hidden="true">
@@ -85,7 +91,7 @@ export function SearchResultGroups({
       )}
       {results.courses.length > 0 && (
         <section aria-labelledby="search-courses-heading">
-          <h2 id="search-courses-heading">课程</h2>
+          <h2 id="search-courses-heading">{t("search.groupCourses")}</h2>
           <ul>
             {results.courses.map((course) => (
               <li key={course.id}>
@@ -95,7 +101,7 @@ export function SearchResultGroups({
                   </span>
                   <span>
                     <strong>{course.name}</strong>
-                    <small>{course.instructor ?? "未记录教师"}</small>
+                    <small>{course.instructor ?? t("search.noTeacher")}</small>
                   </span>
                   <span className="search-result-arrow" aria-hidden="true">
                     →
@@ -108,7 +114,9 @@ export function SearchResultGroups({
       )}
       {results.courseInformation.length > 0 && (
         <section aria-labelledby="search-information-heading">
-          <h2 id="search-information-heading">课程信息</h2>
+          <h2 id="search-information-heading">
+            {t("search.groupInformation")}
+          </h2>
           <ul>
             {results.courseInformation.map((entry) => (
               <li key={entry.id}>
@@ -119,7 +127,8 @@ export function SearchResultGroups({
                   <span>
                     <strong>{entry.content}</strong>
                     <small>
-                      {courseById.get(entry.course_id)?.name ?? "课程已移除"}
+                      {courseById.get(entry.course_id)?.name ??
+                        t("calendar.courseRemoved")}
                     </small>
                   </span>
                   <span className="search-result-arrow" aria-hidden="true">
@@ -152,6 +161,7 @@ export function SearchSurface({
   onOpenCourse(course: Course): void;
   onOpenInformation(entry: CourseInformation): void;
 }) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -233,12 +243,12 @@ export function SearchSurface({
         <header>
           <div>
             <p className="eyebrow">GLOBAL SEARCH</p>
-            <h1 id="global-search-heading">搜索记录</h1>
+            <h1 id="global-search-heading">{t("search.open")}</h1>
           </div>
           <button
             type="button"
             className="detail-close"
-            aria-label="关闭搜索"
+            aria-label={t("search.close")}
             onClick={() => close(true)}
           >
             ×
@@ -253,28 +263,28 @@ export function SearchSurface({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索事项、课程或课程信息"
-            aria-label="搜索事项、课程或课程信息"
+            placeholder={t("search.placeholder")}
+            aria-label={t("search.placeholder")}
           />
           {query && (
             <button
               type="button"
-              aria-label="清空搜索"
+              aria-label={t("search.clear")}
               onClick={() => {
                 setQuery("");
                 inputRef.current?.focus();
               }}
             >
-              清除
+              {t("search.clearShort")}
             </button>
           )}
         </label>
         <p className="search-summary" aria-live="polite">
           {query.trim()
             ? resultCount
-              ? `找到 ${resultCount} 条匹配记录`
-              : "没有匹配的记录"
-            : "输入关键词，直接定位本机已有记录。"}
+              ? t("search.resultCount", { count: resultCount })
+              : t("search.empty")
+            : t("search.hint")}
         </p>
         {query.trim() && resultCount > 0 ? (
           <SearchResultGroups

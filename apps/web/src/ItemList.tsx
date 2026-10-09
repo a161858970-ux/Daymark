@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Course, Item } from "@daymark/domain";
+import { useI18n, type Translate } from "./i18n/index.js";
 
 interface Props {
   items: Item[];
@@ -13,23 +14,27 @@ interface Props {
   onComplete(item: Item): void;
 }
 
-function timeLabel(item: Item): string {
-  const format = (value: string) =>
-    new Date(value).toLocaleString("zh-CN", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+function timeLabel(
+  item: Item,
+  t: Translate,
+  format: (value: string) => string,
+): string {
   if (item.occurrence_start_at && item.occurrence_end_at)
-    return `发生 ${format(item.occurrence_start_at)} — ${format(item.occurrence_end_at)}`;
+    return t("item.tagOccurSpan", {
+      start: format(item.occurrence_start_at),
+      end: format(item.occurrence_end_at),
+    });
   if (item.occurrence_start_at)
-    return `发生 ${format(item.occurrence_start_at)}`;
+    return t("item.tagOccur", { value: format(item.occurrence_start_at) });
   if (item.start_at && item.due_at)
-    return `${format(item.start_at)} — ${format(item.due_at)}`;
-  if (item.due_at) return `截止 ${format(item.due_at)}`;
-  if (item.start_at) return `开始 ${format(item.start_at)}`;
-  return "时间未定";
+    return t("item.tagRange", {
+      start: format(item.start_at),
+      end: format(item.due_at),
+    });
+  if (item.due_at) return t("item.tagDue", { value: format(item.due_at) });
+  if (item.start_at)
+    return t("item.tagStart", { value: format(item.start_at) });
+  return t("item.timeUnset");
 }
 
 function Row({
@@ -51,6 +56,7 @@ function Row({
   onOpen: (item: Item) => void;
   onComplete: (item: Item) => void;
 }) {
+  const { t, formatDateTime } = useI18n();
   const course = courses.find((value) => value.id === item.course_id);
   return (
     <li
@@ -70,7 +76,7 @@ function Row({
         <button
           className="completion-target"
           type="button"
-          aria-label={`完成 ${item.title}`}
+          aria-label={t("item.completeAria", { title: item.title })}
           disabled={deleting}
           onClick={() => onComplete(item)}
         >
@@ -92,7 +98,8 @@ function Row({
       >
         <span className="item-title">{item.title}</span>
         <span className="item-meta">
-          {course?.name ?? "无课程"} · {timeLabel(item)}
+          {course?.name ?? t("item.noCourse")} ·{" "}
+          {timeLabel(item, t, formatDateTime)}
         </span>
       </button>
     </li>
@@ -106,10 +113,11 @@ export function ItemList({
   pendingDeleteIds = new Set(),
   enteringItemIds = new Set(),
   selectedItemId = null,
-  emptyLabel = "没有未完成事项",
+  emptyLabel,
   onOpen,
   onComplete,
 }: Props) {
+  const t = useI18n().t;
   const [completedOpen, setCompletedOpen] = useState(false);
   const incomplete = items.filter(
     (item) => item.status === "INCOMPLETE" || pendingMoveIds.has(item.id),
@@ -121,7 +129,7 @@ export function ItemList({
     <div className="item-list">
       <section aria-labelledby="incomplete-heading">
         <h2 id="incomplete-heading" className="section-heading">
-          未完成
+          {t("item.sectionIncomplete")}
         </h2>
         {incomplete.length ? (
           <ul>
@@ -142,7 +150,7 @@ export function ItemList({
         ) : (
           <div className="empty-state item-empty-state">
             <span aria-hidden="true">○</span>
-            <p>{emptyLabel}</p>
+            <p>{emptyLabel ?? t("item.emptyIncomplete")}</p>
           </div>
         )}
       </section>
@@ -154,7 +162,7 @@ export function ItemList({
           aria-expanded={completedOpen}
           onClick={() => setCompletedOpen(!completedOpen)}
         >
-          已完成 · {completed.length}{" "}
+          {t("item.sectionCompleted", { count: completed.length })}{" "}
           <span
             className={`section-chevron ${completedOpen ? "open" : ""}`}
             aria-hidden="true"

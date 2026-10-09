@@ -5,6 +5,7 @@ import type {
   ItemAssociation,
   RawCapture,
 } from "@daymark/domain";
+import { useI18n } from "./i18n/index.js";
 import { SelectField } from "./SelectField.js";
 
 interface Props {
@@ -28,21 +29,13 @@ interface Props {
   onRemoveAssociation(associationId: string): Promise<void>;
 }
 
-const reminderLabels: Record<Item["reminder_level"], string> = {
-  OFF: "关闭",
-  NORMAL: "普通",
-  HIGH: "高",
+const dateTimeOptions: Intl.DateTimeFormatOptions = {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
 };
-
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export function ItemDetailView({
   item,
@@ -64,6 +57,7 @@ export function ItemDetailView({
   onAssociate,
   onRemoveAssociation,
 }: Props) {
+  const { t, formatDateTime } = useI18n();
   const [showRaw, setShowRaw] = useState(false);
   const [associationId, setAssociationId] = useState("");
   const course = courses.find((value) => value.id === item.course_id);
@@ -75,6 +69,12 @@ export function ItemDetailView({
   );
   const notesId = `${headingId}-notes`;
   const deleteId = `${headingId}-delete`;
+  const reminderLabels: Record<Item["reminder_level"], string> = {
+    OFF: t("item.reminderOff"),
+    NORMAL: t("item.reminderNormal"),
+    HIGH: t("item.reminderHigh"),
+  };
+  const stamp = (value: string) => formatDateTime(value, dateTimeOptions);
 
   return (
     <>
@@ -86,66 +86,73 @@ export function ItemDetailView({
       </header>
       <dl className="detail-facts">
         <div>
-          <dt>课程</dt>
-          <dd>{course?.name ?? "无课程"}</dd>
+          <dt>{t("item.courseLabel")}</dt>
+          <dd>{course?.name ?? t("item.noCourse")}</dd>
         </div>
         <div>
-          <dt>状态</dt>
+          <dt>{t("item.statusLabel")}</dt>
           <dd className={`detail-status ${item.status.toLowerCase()}`}>
             <span aria-hidden="true">
               {item.status === "COMPLETE" ? "✓" : "○"}
             </span>
-            {item.status === "COMPLETE" ? "已完成" : "未完成"}
+            {item.status === "COMPLETE"
+              ? t("item.completed")
+              : t("item.incomplete")}
           </dd>
         </div>
         {!hasTime && (
           <div>
-            <dt>时间</dt>
-            <dd>未定</dd>
+            <dt>{t("item.timeLabel")}</dt>
+            <dd>{t("item.noTime")}</dd>
           </div>
         )}
         {item.start_at && (
           <div>
-            <dt>开始</dt>
-            <dd>{formatDateTime(item.start_at)}</dd>
+            <dt>{t("item.start")}</dt>
+            <dd>{stamp(item.start_at)}</dd>
           </div>
         )}
         {item.occurrence_start_at && (
           <div>
-            <dt>发生</dt>
+            <dt>{t("item.occur")}</dt>
             <dd>
-              {formatDateTime(item.occurrence_start_at)}
               {item.occurrence_end_at
-                ? ` — ${formatDateTime(item.occurrence_end_at)}`
-                : ""}
+                ? t("item.tagRange", {
+                    start: stamp(item.occurrence_start_at),
+                    end: stamp(item.occurrence_end_at),
+                  })
+                : stamp(item.occurrence_start_at)}
             </dd>
           </div>
         )}
         {!item.occurrence_start_at && item.occurrence_end_at && (
           <div>
-            <dt>发生结束</dt>
-            <dd>{formatDateTime(item.occurrence_end_at)}</dd>
+            <dt>{t("item.occurEnd")}</dt>
+            <dd>{stamp(item.occurrence_end_at)}</dd>
           </div>
         )}
         {item.due_at && (
           <div>
-            <dt>截止</dt>
-            <dd>{formatDateTime(item.due_at)}</dd>
+            <dt>{t("item.due")}</dt>
+            <dd>{stamp(item.due_at)}</dd>
           </div>
         )}
         <div>
-          <dt>提醒</dt>
+          <dt>{t("item.reminder")}</dt>
           <dd>{reminderLabels[item.reminder_level]}</dd>
         </div>
       </dl>
       {item.detail && (
         <section className="detail-notes" aria-labelledby={notesId}>
-          <h3 id={notesId}>补充内容</h3>
+          <h3 id={notesId}>{t("item.detailField")}</h3>
           <p className="detail-content">{item.detail}</p>
         </section>
       )}
-      <section className="item-associations" aria-label="关联事项">
-        <h3>关联事项</h3>
+      <section
+        className="item-associations"
+        aria-label={t("item.associations")}
+      >
+        <h3>{t("item.associations")}</h3>
         {associations.length ? (
           <ul>
             {associations.map((value) => (
@@ -156,23 +163,23 @@ export function ItemDetailView({
                   className="text-button"
                   onClick={() => void onRemoveAssociation(value.association.id)}
                 >
-                  移除关联
+                  {t("item.removeAssociation")}
                 </button>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="detail-meta">暂无关联事项</p>
+          <p className="detail-meta">{t("item.noAssociations")}</p>
         )}
         {associationCandidates.length > 0 && (
           <div className="association-add">
             <SelectField
               value={associationId}
               onChange={setAssociationId}
-              ariaLabel="选择关联事项"
-              label="选择关联事项"
+              ariaLabel={t("item.selectAssociation")}
+              label={t("item.selectAssociation")}
               options={[
-                { value: "", label: "选择事项…" },
+                { value: "", label: t("item.chooseItem") },
                 ...associationCandidates.map((candidate) => ({
                   value: candidate.id,
                   label: candidate.title,
@@ -189,7 +196,7 @@ export function ItemDetailView({
                 void onAssociate(target);
               }}
             >
-              添加关联
+              {t("item.addAssociation")}
             </button>
           </div>
         )}
@@ -197,11 +204,11 @@ export function ItemDetailView({
       <div className="detail-actions">
         {item.status === "INCOMPLETE" ? (
           <button type="button" onClick={() => onComplete(item)}>
-            <span aria-hidden="true">✓</span> 完成事项
+            {t("item.completeItem")}
           </button>
         ) : (
           <button type="button" onClick={() => onRestore(item)}>
-            恢复为未完成
+            {t("item.restoreItem")}
           </button>
         )}
         <button
@@ -210,7 +217,7 @@ export function ItemDetailView({
           className="quiet-button"
           onClick={onEdit}
         >
-          编辑
+          {t("item.edit")}
         </button>
       </div>
       {rawCapture && (
@@ -221,7 +228,7 @@ export function ItemDetailView({
             aria-expanded={showRaw}
             onClick={() => setShowRaw(!showRaw)}
           >
-            原始记录
+            {t("item.rawRecords")}
             <svg
               className={`raw-toggle-glyph${showRaw ? " open" : ""}`}
               viewBox="0 0 24 24"
@@ -248,7 +255,7 @@ export function ItemDetailView({
             className="text-button danger"
             onClick={onRequestDelete}
           >
-            删除事项
+            {t("item.deleteItem")}
           </button>
         ) : (
           <div
@@ -256,8 +263,10 @@ export function ItemDetailView({
             role="alertdialog"
             aria-labelledby={deleteId}
           >
-            <p id={deleteId}>删除“{item.title}”？</p>
-            <small>删除后会提供一次短暂撤销。</small>
+            <p id={deleteId}>
+              {t("item.deleteConfirmTitle", { title: item.title })}
+            </p>
+            <small>{t("item.deleteConfirmBody")}</small>
             <div className="delete-confirmation-actions">
               <button
                 ref={confirmDeleteButtonRef}
@@ -265,14 +274,14 @@ export function ItemDetailView({
                 className="confirm-delete-button"
                 onClick={() => onDelete(item)}
               >
-                确认删除
+                {t("item.confirmDelete")}
               </button>
               <button
                 type="button"
                 className="quiet-button"
                 onClick={onCancelDelete}
               >
-                取消
+                {t("common.cancel")}
               </button>
             </div>
           </div>

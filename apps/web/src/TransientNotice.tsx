@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useT } from "./i18n/index.js";
 import { motionDuration, useExitTransition } from "./motion.js";
 
 export interface FeedbackNotice {
@@ -17,6 +18,7 @@ export function TransientFeedback({
   onDismiss(): void;
   onError(cause: unknown): void;
 }) {
+  const t = useT();
   const { exiting, beginExit } = useExitTransition(
     onDismiss,
     motionDuration.short,
@@ -41,7 +43,7 @@ export function TransientFeedback({
             void action?.().catch(onError);
           }}
         >
-          撤销
+          {t("common.undo")}
         </button>
       )}
     </div>
@@ -55,6 +57,7 @@ export function ErrorNotice({
   message: string;
   onDismiss(): void;
 }) {
+  const t = useT();
   const { exiting, beginExit } = useExitTransition(
     onDismiss,
     motionDuration.short,
@@ -66,7 +69,7 @@ export function ErrorNotice({
       <button
         type="button"
         className="detail-close"
-        aria-label="关闭错误"
+        aria-label={t("common.close")}
         onClick={beginExit}
       >
         ×

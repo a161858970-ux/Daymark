@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useT } from "./i18n/index.js";
 
 /**
  * Update card. Platform strategy (official plugin on desktop, custom APK
@@ -16,6 +17,7 @@ export function UpdateDialog({
   install: () => Promise<void>;
   onDismiss: () => void;
 }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,13 +36,23 @@ export function UpdateDialog({
   }
 
   return (
-    <div className="update-dialog" role="dialog" aria-label="应用更新">
-      <p className="update-dialog-title">发现新版本 v{version}</p>
+    <div
+      className="update-dialog"
+      role="dialog"
+      aria-label={t("sync.updateDialogTitle")}
+    >
+      <p className="update-dialog-title">
+        {t("sync.updateFound", { version })}
+      </p>
       {body ? <p className="update-dialog-notes">{body}</p> : null}
-      {error ? <p className="update-dialog-error">更新失败：{error}</p> : null}
+      {error ? (
+        <p className="update-dialog-error">
+          {t("sync.updateFailed", { error })}
+        </p>
+      ) : null}
       <div className="update-dialog-actions">
         <button type="button" onClick={onDismiss} disabled={busy}>
-          稍后
+          {t("sync.updateLater")}
         </button>
         <button
           type="button"
@@ -48,7 +60,7 @@ export function UpdateDialog({
           onClick={() => void run()}
           disabled={busy}
         >
-          {busy ? "下载安装中…" : "立即更新"}
+          {busy ? t("sync.updateInstalling") : t("sync.updateNow")}
         </button>
       </div>
     </div>

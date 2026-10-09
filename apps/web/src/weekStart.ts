@@ -1,24 +1,38 @@
 import { authClient } from "./authSync.js";
+import { getMessage, readStoredLocale, type Locale } from "./i18n/index.js";
 
 /** Which weekday a week begins on (0 = Sunday … 6 = Saturday). */
 export const WEEK_START_OPTIONS = [
-  { value: 1, label: "周一" },
-  { value: 2, label: "周二" },
-  { value: 3, label: "周三" },
-  { value: 4, label: "周四" },
-  { value: 5, label: "周五" },
-  { value: 6, label: "周六" },
-  { value: 0, label: "周日" },
+  { value: 1, labelKey: "course.weekdayMon" },
+  { value: 2, labelKey: "course.weekdayTue" },
+  { value: 3, labelKey: "course.weekdayWed" },
+  { value: 4, labelKey: "course.weekdayThu" },
+  { value: 5, labelKey: "course.weekdayFri" },
+  { value: 6, labelKey: "course.weekdaySat" },
+  { value: 0, labelKey: "course.weekdaySun" },
 ] as const;
 
 const LOCAL_KEY = "cm.week_start_weekday";
 const METADATA_KEY = "week_start_weekday";
 const DEFAULT_WEEK_START = 1;
 
-export function weekStartLabel(value: number): string {
-  return (
-    WEEK_START_OPTIONS.find((option) => option.value === value)?.label ?? "周一"
-  );
+export function weekStartLabel(
+  value: number,
+  locale: Locale = readStoredLocale(),
+): string {
+  const option = WEEK_START_OPTIONS.find((entry) => entry.value === value);
+  return option
+    ? getMessage(locale, option.labelKey)
+    : getMessage(locale, "course.weekdayMon");
+}
+
+export function weekStartOptionLabels(
+  locale: Locale = readStoredLocale(),
+): { value: number; label: string }[] {
+  return WEEK_START_OPTIONS.map((entry) => ({
+    value: entry.value,
+    label: getMessage(locale, entry.labelKey),
+  }));
 }
 
 function normalize(value: unknown): number | null {

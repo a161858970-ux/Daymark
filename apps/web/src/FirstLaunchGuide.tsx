@@ -5,6 +5,7 @@ import {
   requestPermission,
 } from "@tauri-apps/plugin-notification";
 import { isAndroid } from "./apiBase.js";
+import { useT } from "./i18n/index.js";
 
 /**
  * First-launch permission guide (Android only).
@@ -34,6 +35,7 @@ export function shouldShowPermissionGuide(
 type NotifyState = "checking" | "granted" | "denied";
 
 export function FirstLaunchGuide() {
+  const t = useT();
   const [open, setOpen] = useState(() => {
     let shown: boolean;
     try {
@@ -88,27 +90,25 @@ export function FirstLaunchGuide() {
 
   const notifyLabel =
     notify === "granted"
-      ? "已允许"
+      ? t("sync.notifyGranted")
       : notify === "denied"
-        ? "未允许"
-        : "申请中…";
+        ? t("sync.notifyDenied")
+        : t("sync.notifyChecking");
 
   return (
     <div
       className="permission-guide-backdrop"
       role="dialog"
-      aria-label="首次启动权限引导"
+      aria-label={t("sync.guideDialogLabel")}
     >
       <div className="permission-guide">
-        <p className="permission-guide-title">让提醒准时找到你</p>
-        <p className="permission-guide-subtitle">
-          手机系统默认会拦截后台提醒，首次启动把下面几项打开即可，只此一次。
-        </p>
+        <p className="permission-guide-title">{t("sync.guideTitle")}</p>
+        <p className="permission-guide-subtitle">{t("sync.guideSubtitle")}</p>
 
         <div className="permission-guide-row">
           <span className="permission-guide-row-text">
-            <strong>通知</strong>
-            <small>上课提醒、到期提醒</small>
+            <strong>{t("sync.notifyRowTitle")}</strong>
+            <small>{t("sync.notifyRowHint")}</small>
           </span>
           <span className={`permission-guide-state notify-${notify}`}>
             {notifyLabel}
@@ -126,58 +126,54 @@ export function FirstLaunchGuide() {
                   .catch(() => setNotify("denied"));
               }}
             >
-              再次申请
+              {t("sync.notifyRetry")}
             </button>
           ) : null}
         </div>
 
         <div className="permission-guide-row">
           <span className="permission-guide-row-text">
-            <strong>别让系统杀掉提醒</strong>
-            <small>电池设置里选“无限制 / 允许后台运行”</small>
+            <strong>{t("sync.batteryTitle")}</strong>
+            <small>{t("sync.batteryHint")}</small>
           </span>
           <button
             type="button"
             className="permission-guide-action"
             onClick={() => void openSetting("battery")}
           >
-            去设置
+            {t("sync.openSettings")}
           </button>
         </div>
 
         <div className="permission-guide-row">
           <span className="permission-guide-row-text">
-            <strong>到点就响（闹钟级）</strong>
-            <small>允许“闹钟和提醒”</small>
+            <strong>{t("sync.alarmTitle")}</strong>
+            <small>{t("sync.alarmHint")}</small>
           </span>
           <button
             type="button"
             className="permission-guide-action"
             onClick={() => void openSetting("exact_alarm")}
           >
-            去设置
+            {t("sync.openSettings")}
           </button>
         </div>
 
         <div className="permission-guide-row">
           <span className="permission-guide-row-text">
-            <strong>自启动（小米等机型）</strong>
-            <small>
-              打开“自启动”，省电策略设为“无限制”；最近任务里下拉卡片加锁
-            </small>
+            <strong>{t("sync.autostartTitle")}</strong>
+            <small>{t("sync.autostartHint")}</small>
           </span>
           <button
             type="button"
             className="permission-guide-action"
             onClick={() => void openSetting("app_details")}
           >
-            打开应用设置
+            {t("sync.openAppSettings")}
           </button>
         </div>
 
-        <p className="permission-guide-footnote">
-          开关名称因品牌略有不同，含义一致即可。
-        </p>
+        <p className="permission-guide-footnote">{t("sync.guideFootnote")}</p>
 
         <div className="permission-guide-actions">
           <button
@@ -185,14 +181,14 @@ export function FirstLaunchGuide() {
             className="permission-guide-skip"
             onClick={finish}
           >
-            跳过
+            {t("sync.guideSkip")}
           </button>
           <button
             type="button"
             className="permission-guide-done"
             onClick={finish}
           >
-            完成，不再显示
+            {t("sync.guideDone")}
           </button>
         </div>
       </div>

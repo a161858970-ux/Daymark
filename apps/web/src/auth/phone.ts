@@ -5,29 +5,42 @@
  * Auth. The country code is a UI concern (default +86 for the primary
  * audience) and never a data-model concern: any international number that
  * fits E.164 remains representable.
+ *
+ * Region labels are message keys under `auth.region.*`; resolve them with
+ * `phoneCountryLabel` at display time. The number itself is data — never
+ * translated.
  */
+
+import { getMessage } from "../i18n/messages/index.js";
+import { readStoredLocale } from "../i18n/locale.js";
 
 export interface PhoneCountry {
   readonly code: string;
   readonly iso: string;
-  readonly label: string;
+  /** Catalog key under `auth.region.*`. */
+  readonly labelKey: string;
 }
 
 /** Selectable country codes; not an exhaustive world list, just the UI menu. */
 export const PHONE_COUNTRIES: readonly PhoneCountry[] = [
-  { code: "+86", iso: "CN", label: "中国大陆" },
-  { code: "+852", iso: "HK", label: "中国香港" },
-  { code: "+853", iso: "MO", label: "中国澳门" },
-  { code: "+886", iso: "TW", label: "中国台湾" },
-  { code: "+1", iso: "US", label: "美国 / 加拿大" },
-  { code: "+81", iso: "JP", label: "日本" },
-  { code: "+82", iso: "KR", label: "韩国" },
-  { code: "+65", iso: "SG", label: "新加坡" },
-  { code: "+44", iso: "GB", label: "英国" },
-  { code: "+61", iso: "AU", label: "澳大利亚" },
+  { code: "+86", iso: "CN", labelKey: "auth.region.cn" },
+  { code: "+852", iso: "HK", labelKey: "auth.region.hk" },
+  { code: "+853", iso: "MO", labelKey: "auth.region.mo" },
+  { code: "+886", iso: "TW", labelKey: "auth.region.tw" },
+  { code: "+1", iso: "US", labelKey: "auth.region.usca" },
+  { code: "+81", iso: "JP", labelKey: "auth.region.jp" },
+  { code: "+82", iso: "KR", labelKey: "auth.region.kr" },
+  { code: "+65", iso: "SG", labelKey: "auth.region.sg" },
+  { code: "+44", iso: "GB", labelKey: "auth.region.gb" },
+  { code: "+61", iso: "AU", labelKey: "auth.region.au" },
 ];
 
 export const DEFAULT_PHONE_COUNTRY = "+86";
+
+/** Localized region name for a country entry. */
+export function phoneCountryLabel(country: PhoneCountry): string {
+  return getMessage(readStoredLocale(), country.labelKey);
+}
 
 /**
  * Normalize a typed number to E.164, or null when it cannot be one.

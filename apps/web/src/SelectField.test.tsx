@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
+import { I18nProvider } from "./i18n/index.js";
 import { SelectField, selectedLabel } from "./SelectField.js";
 
 const options = [
@@ -10,13 +11,15 @@ const options = [
 
 it("renders an in-app listbox trigger instead of a native select", () => {
   const markup = renderToStaticMarkup(
-    <SelectField
-      value="c1"
-      onChange={() => undefined}
-      options={options}
-      ariaLabel="课程"
-      label="课程"
-    />,
+    <I18nProvider>
+      <SelectField
+        value="c1"
+        onChange={() => undefined}
+        options={options}
+        ariaLabel="课程"
+        label="课程"
+      />
+    </I18nProvider>,
   );
   // The native popup is drawn by the OS and cannot be styled.
   expect(markup).not.toContain("<select");
@@ -32,13 +35,15 @@ it("renders an in-app listbox trigger instead of a native select", () => {
 
 it("keeps ids usable for label-for wiring", () => {
   const markup = renderToStaticMarkup(
-    <SelectField
-      id="week-start"
-      value=""
-      onChange={() => undefined}
-      options={options}
-      placeholder="请选择"
-    />,
+    <I18nProvider>
+      <SelectField
+        id="week-start"
+        value=""
+        onChange={() => undefined}
+        options={options}
+        placeholder="请选择"
+      />
+    </I18nProvider>,
   );
   expect(markup).toContain('id="week-start"');
   // An empty value resolves through the matching "" option (无课程); a value

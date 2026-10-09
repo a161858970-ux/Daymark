@@ -1,5 +1,13 @@
 import type { Course, Item } from "@daymark/domain";
 import { localDateOfInstant } from "@daymark/domain";
+import {
+  formatMonthDay,
+  formatTime,
+  formatWeekday,
+  getMessage,
+  useI18n,
+  type Locale,
+} from "./i18n/index.js";
 
 interface Props {
   date: string;
@@ -10,21 +18,21 @@ interface Props {
   onBack(): void;
 }
 
-function formatClock(value: string, timeZone: string) {
-  return new Intl.DateTimeFormat("zh-CN", {
+function formatClock(value: string, timeZone: string, locale: Locale) {
+  return formatTime(new Date(value), locale, {
     timeZone,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-  }).format(new Date(value));
+  });
 }
 
-function formatShortDate(value: string, timeZone: string) {
-  return new Intl.DateTimeFormat("zh-CN", {
+function formatShortDate(value: string, timeZone: string, locale: Locale) {
+  return formatTime(new Date(value), locale, {
     timeZone,
     month: "numeric",
     day: "numeric",
-  }).format(new Date(value));
+  });
 }
 
 function rangeTimeLabel(
@@ -32,21 +40,35 @@ function rangeTimeLabel(
   end: string,
   date: string,
   timeZone: string,
+  locale: Locale,
 ) {
   const startDate = localDateOfInstant(start, timeZone);
   const endDate = localDateOfInstant(end, timeZone);
   if (startDate === endDate)
-    return `${formatClock(start, timeZone)} — ${formatClock(end, timeZone)}`;
+    return getMessage(locale, "calendar.timeRange", {
+      start: formatClock(start, timeZone, locale),
+      end: formatClock(end, timeZone, locale),
+    });
   if (date === startDate)
-    return `${formatClock(start, timeZone)} 开始 · 至 ${formatShortDate(end, timeZone)}`;
-  if (date === endDate) return `持续事项 · ${formatClock(end, timeZone)} 结束`;
-  return `${formatShortDate(start, timeZone)} — ${formatShortDate(end, timeZone)} · 持续事项`;
+    return getMessage(locale, "calendar.allDayRange", {
+      start: formatClock(start, timeZone, locale),
+      end: formatShortDate(end, timeZone, locale),
+    });
+  if (date === endDate)
+    return getMessage(locale, "calendar.multiDay", {
+      end: formatClock(end, timeZone, locale),
+    });
+  return getMessage(locale, "calendar.rangeLabel", {
+    from: formatShortDate(start, timeZone, locale),
+    end: formatShortDate(end, timeZone, locale),
+  });
 }
 
 export function calendarItemTimeLabel(
   item: Item,
   date: string,
   timeZone: string,
+  locale: Locale,
 ) {
   if (item.occurrence_start_at && item.occurrence_end_at)
     return rangeTimeLabel(
@@ -54,30 +76,36 @@ export function calendarItemTimeLabel(
       item.occurrence_end_at,
       date,
       timeZone,
+      locale,
     );
   if (item.start_at && item.due_at)
-    return rangeTimeLabel(item.start_at, item.due_at, date, timeZone);
+    return rangeTimeLabel(item.start_at, item.due_at, date, timeZone, locale);
   if (item.occurrence_start_at)
-    return `发生 ${formatClock(item.occurrence_start_at, timeZone)}`;
-  if (item.due_at) return `截止 ${formatClock(item.due_at, timeZone)}`;
-  if (item.start_at) return `开始 ${formatClock(item.start_at, timeZone)}`;
+    return getMessage(locale, "calendar.occurrenceAt", {
+      time: formatClock(item.occurrence_start_at, timeZone, locale),
+    });
+  if (item.due_at)
+    return getMessage(locale, "calendar.dueAt", {
+      time: formatClock(item.due_at, timeZone, locale),
+    });
+  if (item.start_at)
+    return getMessage(locale, "calendar.startAt", {
+      time: formatClock(item.start_at, timeZone, locale),
+    });
   if (item.occurrence_end_at)
-    return `发生结束 ${formatClock(item.occurrence_end_at, timeZone)}`;
+    return getMessage(locale, "calendar.occurrenceEndAt", {
+      time: formatClock(item.occurrence_end_at, timeZone, locale),
+    });
   return "";
 }
 
-export function calendarDayHeading(date: string) {
+export function calendarDayHeading(date: string, locale: Locale) {
+  // Noon UTC keeps the calendar date stable across local time zones.
   const value = new Date(`${date}T12:00:00Z`);
-  const calendarDate = new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "UTC",
-    month: "long",
-    day: "numeric",
-  }).format(value);
-  const weekday = new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "UTC",
-    weekday: "long",
-  }).format(value);
-  return `${calendarDate} · ${weekday}`;
+  return getMessage(locale, "calendar.dayHeading", {
+    date: formatMonthDay(value, locale),
+    weekday: formatWeekday(value, locale, { weekday: "long" }),
+  });
 }
 
 export function CalendarDayView({
@@ -88,22 +116,26 @@ export function CalendarDayView({
   onOpen,
   onBack,
 }: Props) {
+  const { t, locale } = useI18n();
   const courseById = new Map(courses.map((course) => [course.id, course]));
   return (
-    <section className="calendar-day-detail" aria-label={`${date} 的事项`}>
+    <section
+      className="calendar-day-detail"
+      aria-label={t("calendar.dayItems", { date })}
+    >
       <div className="calendar-day-heading">
         <div>
           <p className="eyebrow">SINGLE DAY</p>
-          <h2>{calendarDayHeading(date)}</h2>
+          <h2>{calendarDayHeading(date, locale)}</h2>
         </div>
         <button type="button" className="quiet-button" onClick={onBack}>
-          <span aria-hidden="true">←</span> 返回日程
+          {t("calendar.backToCalendar")}
         </button>
       </div>
       {items.length === 0 ? (
         <div className="empty-state calendar-day-empty">
           <span aria-hidden="true">○</span>
-          <p>这一天没有已记录的有时间事项。</p>
+          <p>{t("calendar.emptyDay")}</p>
         </div>
       ) : (
         <ul>
@@ -116,13 +148,18 @@ export function CalendarDayView({
                 {item.status === "COMPLETE" ? "✓" : "○"}
               </span>
               <button type="button" onClick={() => onOpen(item)}>
-                <time>{calendarItemTimeLabel(item, date, timeZone)}</time>
+                <time>
+                  {calendarItemTimeLabel(item, date, timeZone, locale)}
+                </time>
                 <strong>{item.title}</strong>
                 <small>
                   {item.course_id
-                    ? (courseById.get(item.course_id)?.name ?? "课程已移除")
-                    : "无课程"}
-                  {item.status === "COMPLETE" ? " · 已完成" : ""}
+                    ? (courseById.get(item.course_id)?.name ??
+                      t("calendar.courseRemoved"))
+                    : t("item.noCourse")}
+                  {item.status === "COMPLETE"
+                    ? t("calendar.completedSuffix")
+                    : ""}
                 </small>
               </button>
             </li>

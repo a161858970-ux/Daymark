@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { CourseInformation } from "@daymark/domain";
+import { useT } from "./i18n/index.js";
 
 interface Props {
   information: CourseInformation[];
@@ -16,6 +17,7 @@ export function CourseInformationList({
   onDelete,
   highlightedId = null,
 }: Props) {
+  const t = useT();
   const [content, setContent] = useState("");
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -66,11 +68,14 @@ export function CourseInformationList({
   }
 
   return (
-    <section className="course-information" aria-label="课程信息">
+    <section
+      className="course-information"
+      aria-label={t("course.informationSection")}
+    >
       <div className="subsection-header">
         <div>
-          <h2>课程信息</h2>
-          <p>长期有效的课堂要求、老师说明与课程上下文。</p>
+          <h2>{t("course.informationSection")}</h2>
+          <p>{t("course.informationDeck")}</p>
         </div>
         <button
           type="button"
@@ -78,7 +83,7 @@ export function CourseInformationList({
           aria-expanded={adding}
           onClick={() => setAdding(!adding)}
         >
-          {adding ? "收起" : "＋ 添加课程信息"}
+          {adding ? t("common.collapse") : t("course.addInformation")}
         </button>
       </div>
       {adding && (
@@ -89,15 +94,15 @@ export function CourseInformationList({
           <input
             value={content}
             onChange={(event) => setContent(event.target.value)}
-            placeholder="记录关于这门课的信息……"
-            aria-label="新增课程信息"
+            placeholder={t("course.informationPlaceholder")}
+            aria-label={t("course.addInformationTitle")}
             autoFocus
           />
-          <button type="submit">保存信息</button>
+          <button type="submit">{t("course.saveInformation")}</button>
         </form>
       )}
       {information.length === 0 && (
-        <p className="empty-state">还没有课程信息。</p>
+        <p className="empty-state">{t("course.emptyInformation")}</p>
       )}
       <ul className="information-list">
         {information.map((entry) => (
@@ -125,16 +130,16 @@ export function CourseInformationList({
                 <input
                   value={editContent}
                   onChange={(event) => setEditContent(event.target.value)}
-                  aria-label="编辑课程信息"
+                  aria-label={t("course.editInformation")}
                   required
                 />
-                <button type="submit">保存</button>
+                <button type="submit">{t("common.save")}</button>
                 <button
                   type="button"
                   className="quiet-button"
                   onClick={() => setEditingId(null)}
                 >
-                  取消
+                  {t("common.cancel")}
                 </button>
               </form>
             ) : (
@@ -149,14 +154,14 @@ export function CourseInformationList({
                       setEditContent(entry.content);
                     }}
                   >
-                    编辑
+                    {t("common.edit")}
                   </button>
                   <button
                     type="button"
                     className="text-button danger"
                     onClick={() => void onDelete(entry.id)}
                   >
-                    删除
+                    {t("common.delete")}
                   </button>
                 </div>
               </>

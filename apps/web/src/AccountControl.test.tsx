@@ -1,9 +1,14 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
+import { I18nProvider } from "./i18n/index.js";
 import { AccountControl, SyncStateSummary } from "./AccountControl.js";
 
+function render(node: React.ReactNode) {
+  return renderToStaticMarkup(<I18nProvider>{node}</I18nProvider>);
+}
+
 it("shows a calm local-only state even when account sync is not configured", () => {
-  const markup = renderToStaticMarkup(
+  const markup = render(
     <AccountControl
       online
       attentionCount={0}
@@ -15,14 +20,14 @@ it("shows a calm local-only state even when account sync is not configured", () 
 });
 
 it("lets offline and attention states override a stale synced label", () => {
-  const offline = renderToStaticMarkup(
+  const offline = render(
     <AccountControl
       online={false}
       attentionCount={0}
       status={{ state: "UP_TO_DATE", checked_at: "2026-09-24T08:00:00Z" }}
     />,
   );
-  const attention = renderToStaticMarkup(
+  const attention = render(
     <AccountControl
       online
       attentionCount={2}
@@ -35,7 +40,7 @@ it("lets offline and attention states override a stale synced label", () => {
 });
 
 it("offers an explicit exit when sync needs attention", () => {
-  const markup = renderToStaticMarkup(
+  const markup = render(
     <SyncStateSummary
       state="NEEDS_ATTENTION"
       attentionCount={1}
@@ -47,7 +52,7 @@ it("offers an explicit exit when sync needs attention", () => {
   expect(markup).toContain("1 条记录需要处理");
   expect(markup).toContain("查看并处理");
 
-  const calm = renderToStaticMarkup(
+  const calm = render(
     <SyncStateSummary
       state="UP_TO_DATE"
       attentionCount={0}

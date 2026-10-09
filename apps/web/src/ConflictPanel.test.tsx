@@ -1,9 +1,14 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
+import { I18nProvider } from "./i18n/index.js";
 import { ConflictPanel } from "./ConflictPanel.js";
 
+function render(node: React.ReactNode) {
+  return renderToStaticMarkup(<I18nProvider>{node}</I18nProvider>);
+}
+
 it("shows only fields that need a user decision", () => {
-  const html = renderToStaticMarkup(
+  const html = render(
     <ConflictPanel
       defaultExpanded
       conflicts={[
@@ -47,7 +52,7 @@ it("shows only fields that need a user decision", () => {
 });
 
 it("does not offer a local overwrite for an already deleted object", () => {
-  const html = renderToStaticMarkup(
+  const html = render(
     <ConflictPanel
       defaultExpanded
       conflicts={[
@@ -84,7 +89,7 @@ it("does not offer a local overwrite for an already deleted object", () => {
 
 it("summarizes a collection conflict without exposing sync internals", () => {
   const courseId = "33333333-3333-4333-8333-333333333333";
-  const html = renderToStaticMarkup(
+  const html = render(
     <ConflictPanel
       defaultExpanded
       conflicts={[
@@ -141,7 +146,7 @@ it("summarizes a collection conflict without exposing sync internals", () => {
 });
 
 it("shows what each whole-group option contains so the choice is comparable", () => {
-  const html = renderToStaticMarkup(
+  const html = render(
     <ConflictPanel
       defaultExpanded
       conflicts={[
@@ -207,6 +212,7 @@ it("shows what each whole-group option contains so the choice is comparable", ()
     />,
   );
   // Both sides are spelled out line by line, not just "1 条记录".
+  // Weekday/week phrasing still comes from scheduleSummary (outside this scope).
   expect(html).toContain("周一 12:00–14:30 · 第1周 · 103");
   expect(html).toContain("周一 08:00–09:30 · 第1周 · 303");
   expect(html).toContain("本机记录");
