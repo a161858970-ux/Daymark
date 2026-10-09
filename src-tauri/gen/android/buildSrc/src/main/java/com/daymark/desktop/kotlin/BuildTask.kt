@@ -55,11 +55,15 @@ abstract class BuildTask : DefaultTask() {
         val rootDirRel = rootDirRel ?: throw GradleException("rootDirRel cannot be null")
         val target = target ?: throw GradleException("target cannot be null")
         val release = release ?: throw GradleException("release cannot be null")
-        val args = listOf("tauri", "android", "android-studio-script");
+        // Always use the patched cargo-tauri (symlink→copy on standard-user
+        // Windows). `pnpm tauri` can resolve to the unpatched npm CLI and then
+        // jniLibs symlink creation fails without Developer Mode.
+        val cli = """E:\devtools\tauri-cli-src\tauri-cli-2.12.1\target\release\cargo-tauri.exe"""
+        val args = listOf("android", "android-studio-script");
 
         execOperations.exec {
             workingDir(File(projectDir, rootDirRel))
-            executable(executable)
+            executable(cli)
             args(args)
             if (logger.isEnabled(LogLevel.DEBUG)) {
                 args("-vv")
