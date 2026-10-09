@@ -68,13 +68,26 @@ def sign_file(path: str) -> str:
 
 
 def github_token() -> str:
-    out = subprocess.run(
-        ["bash", "-c",
-         "printf 'protocol=https\\nhost=github.com\\n\\n' | git credential fill | grep '^password=' | sed 's/^password=//'"],
-        cwd=ROOT, capture_output=True, timeout=60).stdout.decode().strip()
-    if not out:
-        die("GitHub token 获取失败")
-    return out
+    env = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if env:
+        return env.strip()
+    # Windows-friendly credential helper (no bash required).
+    payload = "protocol=https\nhost=github.com\n\n"
+    try:
+        out = subprocess.run(
+            ["git", "credential", "fill"],
+            input=payload.encode(),
+            cwd=ROOT,
+            capture_output=True,
+            timeout=60,
+        ).stdout.decode(errors="replace")
+    except OSError:
+        out = ""
+    for line in out.splitlines():
+        if line.startswith("password="):
+            return line.split("=", 1)[1].strip()
+    die("GitHub token 获取失败")
+    return ""
 
 
 def main() -> int:
