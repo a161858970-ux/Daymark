@@ -3,11 +3,31 @@ import { LOCALES, LOCALE_LABELS, useI18n, type Locale } from "./i18n/index.js";
 import { motionDuration, useExitTransition } from "./motion.js";
 
 function LanguagesIcon() {
+  // Classic "文 / A" translation mark (Wen & A).
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M5 8.5h8.5M9.5 5v3.5c0 3.2-1.4 5.8-4 7.5" />
-      <path d="M8 12.2c1.2 1.7 2.7 3 4.5 3.8" />
-      <path d="M13.2 20l3.2-8 3.2 8M14.4 17.2h4" />
+      <text
+        x="2.2"
+        y="16.2"
+        fill="currentColor"
+        stroke="none"
+        fontSize="12.5"
+        fontWeight="650"
+        fontFamily="ui-serif, 'Songti SC', 'SimSun', serif"
+      >
+        文
+      </text>
+      <text
+        x="12.8"
+        y="16.2"
+        fill="currentColor"
+        stroke="none"
+        fontSize="12.5"
+        fontWeight="650"
+        fontFamily="ui-sans-serif, system-ui, sans-serif"
+      >
+        A
+      </text>
     </svg>
   );
 }
