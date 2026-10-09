@@ -6,8 +6,8 @@
 
 - **项目**：拾序 Daymark——面向学生的课程事务应用（Windows Tauri 2 + 安卓 APK + 云端 API；本地优先、登录后云同步）。代码/文件侧 `daymark`。
 - **当前阶段**：**发布后维护更新阶段**（2026-10-08 开发阶段收官）。工作模式 = 发现/修复 bug → 小步发版 → 记档，不再有开发期大待办。
-- **产品/发布**：GitHub `violetsnowl/Daymark`；0.1.0 期间单 release 覆盖 + 应用内 semver 爬升（现役 **0.1.11**）；发版与热更新见 [`docs/HOT_UPDATE_RELEASE.md`](docs/HOT_UPDATE_RELEASE.md)。
-- **门控基线（收官时）**：`pnpm format:check` / `lint` / `typecheck` / `test` 全 0（**304+1**：web150、api80+1、storage44、domain11、application19）+ `src-tauri` 下 `cargo check` 0 警告。
+- **产品/发布**：GitHub `violetsnowl/Daymark`；0.1.0 期间单 release 覆盖 + 应用内 semver 爬升（现役 **0.1.15**）；发版与热更新见 [`docs/HOT_UPDATE_RELEASE.md`](docs/HOT_UPDATE_RELEASE.md)。
+- **门控基线（现行）**：`pnpm format:check` / `lint` / `typecheck` / `test` 全 0（**316+1**：web162、api80+1、storage44、domain11、application19）+ `src-tauri` 下 `cargo check` 0 警告。
 - **外部 lane**：A–F 已全部 `VERIFIED REAL`（见 [`docs/FINAL_RELEASE_VALIDATION.md`](docs/FINAL_RELEASE_VALIDATION.md)）；**不再存在**「RELEASE INFRASTRUCTURE VERIFICATION: BLOCKED BY EXTERNAL CONFIGURATION」状态。
 - **数据安全红线**：Dexie 库名 `"course-manager"` 与 `course_manager_device_id` 是本机/设备持久化键，**改名工程永不得触碰**。
 - **证据分层**：PGlite/fake IndexedDB 证据与真实 PostgreSQL/Supabase 证据始终严格分开；「skipped」不算真实 PASS。
