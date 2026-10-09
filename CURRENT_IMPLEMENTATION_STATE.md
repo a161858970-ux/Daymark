@@ -609,3 +609,14 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 - **本窗口其他落地**：单实例（`tauri-plugin-single-instance`，桌面 cfg 门控，防快捷方式无限开窗）；首启权限引导（小米已验收，他厂未验=PR-003）；账户页绑定状态闪跳修复（按 userId 缓存+读取中占位）；`[UPDATE_CHECK]` 诊断桩保留。
 - **阶段转换**：**开发阶段结束 → 发布后维护阶段**。bug 总账 = `docs/POST_RELEASE_BUGS.md`（现存待修 PR-001~006 / 遗留事项 L-02~08 / 已修复存档）；入口索引 = `AGENTS.md`。
 - **门控基线**（收官时）：FMT/LINT/TSC/TEST 全 0（**304+1**：web150、api80+1、storage44、domain11、application19）、cargo check 0 警告；0.1.11 双产物回读通过。
+
+## 27. 中英文切换 + 三次热更（2026-10-09，i18n 窗口）
+
+- **应用级 i18n（zh-CN / en-US）**：`apps/web/src/i18n/` 自研轻量层——`locale.ts`（`cm.app_locale`，默认 zh-CN，**不进云同步**）、分域 `messages/*`（common/nav/app/item/course/calendar/search/capture/account/auth/conflict/sync/errors，zh/en 键对齐测试）、`context.tsx`（`I18nProvider`/`useT`/`useI18n`）、`format.ts`（Intl 日期）。官网（`E:\CUFE\vibecoding\Daymark website`）语言独立（`daymark-language` + 路径 `/en/`），互不联动。约定见 **`docs/I18N.md`**。
+- **语言入口**：桌面＝侧栏搜索下方「文/A」；手机＝右上角 compact（与账户/同步同 `.top-tools` 弹性簇，gap 8px）。**桌面勿再渲染 compact 入口**（0.1.14 已去重）。品牌区随语言主次切换：中文「拾序/DAYMARK」，英文「Daymark/拾序」。
+- **用户数据永不翻译**；`unresolved_reason` 中文持久键仅在 UI 边界映射；错误经 `errors.ts`/`auth/errors.ts` 映射消息键，`AuthUiError.message` 为 prototype getter 随 locale 解析。
+- **发版**：**0.1.12**（i18n 全量）→ **0.1.14**（去桌面重复语言钮 + 品牌主次 + 安卓下载镜像回退）→ **0.1.15**（冲突「保留所选内容」主按钮样式、语言图标改文/A）。用户已验收 0.1.13/0.1.14 语义（13 未单独发版，内容并入 14）。
+- **安卓下载失败根因**：清单安卓源＝GitHub Release CDN，国内移动网 DownloadManager 常连不上（「连接中」→失败）；**镜像** `api.daymark.top/update/app-universal-release.apk` 可达。已实现 GitHub 优先、失败自动改镜像再试；DM 补 UA/蜂窝允许并回传 reason 码。**鸡生蛋**：下载修复须装上后才生效，必要时手动装一次 APK。
+- **本轮踩坑**：① `BuildTask.kt` 走 `pnpm tauri` 可能落到**未打补丁** npm CLI → 并行 rustBuild 部分任务仍符号链接失败——已改为直连补丁版 `cargo-tauri.exe`；② `cargo-mobile2` `force_symlink` 对 `TargetStyle::File` **一律 `fs::copy`**（标准用户无 SeCreateSymbolicLinkPrivilege）；③ `publish_release.py` 的 `github_token` 原走 bash+grep，Windows 无 bash 直接挂——改 `git credential fill` / `GITHUB_TOKEN`。
+- **门控基线（本窗口收官）**：**316+1**（web162、api80+1、storage44、domain11、application19；+9 为 i18n 用例）、cargo check 0；0.1.15 双产物回读通过。
+- **未决**：PR-001 安装选择器仍被第三方接住（用户实测 0.1.13/0.1.14 后**搁置**，记在 `POST_RELEASE_BUGS.md` 勿关单）；PR-002 带宽；L-02/03/06 等。

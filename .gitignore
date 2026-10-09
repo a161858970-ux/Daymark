@@ -19,3 +19,10 @@ supabase/.temp/
 
 # Kotlin/Gradle scratch (compiler session files)
 src-tauri/gen/android/.kotlin/
+
+# Local visual-check artifacts and publish scratch (not product code)
+output/
+.playwright-cli/
+apk-build-*.log
+latest.json
+release_body.json
