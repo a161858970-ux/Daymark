@@ -3137,7 +3137,8 @@ h2 {
   transform: translateY(1px);
 }
 .language-switcher-compact {
-  display: flex;
+  /* Desktop: language lives only in the left nav utility area. */
+  display: none;
   justify-content: flex-end;
 }
 .language-switcher-compact .language-trigger {
@@ -3211,6 +3212,7 @@ h2 {
     gap: 8px;
   }
   .top-tools .language-switcher-compact {
+    display: flex;
     position: static;
     top: auto;
     right: auto;
