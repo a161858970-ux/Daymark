@@ -186,6 +186,141 @@ it("interprets only unresolved captures owned by the caller and never creates It
   }
 });
 
+it("never invents relative dates for historical captures without captured_tz", async () => {
+  const db = new PGlite();
+  const migration = fileURLToPath(
+    new URL("../../../../backend/migrations/001_initial.sql", import.meta.url),
+  );
+  await db.exec(await readFile(migration, "utf8"));
+  await db.exec(
+    await readFile(
+      fileURLToPath(
+        new URL(
+          "../../../../backend/migrations/007_date_precision.sql",
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    ),
+  );
+  const port: CloudDatabase = {
+    query: async (sql, params) => db.query(sql, params),
+    transaction: (work) =>
+      db.transaction((tx) =>
+        work({ query: async (sql, params) => tx.query(sql, params) }),
+      ),
+  };
+  const cloud = new CloudDaymark(port);
+  let seen: {
+    captureLocalDate: string | null;
+    capturedTimeZone: string | null;
+    capturedAt: string;
+  } | null = null;
+  const provider: InterpretationProvider = {
+    interpret: async (input) => {
+      seen = {
+        captureLocalDate: input.captureLocalDate,
+        capturedTimeZone: input.capturedTimeZone,
+        capturedAt: input.capturedAt,
+      };
+      return {
+        classification: "AMBIGUOUS",
+        title: null,
+        detail: null,
+        course_candidate: null,
+        start_at: null,
+        start_date: null,
+        occurrence_start_at: null,
+        occurrence_start_date: null,
+        occurrence_end_at: null,
+        occurrence_end_date: null,
+        due_at: null,
+        due_date: null,
+        course_information: null,
+        split_candidates: [],
+        confidence: 0.4,
+        uncertainty: "缺少捕获时区，相对日期无法确认",
+      };
+    },
+  };
+  const server = buildServer({
+    cloud,
+    interpretation: new CaptureInterpretationService(cloud, null, provider),
+    verifyToken: async (token) => (token === "one" ? ownerOne : null),
+  });
+  try {
+    // Clear type + relative time, no tz → deterministic ITEM with null dates.
+    const clear = await cloud.createRawCapture(ownerOne, randomUUID(), {
+      source: "QUICK_CAPTURE",
+      raw_text: "明天下午3点交报告",
+      captured_at: "2026-10-09T02:00:00.000Z",
+      captured_tz: null,
+    });
+    const clearBody = (
+      await server.inject({
+        method: "POST",
+        url: "/api/v1/ai/capture-interpretations",
+        headers: { authorization: "Bearer one" },
+        payload: {
+          raw_capture_id: clear.id,
+          context: {
+            candidate_course_ids: [],
+            current_course_id: null,
+            current_semester_id: null,
+          },
+        },
+      })
+    ).json();
+    expect(clearBody.data.source).toBe("DETERMINISTIC");
+    expect(clearBody.data.interpretation.classification).toBe("ITEM");
+    expect(clearBody.data.interpretation.due_at).toBeNull();
+    expect(clearBody.data.interpretation.due_date).toBeNull();
+    expect(seen).toBeNull();
+
+    // Ambiguous + relative time, no tz → AI sees captureLocalDate=null.
+    const ambiguous = await cloud.createRawCapture(ownerOne, randomUUID(), {
+      source: "QUICK_CAPTURE",
+      raw_text: "老师让我们关注一下第三章，明天再说",
+      captured_at: "2026-10-09T02:00:00.000Z",
+      captured_tz: null,
+    });
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/v1/ai/capture-interpretations",
+      headers: { authorization: "Bearer one" },
+      payload: {
+        raw_capture_id: ambiguous.id,
+        context: {
+          candidate_course_ids: [],
+          current_course_id: null,
+          current_semester_id: null,
+        },
+      },
+    });
+    const body = response.json();
+    expect(body, JSON.stringify(body)).toHaveProperty("data");
+    expect(body.data.source).toBe("AI");
+    expect(seen).toMatchObject({
+      captureLocalDate: null,
+      capturedTimeZone: null,
+    });
+    expect(String((seen as { capturedAt: string }).capturedAt)).toContain(
+      "2026-10-09",
+    );
+    const proposal = body.data.interpretation;
+    expect(proposal.due_at).toBeNull();
+    expect(proposal.due_date).toBeNull();
+    expect(proposal.start_date).toBeNull();
+    expect((await cloud.getRawCapture(ownerOne, ambiguous.id))?.raw_text).toBe(
+      "老师让我们关注一下第三章，明天再说",
+    );
+    expect((await db.query("SELECT id FROM items")).rows).toHaveLength(0);
+  } finally {
+    await server.close();
+    await db.close();
+  }
+});
+
 it("sends minimal context through a strict structured response request", async () => {
   let sent: Record<string, unknown> | null = null;
   let endpoint = "";
@@ -228,7 +363,9 @@ it("sends minimal context through a strict structured response request", async (
       currentCourseName: null,
       candidateCourseNames: [],
       semesterDates: null,
-      currentDate: "2026-09-22",
+      capturedAt: "2026-09-22T08:00:00Z",
+      capturedTimeZone: "UTC",
+      captureLocalDate: "2026-09-22",
     }),
   ).toEqual({ classification: "AMBIGUOUS" });
   expect(endpoint).toBe("https://chat.example.test/v1/chat/completions");

@@ -511,8 +511,8 @@ function findRelativeAnchors(
     }
   }
 
-  // Weekday: (本周|下周|这周)?周X / 星期X
-  const weekRe = /(本周|这周|下周|下下周)?\s*(?:周|星期)([一二三四五六日天])/g;
+  // Weekday: (下下|下|本|这)?周X / 星期X — longer prefixes first.
+  const weekRe = /(下下|下|本|这)?\s*(?:周|星期)([一二三四五六日天])/g;
   let weekMatch: RegExpExecArray | null;
   while ((weekMatch = weekRe.exec(text))) {
     const prefix = weekMatch[1] ?? "";
@@ -520,11 +520,11 @@ function findRelativeAnchors(
     if (weekday == null) continue;
     const target = weekday === 7 ? 7 : weekday;
     let date: string;
-    if (prefix === "下周") {
+    if (prefix === "下") {
       date = addDays(startOfNaturalWeek(captureLocalDate), 7 + (target - 1));
-    } else if (prefix === "下下周") {
+    } else if (prefix === "下下") {
       date = addDays(startOfNaturalWeek(captureLocalDate), 14 + (target - 1));
-    } else if (prefix === "本周" || prefix === "这周") {
+    } else if (prefix === "本" || prefix === "这") {
       date = addDays(startOfNaturalWeek(captureLocalDate), target - 1);
     } else {
       // Bare weekday: nearest future candidate; same day allowed.

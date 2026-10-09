@@ -16,7 +16,14 @@ export interface InterpretationProvider {
     currentCourseName: string | null;
     candidateCourseNames: string[];
     semesterDates: { start: string; end: string } | null;
-    currentDate: string;
+    /** Capture instant (ISO) and IANA zone — not "server today". */
+    capturedAt: string;
+    capturedTimeZone: string | null;
+    /**
+     * Capture-local calendar day when capturedTimeZone is known; otherwise
+     * null so the model must not invent relative dates.
+     */
+    captureLocalDate: string | null;
   }): Promise<unknown>;
 }
 
@@ -162,6 +169,16 @@ export class CaptureInterpretationService {
       );
     let value: unknown;
     this.gateAi(ownerId);
+    // Capture-local day for relative-date guidance — never "server today".
+    const captureTz = capture.captured_tz;
+    const captureLocalDate = captureTz
+      ? new Intl.DateTimeFormat("en-CA", {
+          timeZone: captureTz,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date(capture.captured_at))
+      : null;
     try {
       value = await this.provider.interpret({
         rawText: capture.raw_text,
@@ -171,7 +188,9 @@ export class CaptureInterpretationService {
         semesterDates: semester
           ? { start: semester.start_date, end: semester.end_date }
           : null,
-        currentDate: new Date().toISOString().slice(0, 10),
+        capturedAt: capture.captured_at,
+        capturedTimeZone: captureTz,
+        captureLocalDate,
       });
     } catch (error) {
       throw new CloudError(

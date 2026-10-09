@@ -1,6 +1,11 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
-import { Daymark, preprocessCapture, type Runtime } from "@daymark/application";
+import {
+  Daymark,
+  preprocessCapture,
+  resolveItemReminderTimes,
+  type Runtime,
+} from "@daymark/application";
 import {
   projectItemToCalendar,
   semesterWeekForDate,
@@ -757,4 +762,109 @@ it("removes a Semester with its courses locally and queues the cascade for sync"
   await expect(manager.deleteSemester(doomed.id)).rejects.toThrow(
     "Semester not found",
   );
+});
+
+describe("NL capture e2e (processClearCapture)", () => {
+  function setupWithZone(zone: string | null) {
+    const name = `daymark-test-${crypto.randomUUID()}`;
+    const db = new DaymarkDb(name);
+    databases.push(db);
+    const repo = new DexieLocalRepository(db);
+    let time = "2026-10-09T02:00:00.000Z";
+    const runtime: Runtime = {
+      now: () => time,
+      id: () => crypto.randomUUID(),
+      timeZone: () => zone ?? "Asia/Shanghai",
+    };
+    return {
+      db,
+      repo,
+      manager: new Daymark(repo, runtime),
+      setTime: (value: string) => {
+        time = value;
+      },
+    };
+  }
+
+  it("creates an Item for 下周三课堂展示 with DATE occurrence, no extra prompt", async () => {
+    const { manager, repo } = setupWithZone("Asia/Shanghai");
+    const raw = await manager.capture(
+      "下周三课堂展示",
+      "QUICK_CAPTURE",
+      null,
+      "Asia/Shanghai",
+    );
+    expect(raw.captured_tz).toBe("Asia/Shanghai");
+    const item = (await manager.processClearCapture(raw.id)) as Item;
+    expect(item).toBeTruthy();
+    expect(item.title).toBe("课堂展示");
+    expect(item.occurrence_start_date).toBe("2026-10-14");
+    expect(item.occurrence_start_at).toBeNull();
+    expect(item.time_zone).toBe("Asia/Shanghai");
+    expect((await repo.getRawCapture(raw.id))?.raw_text).toBe("下周三课堂展示");
+    expect((await repo.getRawCapture(raw.id))?.processing_status).toBe(
+      "RESOLVED",
+    );
+  });
+
+  it("keeps 老师让我们关注一下第三章 unresolved", async () => {
+    const { manager } = setupWithZone("Asia/Shanghai");
+    const raw = await manager.capture(
+      "老师让我们关注一下第三章",
+      "QUICK_CAPTURE",
+      null,
+      "Asia/Shanghai",
+    );
+    expect(await manager.processClearCapture(raw.id)).toBeNull();
+    expect(
+      (await manager.unresolvedCaptures()).map((value) => value.id),
+    ).toEqual([raw.id]);
+  });
+
+  it("historical no-tz absolute DATE gets device time_zone for reminders", async () => {
+    const { manager, repo } = setupWithZone("Asia/Tokyo");
+    // Simulate a historical row: captured_tz missing (null).
+    const raw = await manager.capture("2026年10月12日截止");
+    await repo.putRawCapture({ ...raw, captured_tz: null });
+    const item = (await manager.processClearCapture(raw.id)) as Item;
+    expect(item.due_date).toBe("2026-10-12");
+    expect(item.due_at).toBeNull();
+    // Item.time_zone uses the device zone so day-end reminders work.
+    expect(item.time_zone).toBe("Asia/Tokyo");
+    const times = resolveItemReminderTimes(item);
+    // End of 2026-10-12 in Asia/Tokyo = 2026-10-12T15:00:00.000Z
+    expect(times.dueInstant).toBe("2026-10-12T15:00:00.000Z");
+    expect(times.dueDateOnly).toBe(true);
+  });
+
+  it("historical no-tz relative phrase invents no formal date", async () => {
+    const { manager, repo } = setupWithZone("Asia/Tokyo");
+    const raw = await manager.capture("明天下午3点交报告");
+    await repo.putRawCapture({ ...raw, captured_tz: null });
+    const item = (await manager.processClearCapture(raw.id)) as Item;
+    expect(item.due_at).toBeNull();
+    expect(item.due_date).toBeNull();
+    expect(item.title).toContain("明天");
+    expect((await repo.getRawCapture(raw.id))?.raw_text).toBe(
+      "明天下午3点交报告",
+    );
+  });
+
+  it("purifies course-information content when context course prefixes the text", async () => {
+    const { manager, repo } = setupWithZone("Asia/Shanghai");
+    const course = await manager.createCourse("零基础日语听说");
+    const raw = await manager.capture(
+      "零基础日语听说，老师会点名回答",
+      "COURSE_INFORMATION",
+      course.id,
+      "Asia/Shanghai",
+    );
+    const info = await manager.processClearCapture(raw.id);
+    expect(info && "content" in info ? info.content : null).toBe(
+      "老师会点名回答",
+    );
+    expect((await repo.getRawCapture(raw.id))?.raw_text).toBe(
+      "零基础日语听说，老师会点名回答",
+    );
+  });
 });

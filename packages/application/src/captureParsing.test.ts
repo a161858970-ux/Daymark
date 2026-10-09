@@ -28,6 +28,7 @@ const base = {
   capturedAt: CAPTURE,
   timeZone: TZ,
   contextCourseId: null,
+  courses: [] as Course[],
 };
 
 it("raises the reminder level only for an explicit reminder request", () => {
@@ -190,12 +191,75 @@ it("keeps original text when removing time would break the sentence", () => {
     courses: [],
     semesterYear: 2026,
   });
-  // "10.12的作业" — removing 10.12 would leave a broken fragment; prefer keep.
-  expect(["10.12的作业", "的作业"]).toContain(parsed.title);
-  if (parsed.timeFields.due_date) {
-    expect(parsed.title.length).toBeGreaterThan(0);
-    expect(parsed.title).not.toBe("的");
-  }
+  // Removing 10.12 would leave `的作业` — keep the full title.
+  expect(parsed.title).toBe("10.12的作业");
+  // Time may still be structured; the ungrammatical remainder is never used.
+  expect(parsed.timeFields.due_date).toBe("2026-10-12");
+});
+
+it("classifies clear event expressions as ITEM with DATE occurrence", () => {
+  const parsed = preprocessCapture({
+    ...base,
+    rawText: "下周三课堂展示",
+  });
+  expect(parsed.classification).toBe("ITEM");
+  expect(parsed.timeFields.occurrence_start_date).toBe("2026-10-14");
+  expect(parsed.title).toBe("课堂展示");
+});
+
+it("still keeps 老师让我们关注一下第三章 unresolved", () => {
+  const parsed = preprocessCapture({
+    ...base,
+    rawText: "老师让我们关注一下第三章",
+  });
+  expect(parsed.classification).toBe("UNRESOLVED");
+});
+
+it("purifies leading course label from course-information with context course", () => {
+  const course = {
+    id: "c1",
+    owner_id: "o",
+    semester_id: null,
+    name: "零基础日语听说",
+    instructor: null,
+    created_at: CAPTURE,
+    updated_at: CAPTURE,
+    deleted_at: null,
+    row_version: 1,
+  } as const;
+  const prefix = preprocessCapture({
+    source: "COURSE_INFORMATION",
+    rawText: "零基础日语听说，老师会点名回答",
+    capturedAt: CAPTURE,
+    timeZone: TZ,
+    contextCourseId: "c1",
+    courses: [course],
+  });
+  expect(prefix.classification).toBe("COURSE_INFORMATION");
+  expect(prefix.content).toBe("老师会点名回答");
+
+  const mid = preprocessCapture({
+    source: "COURSE_INFORMATION",
+    rawText: "老师说零基础日语听说会考第三章",
+    capturedAt: CAPTURE,
+    timeZone: TZ,
+    contextCourseId: "c1",
+    courses: [course],
+  });
+  expect(mid.classification).toBe("COURSE_INFORMATION");
+  // Mid-sentence name is a semantic component — keep the original content.
+  expect(mid.content).toBe("老师说零基础日语听说会考第三章");
+
+  const noCourse = preprocessCapture({
+    source: "QUICK_CAPTURE",
+    rawText: "老师会点名回答",
+    capturedAt: CAPTURE,
+    timeZone: TZ,
+    contextCourseId: null,
+    courses: [],
+  });
+  expect(noCourse.classification).toBe("UNRESOLVED");
+  expect(noCourse.unresolvedReason).toBe("需要确认所属课程");
 });
 
 it("refuses removal that would leave a broken fragment", () => {

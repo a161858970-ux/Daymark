@@ -50,6 +50,14 @@ const ACTION_PATTERNS = [
   /(截止|之前|前交|要交|得交|记得|别忘了|需要完成|待办)/u,
 ];
 
+/** Clear schedule/event expressions → ITEM without inventing extra semantics. */
+const EVENT_PATTERNS = [
+  /(课堂展示|课堂报告|课堂演讲|展示|演讲|汇报|答辩|面试|讲座|宣讲|会议|开会|研讨会|工作坊)/u,
+  /(期中考试|期末考试|考试|测验|quiz|exam|补考|缓考)/u,
+  /(典礼|开幕式|闭幕式|聚会|聚餐|团建|比赛|竞赛|运动会|演出|排练)/u,
+  /(实习|实践|调研|考察|参观|出行|出发|集合)/u,
+];
+
 /** Course-fact / information expressions. */
 const INFORMATION_PATTERNS = [
   /^(老师(说|提到|表示|讲|强调|要求)|期末(考试)?会|考试会|教材是|参考书是|课件|课件在|课件已|课件已上传)/u,
@@ -62,6 +70,10 @@ const AMBIGUOUS_TEACHER = /(老师让我们|老师让咱们|老师叫我们|老�
 
 function countActionHits(text: string): number {
   return ACTION_PATTERNS.filter((re) => re.test(text)).length;
+}
+
+function countEventHits(text: string): number {
+  return EVENT_PATTERNS.filter((re) => re.test(text)).length;
 }
 
 function countInformationHits(text: string): number {
@@ -113,6 +125,9 @@ export function removeSpanSafely(
     return null;
   if (/^[，,：:；;、。．.！!？?…—\-–]+$/.test(joined)) return null;
   if (/^(的|了|着|过|和|与|及|或|在|从|对|给|把|被)$/.test(joined)) return null;
+  // Remainder that only works as a modifier of the removed span
+  // (`10.12的作业` → `的作业`, `明天在考试` → `在考试`).
+  if (/^[的了着过地得在从对给把被向和与及或而并]/.test(joined)) return null;
   // Leftover leading connector after removing a leading time phrase.
   if (/^(然后|接着|并且|而且|以及|还有|后来)/.test(joined) && joined.length < 6)
     return null;
@@ -185,6 +200,10 @@ export function preprocessCapture(
   input: PreprocessInput,
 ): CapturePreprocessing {
   const normalized = input.rawText.trim().replace(/\s+/g, " ");
+  const contextCourse = input.contextCourseId
+    ? (input.courses.find((course) => course.id === input.contextCourseId) ??
+      null)
+    : null;
   const courseMatches = input.contextCourseId
     ? []
     : input.courses.filter(
@@ -195,12 +214,15 @@ export function preprocessCapture(
     input.contextCourseId ??
     (courseMatches.length === 1 ? courseMatches[0]!.id : null);
 
-  // Course name as leading label is stripped before time purification so spans
-  // match the working title (see below).
-  const courseLabel =
+  // Leading course-name label: unique name match, or the known context course
+  // when its name actually prefixes the text (not merely assigned by UI).
+  const labelCourse =
     courseMatches.length === 1 && normalized.startsWith(courseMatches[0]!.name)
-      ? courseMatches[0]!.name
-      : null;
+      ? courseMatches[0]!
+      : contextCourse && normalized.startsWith(contextCourse.name)
+        ? contextCourse
+        : null;
+  const courseLabel = labelCourse?.name ?? null;
 
   let title = normalized;
   if (courseLabel && input.source !== "COURSE_INFORMATION") {
@@ -232,7 +254,8 @@ export function preprocessCapture(
   const content =
     input.source === "COURSE_INFORMATION" ||
     (courseLabel &&
-      countInformationHits(normalized) > countActionHits(normalized))
+      countInformationHits(normalized) >
+        countActionHits(normalized) + countEventHits(normalized))
       ? purifyCourseInformationContent(
           courseLabel
             ? normalized
@@ -245,6 +268,8 @@ export function preprocessCapture(
         )
       : null;
 
+  const clearEvent =
+    countEventHits(title) >= 1 || countEventHits(normalized) >= 1;
   const clearAction =
     input.source === "COURSE_ITEM" ||
     countActionHits(title) >= 1 ||
@@ -255,6 +280,8 @@ export function preprocessCapture(
       (countInformationHits(title) >= 1 ||
         countInformationHits(normalized) >= 2) &&
       countActionHits(title) === 0);
+  // Event nouns alone are ITEM; event + course-fact language stays information/ambiguous.
+  const clearItem = clearAction || (clearEvent && !clearInformation);
   const ambiguousTeacher = AMBIGUOUS_TEACHER.test(normalized);
   const splitCandidates = detectSplitCandidates(title || normalized);
   const multiCourse = courseMatches.length > 1;
@@ -313,7 +340,7 @@ export function preprocessCapture(
     };
   }
 
-  if (clearInformation && resolvedCourseId && courseMatches.length <= 1) {
+  if (clearInformation && resolvedCourseId) {
     return {
       normalized,
       title,
@@ -347,8 +374,8 @@ export function preprocessCapture(
     };
   }
 
-  // Clear action → ITEM even when times are incomplete (spec §2.1).
-  if (clearAction && courseMatches.length <= 1) {
+  // Clear action/event → ITEM even when times are incomplete (spec §2.1).
+  if (clearItem && courseMatches.length <= 1) {
     return {
       normalized,
       title: title || normalized,

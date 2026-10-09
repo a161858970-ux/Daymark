@@ -191,6 +191,7 @@ const interpretationInstructions = [
   "Use a course_candidate only when it is an exact supplied course name and appears in the raw text, or it is the current course context.",
   "Never invent deadlines, requirements, recommendations, priority, or a study plan.",
   "Time model: use due_date/start_date/occurrence_*_date (YYYY-MM-DD) when the user only gave a calendar day; use *_at (RFC3339 instant with offset) only when a clock time is explicit. Never both for the same endpoint.",
+  "Relative dates (明天/下周三/今天) must be resolved from captureLocalDate (the capture-local calendar day) when present. If captureLocalDate is null (historical capture without timezone), leave all time fields null and keep the phrase in the title — never use the server processing date.",
   "Leave time fields null when a value cannot be proven from the text plus supplied semester/course context. Do not invent relative dates, semester week dates, AM/PM, or year completions you cannot justify.",
   "Unparseable temporal phrases must remain in the title; do not delete them.",
   "Only mark MULTI_ITEM_CANDIDATE for clearly independent actions; then list at least two exact substrings in split_candidates, otherwise use AMBIGUOUS with a short uncertainty. Never decide to split or create objects.",

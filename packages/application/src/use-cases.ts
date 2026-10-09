@@ -280,6 +280,21 @@ export class Daymark {
     }
     const now = this.runtime.now();
     const timeFields = parsed.timeFields;
+    // parseTimeZone stays `capturedTz` (null for historical rows). Formal
+    // Item.time_zone is the reminder/day-boundary zone: prefer capture zone,
+    // else the device zone when we actually wrote a DATE/DATETIME field.
+    const hasFormalTime = Boolean(
+      timeFields.start_at ||
+      timeFields.start_date ||
+      timeFields.occurrence_start_at ||
+      timeFields.occurrence_start_date ||
+      timeFields.occurrence_end_at ||
+      timeFields.occurrence_end_date ||
+      timeFields.due_at ||
+      timeFields.due_date,
+    );
+    const itemTimeZone =
+      capturedTz ?? (hasFormalTime ? runtimeTimeZone(this.runtime) : null);
     const item: Item = {
       id: this.runtime.id(),
       owner_id: capture.owner_id,
@@ -295,7 +310,7 @@ export class Daymark {
       occurrence_end_date: timeFields.occurrence_end_date,
       due_at: timeFields.due_at,
       due_date: timeFields.due_date,
-      time_zone: capturedTz,
+      time_zone: itemTimeZone,
       reminder_level: reminderLevelForCapture(capture.raw_text),
       completed_at: null,
       raw_capture_id: capture.id,
