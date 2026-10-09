@@ -19,6 +19,16 @@ function timeLabel(
   t: Translate,
   format: (value: string) => string,
 ): string {
+  if (item.occurrence_start_date || item.occurrence_end_date) {
+    const start = item.occurrence_start_date ?? item.occurrence_end_date!;
+    const end = item.occurrence_end_date ?? start;
+    return start === end
+      ? t("item.tagOccur", { value: format(`${start}T00:00:00`) })
+      : t("item.tagOccurSpan", {
+          start: format(`${start}T00:00:00`),
+          end: format(`${end}T00:00:00`),
+        });
+  }
   if (item.occurrence_start_at && item.occurrence_end_at)
     return t("item.tagOccurSpan", {
       start: format(item.occurrence_start_at),
@@ -26,12 +36,21 @@ function timeLabel(
     });
   if (item.occurrence_start_at)
     return t("item.tagOccur", { value: format(item.occurrence_start_at) });
+  if (item.start_date && item.due_date)
+    return t("item.tagRange", {
+      start: format(`${item.start_date}T00:00:00`),
+      end: format(`${item.due_date}T00:00:00`),
+    });
   if (item.start_at && item.due_at)
     return t("item.tagRange", {
       start: format(item.start_at),
       end: format(item.due_at),
     });
+  if (item.due_date)
+    return t("item.tagDue", { value: format(`${item.due_date}T00:00:00`) });
   if (item.due_at) return t("item.tagDue", { value: format(item.due_at) });
+  if (item.start_date)
+    return t("item.tagStart", { value: format(`${item.start_date}T00:00:00`) });
   if (item.start_at)
     return t("item.tagStart", { value: format(item.start_at) });
   return t("item.timeUnset");

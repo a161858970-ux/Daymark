@@ -17,6 +17,8 @@ export const createRawCaptureSchema = z.object({
   source: z.enum(["QUICK_CAPTURE", "COURSE_ITEM", "COURSE_INFORMATION"]),
   raw_text: z.string().min(1).max(10000),
   captured_at: isoDateTimeSchema,
+  /** IANA timezone at capture. New local writes always set it; legacy payloads may omit. */
+  captured_tz: z.string().min(1).max(64).nullish(),
 });
 
 export const itemFieldsSchema = z.object({
@@ -25,23 +27,66 @@ export const itemFieldsSchema = z.object({
   course_id: uuidSchema.nullable(),
   status: itemStatusSchema,
   start_at: isoDateTimeSchema.nullable(),
+  start_date: dateOnlySchema.nullable(),
   occurrence_start_at: isoDateTimeSchema.nullable(),
+  occurrence_start_date: dateOnlySchema.nullable(),
   occurrence_end_at: isoDateTimeSchema.nullable(),
+  occurrence_end_date: dateOnlySchema.nullable(),
   due_at: isoDateTimeSchema.nullable(),
+  due_date: dateOnlySchema.nullable(),
+  time_zone: z.string().min(1).max(64).nullable(),
   reminder_level: reminderLevelSchema,
   raw_capture_id: uuidSchema.nullable(),
 });
 
-export const createItemSchema = itemFieldsSchema.refine(
-  (value) =>
-    !value.occurrence_start_at ||
-    !value.occurrence_end_at ||
-    value.occurrence_start_at <= value.occurrence_end_at,
-  { message: "Occurrence end must not precede start" },
-);
+const mutuallyExclusivePairs = [
+  ["start_at", "start_date"],
+  ["occurrence_start_at", "occurrence_start_date"],
+  ["occurrence_end_at", "occurrence_end_date"],
+  ["due_at", "due_date"],
+] as const;
+
+function datePrecisionOk(value: {
+  start_at?: string | null | undefined;
+  start_date?: string | null | undefined;
+  occurrence_start_at?: string | null | undefined;
+  occurrence_start_date?: string | null | undefined;
+  occurrence_end_at?: string | null | undefined;
+  occurrence_end_date?: string | null | undefined;
+  due_at?: string | null | undefined;
+  due_date?: string | null | undefined;
+}): boolean {
+  return mutuallyExclusivePairs.every(([at, date]) => {
+    const hasAt = value[at] != null && value[at] !== "";
+    const hasDate = value[date] != null && value[date] !== "";
+    return !(hasAt && hasDate);
+  });
+}
+
+export const createItemSchema = itemFieldsSchema
+  .refine(datePrecisionOk, {
+    message: "Each time endpoint is either DATE or DATETIME, not both",
+  })
+  .refine(
+    (value) =>
+      !value.occurrence_start_at ||
+      !value.occurrence_end_at ||
+      value.occurrence_start_at <= value.occurrence_end_at,
+    { message: "Occurrence end must not precede start" },
+  )
+  .refine(
+    (value) =>
+      !value.occurrence_start_date ||
+      !value.occurrence_end_date ||
+      value.occurrence_start_date <= value.occurrence_end_date,
+    { message: "Occurrence end date must not precede start date" },
+  );
 export const updateItemSchema = itemFieldsSchema
   .omit({ status: true, raw_capture_id: true })
-  .partial();
+  .partial()
+  .refine(datePrecisionOk, {
+    message: "Each time endpoint is either DATE or DATETIME, not both",
+  });
 export const createCourseSchema = z.object({
   name: z.string().trim().min(1).max(300),
   semester_id: uuidSchema.nullable(),

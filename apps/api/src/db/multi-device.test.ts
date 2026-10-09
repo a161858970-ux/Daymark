@@ -27,6 +27,7 @@ async function harness() {
     "001_initial.sql",
     "002_collection_sync.sql",
     "005_schedule_times_nullable.sql",
+    "007_date_precision.sql",
   ]) {
     const path = fileURLToPath(
       new URL(`../../../../backend/migrations/${name}`, import.meta.url),

@@ -29,6 +29,8 @@ import type { LocalRepository } from "./repository.js";
 export interface Runtime {
   now(): string;
   id(): string;
+  /** IANA timezone for capture-time interpretation. */
+  timeZone?(): string;
 }
 
 export type ManualCaptureResolution =
@@ -38,9 +40,14 @@ export type ManualCaptureResolution =
       | "detail"
       | "course_id"
       | "start_at"
+      | "start_date"
       | "occurrence_start_at"
+      | "occurrence_start_date"
       | "occurrence_end_at"
+      | "occurrence_end_date"
       | "due_at"
+      | "due_date"
+      | "time_zone"
       | "reminder_level"
     >)
   | { kind: "COURSE_INFORMATION"; course_id: string; content: string };
@@ -48,7 +55,16 @@ export type ManualCaptureResolution =
 const browserRuntime: Runtime = {
   now: () => new Date().toISOString(),
   id: () => crypto.randomUUID(),
+  timeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
 };
+
+function runtimeTimeZone(runtime: Runtime): string {
+  try {
+    return runtime.timeZone?.() || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
 
 function validDateOnly(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -62,9 +78,13 @@ function validDateOnly(value: string): boolean {
 /** ISO date-times arrive in different formats for the same instant. */
 const TIME_FIELDS = new Set([
   "start_at",
+  "start_date",
   "due_at",
+  "due_date",
   "occurrence_start_at",
+  "occurrence_start_date",
   "occurrence_end_at",
+  "occurrence_end_date",
   "completed_at",
   "deleted_at",
 ]);
@@ -115,6 +135,7 @@ export class Daymark {
     rawText: string,
     source: RawCaptureSource = "QUICK_CAPTURE",
     contextCourseId: string | null = null,
+    timeZone: string | null = null,
   ): Promise<RawCapture> {
     if (!rawText.trim()) throw new Error("Record cannot be empty");
     const ownerId = await this.repo.ownerId();
@@ -124,6 +145,7 @@ export class Daymark {
       source,
       raw_text: rawText,
       captured_at: this.runtime.now(),
+      captured_tz: timeZone ?? runtimeTimeZone(this.runtime),
       processing_status: "RAW",
       unresolved_reason: null,
       deleted_at: null,
@@ -166,17 +188,58 @@ export class Daymark {
     if (capture.processing_status === "UNRESOLVED") return null;
     const storedContext = await this.repo.getCaptureContext(captureId);
     const contextCourseId = courseId ?? storedContext?.course_id ?? null;
+    const courses = (await this.repo.listCourses()).filter(
+      (course) => course.owner_id === capture.owner_id,
+    );
+    const semesters = (await this.repo.listSemesters()).filter(
+      (semester) => semester.owner_id === capture.owner_id,
+    );
+    const capturedAt = capture.captured_at;
+    const capturedTz =
+      capture.captured_tz ?? runtimeTimeZone(this.runtime) ?? "UTC";
+    // Prefer semester of the resolved course for year-less dates.
+    const contextCourse = contextCourseId
+      ? courses.find((course) => course.id === contextCourseId)
+      : courses.find(
+          (course) =>
+            capture.raw_text.includes(course.name) &&
+            course.deleted_at === null,
+        );
+    const courseSemester = contextCourse?.semester_id
+      ? (semesters.find((s) => s.id === contextCourse.semester_id) ?? null)
+      : null;
+    const relatedWeeks = courseSemester
+      ? await this.repo.listSemesterWeeks(courseSemester.id)
+      : [];
     const parsed = preprocessCapture({
       rawText: capture.raw_text,
       source: capture.source,
       contextCourseId,
-      courses: (await this.repo.listCourses()).filter(
-        (course) => course.owner_id === capture.owner_id,
-      ),
+      courses,
+      capturedAt,
+      timeZone: capturedTz,
+      semesterWeeks: relatedWeeks.map((week) => ({
+        week_number: week.week_number,
+        start_date: week.start_date,
+        end_date: week.end_date,
+      })),
+      semester: courseSemester
+        ? {
+            start_date: courseSemester.start_date,
+            end_date: courseSemester.end_date,
+          }
+        : null,
+      semesterYear: courseSemester
+        ? Number(courseSemester.start_date.slice(0, 4))
+        : null,
     });
     const { resolvedCourseId, title } = parsed;
     if (parsed.classification === "COURSE_INFORMATION") {
-      return this.createInformationOutput(capture, resolvedCourseId!, title);
+      return this.createInformationOutput(
+        capture,
+        resolvedCourseId!,
+        parsed.content ?? title,
+      );
     }
     if (parsed.classification === "UNRESOLVED") {
       const unresolvedReason = parsed.unresolvedReason!;
@@ -215,17 +278,23 @@ export class Daymark {
         throw new Error("Course context is unavailable");
     }
     const now = this.runtime.now();
+    const timeFields = parsed.timeFields;
     const item: Item = {
       id: this.runtime.id(),
       owner_id: capture.owner_id,
       course_id: resolvedCourseId,
-      title,
+      title: title || parsed.normalized,
       detail: null,
       status: "INCOMPLETE",
-      start_at: null,
-      occurrence_start_at: null,
-      occurrence_end_at: null,
-      due_at: null,
+      start_at: timeFields.start_at,
+      start_date: timeFields.start_date,
+      occurrence_start_at: timeFields.occurrence_start_at,
+      occurrence_start_date: timeFields.occurrence_start_date,
+      occurrence_end_at: timeFields.occurrence_end_at,
+      occurrence_end_date: timeFields.occurrence_end_date,
+      due_at: timeFields.due_at,
+      due_date: timeFields.due_date,
+      time_zone: capturedTz,
       reminder_level: reminderLevelForCapture(capture.raw_text),
       completed_at: null,
       raw_capture_id: capture.id,
@@ -399,10 +468,18 @@ export class Daymark {
         detail: resolution.detail,
         course_id: resolution.course_id,
         status: "INCOMPLETE",
-        start_at: resolution.start_at,
-        occurrence_start_at: resolution.occurrence_start_at,
-        occurrence_end_at: resolution.occurrence_end_at,
-        due_at: resolution.due_at,
+        start_at: resolution.start_at ?? null,
+        start_date: resolution.start_date ?? null,
+        occurrence_start_at: resolution.occurrence_start_at ?? null,
+        occurrence_start_date: resolution.occurrence_start_date ?? null,
+        occurrence_end_at: resolution.occurrence_end_at ?? null,
+        occurrence_end_date: resolution.occurrence_end_date ?? null,
+        due_at: resolution.due_at ?? null,
+        due_date: resolution.due_date ?? null,
+        time_zone:
+          resolution.time_zone ??
+          capture.captured_tz ??
+          runtimeTimeZone(this.runtime),
         reminder_level: resolution.reminder_level,
         raw_capture_id: capture.id,
       });
@@ -562,8 +639,23 @@ export class Daymark {
     const now = this.runtime.now();
     const items = resolutions.map((resolution): Item => {
       const fields = createItemSchema.parse({
-        ...resolution,
+        title: resolution.title,
+        detail: resolution.detail ?? null,
+        course_id: resolution.course_id ?? null,
         status: "INCOMPLETE",
+        start_at: resolution.start_at ?? null,
+        start_date: resolution.start_date ?? null,
+        occurrence_start_at: resolution.occurrence_start_at ?? null,
+        occurrence_start_date: resolution.occurrence_start_date ?? null,
+        occurrence_end_at: resolution.occurrence_end_at ?? null,
+        occurrence_end_date: resolution.occurrence_end_date ?? null,
+        due_at: resolution.due_at ?? null,
+        due_date: resolution.due_date ?? null,
+        time_zone:
+          resolution.time_zone ??
+          capture.captured_tz ??
+          runtimeTimeZone(this.runtime),
+        reminder_level: resolution.reminder_level,
         raw_capture_id: capture.id,
       });
       return {

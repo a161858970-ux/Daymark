@@ -48,6 +48,13 @@ it("applies the canonical schema and enforces two-state Item and provenance cons
       ),
     );
     await db.exec(await readFile(cachePath, "utf8"));
+    const datePrecisionPath = fileURLToPath(
+      new URL(
+        "../../../../backend/migrations/007_date_precision.sql",
+        import.meta.url,
+      ),
+    );
+    await db.exec(await readFile(datePrecisionPath, "utf8"));
     const tables = await db.query<{ tablename: string }>(
       "SELECT tablename FROM pg_tables WHERE schemaname = 'public'",
     );

@@ -43,6 +43,8 @@ it("preprocesses clear input without changing raw text or asking AI", () => {
       source: "QUICK_CAPTURE",
       contextCourseId: null,
       courses: [],
+      capturedAt: "2026-09-22T08:00:00.000Z",
+      timeZone: "UTC",
     }),
   ).toMatchObject({ classification: "ITEM", title: "找学姐要笔记" });
   expect(rawText).toBe("  找学姐要笔记   ");
@@ -52,6 +54,8 @@ it("preprocesses clear input without changing raw text or asking AI", () => {
       source: "QUICK_CAPTURE",
       contextCourseId: null,
       courses: [],
+      capturedAt: "2026-09-22T08:00:00.000Z",
+      timeZone: "UTC",
     }),
   ).toMatchObject({
     classification: "UNRESOLVED",
@@ -75,6 +79,8 @@ it("preprocesses clear input without changing raw text or asking AI", () => {
       source: "COURSE_INFORMATION",
       contextCourseId: course.id,
       courses: [course],
+      capturedAt: "2026-09-22T08:00:00.000Z",
+      timeZone: "UTC",
     }),
   ).toMatchObject({ classification: "COURSE_INFORMATION" });
 });
@@ -89,9 +95,14 @@ it("keeps one or splits only according to the recorded user decision", async () 
     detail: null,
     course_id: null,
     start_at: null,
+    start_date: null,
     occurrence_start_at: null,
+    occurrence_start_date: null,
     occurrence_end_at: null,
+    occurrence_end_date: null,
     due_at: null,
+    due_date: null,
+    time_zone: "UTC",
     reminder_level: "NORMAL" as const,
   };
   const single = await manager.resolveRawCapture(
@@ -420,6 +431,7 @@ describe("local-first persistence and Item identity", () => {
       start: "2026-09-23T08:00:00Z",
       end: "2026-09-27T12:00:00Z",
       kind: "RANGE",
+      all_day: false,
     });
 
     const completed = await manager.completeItem(item.id);
@@ -455,16 +467,18 @@ describe("local-first persistence and Item identity", () => {
     );
   });
 
-  it("keeps time-bearing or uncertain text as unresolved RawCapture instead of dropping facts", async () => {
+  it("creates a clear item from time-bearing text and never drops facts", async () => {
     const { manager, repo } = setup();
     const capture = await manager.capture("提交课程报告，9月28日前");
-    expect(await manager.processClearCapture(capture.id)).toBeNull();
-    expect(
-      (await manager.unresolvedCaptures()).map((value) => value.id),
-    ).toEqual([capture.id]);
-    expect(await repo.listOutputs(capture.id)).toHaveLength(0);
-    await manager.deleteUnresolvedCapture(capture.id);
-    expect(await manager.unresolvedCaptures()).toHaveLength(0);
+    // Spec 22 §2.1: a clear ITEM with a trusted date is not blocked by time.
+    const item = await manager.processClearCapture(capture.id);
+    expect(item).not.toBeNull();
+    expect((item as Item).title).toContain("提交课程报告");
+    expect((item as Item).due_date).toBe("2026-09-27"); // 9月28日前 → previous day
+    expect((await repo.getRawCapture(capture.id))?.raw_text).toBe(
+      "提交课程报告，9月28日前",
+    );
+    expect(await repo.listOutputs(capture.id)).toHaveLength(1);
   });
 
   it("stores course information independently of Item status and preserves edits", async () => {
@@ -596,29 +610,40 @@ describe("local-first persistence and Item identity", () => {
     expect(await reopened.items.count()).toBe(1);
   });
 
-  it("records a user's resolution and preserves time rather than inventing a date", async () => {
+  it("records a clear ITEM for 第四周前 without inventing a date", async () => {
     const { manager, db, repo } = setup();
     const raw = await manager.capture("第四周前交作业");
+    // Clear type; missing SemesterWeek mapping must not block the Item.
+    const created = await manager.processClearCapture(raw.id);
+    expect(created).not.toBeNull();
+    expect((created as Item).title).toContain("第四周");
+    expect((created as Item).due_at).toBeNull();
+    expect((created as Item).due_date).toBeNull();
+    expect((await repo.getRawCapture(raw.id))?.raw_text).toBe("第四周前交作业");
+    expect(await db.raw_capture_decisions.count()).toBe(0);
+  });
+
+  it("records a user's explicit resolution and preserves time", async () => {
+    const { manager, db, repo } = setup();
+    const raw = await manager.capture("老师让我们关注第三章");
     expect(await manager.processClearCapture(raw.id)).toBeNull();
-    await manager.deferRawCapture(raw.id);
-    expect(await manager.unresolvedCaptures()).toHaveLength(1);
-    const item = await manager.resolveRawCapture(raw.id, {
+    await manager.resolveRawCapture(raw.id, {
       kind: "ITEM",
-      title: "交作业",
+      title: "关注第三章",
       detail: null,
       course_id: null,
       start_at: null,
+      start_date: null,
       occurrence_start_at: null,
+      occurrence_start_date: null,
       occurrence_end_at: null,
+      occurrence_end_date: null,
       due_at: "2026-10-09T12:00:00.000Z",
+      due_date: null,
+      time_zone: "UTC",
       reminder_level: "NORMAL",
     });
-    expect(item).toMatchObject({
-      title: "交作业",
-      due_at: "2026-10-09T12:00:00.000Z",
-      raw_capture_id: raw.id,
-    });
-    expect(await db.raw_capture_decisions.count()).toBe(2);
+    expect(await db.raw_capture_decisions.count()).toBe(1);
     expect(await repo.listOutputs(raw.id)).toHaveLength(1);
     await expect(
       manager.resolveRawCapture(raw.id, {

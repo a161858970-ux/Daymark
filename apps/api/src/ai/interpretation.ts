@@ -87,19 +87,35 @@ export class CaptureInterpretationService {
       source: capture.source,
       contextCourseId: currentCourse?.id ?? null,
       courses: knownCourses,
+      capturedAt: capture.captured_at,
+      timeZone: capture.captured_tz ?? "UTC",
     });
     const empty = {
       title: null,
       detail: null,
       course_candidate: currentCourse?.name ?? null,
       start_at: null,
+      start_date: null,
       occurrence_start_at: null,
+      occurrence_start_date: null,
       occurrence_end_at: null,
+      occurrence_end_date: null,
       due_at: null,
+      due_date: null,
       course_information: null,
       split_candidates: [] as string[],
       confidence: 1,
       uncertainty: null,
+    };
+    const timeFromParse = {
+      start_at: parsed.timeFields.start_at,
+      start_date: parsed.timeFields.start_date,
+      occurrence_start_at: parsed.timeFields.occurrence_start_at,
+      occurrence_start_date: parsed.timeFields.occurrence_start_date,
+      occurrence_end_at: parsed.timeFields.occurrence_end_at,
+      occurrence_end_date: parsed.timeFields.occurrence_end_date,
+      due_at: parsed.timeFields.due_at,
+      due_date: parsed.timeFields.due_date,
     };
     if (parsed.classification === "ITEM")
       return {
@@ -107,6 +123,7 @@ export class CaptureInterpretationService {
         requires_confirmation: false,
         interpretation: interpretationSchema.parse({
           ...empty,
+          ...timeFromParse,
           classification: "ITEM",
           title: parsed.title,
           course_candidate:
@@ -230,9 +247,13 @@ export class CaptureInterpretationService {
       !hasTime &&
       [
         value.start_at,
+        value.start_date,
         value.occurrence_start_at,
+        value.occurrence_start_date,
         value.occurrence_end_at,
+        value.occurrence_end_date,
         value.due_at,
+        value.due_date,
       ].some(Boolean)
     )
       return false;

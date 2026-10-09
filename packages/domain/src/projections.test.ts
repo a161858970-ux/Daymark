@@ -17,9 +17,14 @@ const item = (id: string, patch: Partial<Item> = {}): Item => ({
   detail: null,
   status: "INCOMPLETE",
   start_at: null,
+  start_date: null,
   occurrence_start_at: null,
+  occurrence_start_date: null,
   occurrence_end_at: null,
+  occurrence_end_date: null,
   due_at: null,
+  due_date: null,
+  time_zone: "UTC",
   reminder_level: "NORMAL",
   completed_at: null,
   raw_capture_id: null,
@@ -96,6 +101,7 @@ describe("Item projections", () => {
       start: "2026-09-23T00:00:00Z",
       end: "2026-09-27T00:00:00Z",
       kind: "RANGE",
+      all_day: false,
     });
     expect(
       calendarItems([value], "2026-09-25T00:00:00Z", "2026-09-25T23:59:59Z"),

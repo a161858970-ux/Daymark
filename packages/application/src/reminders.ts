@@ -1,4 +1,61 @@
 import type { Item } from "@daymark/domain";
+import { endOfLocalDayInstant, localDay0900Instant } from "./timeParsing.js";
+
+/** Resolve the effective reminder instants for DATE vs DATETIME fields. */
+export interface ResolvedItemTimes {
+  /** DATETIME start instant, or null when DATE/no start. */
+  startInstant: string | null;
+  /** True when start is DATE-only (no start reminder). */
+  startDateOnly: boolean;
+  /** Deadline instant used for leads/overdue (DATE → local day-end exclusive boundary). */
+  dueInstant: string | null;
+  dueDateOnly: boolean;
+  /** Occurrence pre-reminder anchor (DATE → local 09:00). */
+  occurrenceStartInstant: string | null;
+  /** Occurrence end for post-reminders (DATE range → end of last local day). */
+  occurrenceEndInstant: string | null;
+  occurrenceDateOnly: boolean;
+}
+
+export function resolveItemReminderTimes(item: Item): ResolvedItemTimes {
+  const tz = item.time_zone || "UTC";
+  const hasDateDue = Boolean(item.due_date);
+  const hasDateOccurrence = Boolean(
+    item.occurrence_start_date || item.occurrence_end_date,
+  );
+  const hasDateStart = Boolean(item.start_date);
+
+  let dueInstant: string | null = item.due_at;
+  if (item.due_date) {
+    // Deadline = end of that local day (exclusive next midnight).
+    dueInstant = endOfLocalDayInstant(item.due_date, tz);
+  }
+
+  let occurrenceStartInstant: string | null = item.occurrence_start_at;
+  let occurrenceEndInstant: string | null = item.occurrence_end_at;
+  if (item.occurrence_start_date) {
+    occurrenceStartInstant = localDay0900Instant(
+      item.occurrence_start_date,
+      tz,
+    );
+  }
+  if (item.occurrence_end_date) {
+    occurrenceEndInstant = endOfLocalDayInstant(item.occurrence_end_date, tz);
+  } else if (item.occurrence_start_date && !item.occurrence_end_at) {
+    // Single-day DATE occurrence: post reminders from end of that day.
+    occurrenceEndInstant = endOfLocalDayInstant(item.occurrence_start_date, tz);
+  }
+
+  return {
+    startInstant: item.start_at,
+    startDateOnly: hasDateStart && !item.start_at,
+    dueInstant,
+    dueDateOnly: hasDateDue && !item.due_at,
+    occurrenceStartInstant,
+    occurrenceEndInstant,
+    occurrenceDateOnly: hasDateOccurrence,
+  };
+}
 
 export interface ReminderCadence {
   due_leads_ms: number[];
@@ -66,9 +123,14 @@ export function itemReminderSnapshotKey(item: Item): string {
     item.deleted_at,
     item.reminder_level,
     item.start_at,
+    item.start_date,
     item.occurrence_start_at,
+    item.occurrence_start_date,
     item.occurrence_end_at,
+    item.occurrence_end_date,
     item.due_at,
+    item.due_date,
+    item.time_zone,
   ]);
 }
 
@@ -220,12 +282,14 @@ export function deriveReminderSchedule(
         if (step > 1000) throw new Error("Reminder same-day cadence overflow");
       }
     };
-    if (item.start_at) {
-      const at = timestamp(item.start_at);
-      emit("start:once", item.start_at, at + policy.start_offset_ms);
+    const times = resolveItemReminderTimes(item);
+    // DATE start never invents a clock / start reminder (spec 22 §8).
+    if (times.startInstant && !times.startDateOnly) {
+      const at = timestamp(times.startInstant);
+      emit("start:once", times.startInstant, at + policy.start_offset_ms);
     }
-    if (item.due_at) {
-      const at = timestamp(item.due_at);
+    if (times.dueInstant) {
+      const at = timestamp(times.dueInstant);
       before("due", at, cadence.due_leads_ms);
       if (cadence.due_same_day_interval_ms)
         sameDay(at, cadence.due_same_day_interval_ms);
@@ -236,8 +300,10 @@ export function deriveReminderSchedule(
         cadence.overdue_interval_ms,
       );
     }
-    const occurrenceStart = item.occurrence_start_at ?? item.occurrence_end_at;
-    const occurrenceEnd = item.occurrence_end_at ?? item.occurrence_start_at;
+    const occurrenceStart =
+      times.occurrenceStartInstant ?? times.occurrenceEndInstant;
+    const occurrenceEnd =
+      times.occurrenceEndInstant ?? times.occurrenceStartInstant;
     if (occurrenceStart && occurrenceEnd) {
       const start = timestamp(occurrenceStart);
       const end = timestamp(occurrenceEnd);

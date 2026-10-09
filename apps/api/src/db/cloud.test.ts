@@ -15,6 +15,13 @@ it("protects the capture → course → item API, persists provenance, and repla
     new URL("../../../../backend/migrations/001_initial.sql", import.meta.url),
   );
   await db.exec(await readFile(migration, "utf8"));
+  const datePrecisionMigration = fileURLToPath(
+    new URL(
+      "../../../../backend/migrations/007_date_precision.sql",
+      import.meta.url,
+    ),
+  );
+  await db.exec(await readFile(datePrecisionMigration, "utf8"));
   const port: CloudDatabase = {
     query: async (sql, params) => db.query(sql, params),
     transaction: (work) =>
@@ -35,6 +42,7 @@ it("protects the capture → course → item API, persists provenance, and repla
         source: "QUICK_CAPTURE",
         raw_text: "找学姐要笔记",
         captured_at: "2026-09-22T08:00:00Z",
+        captured_tz: "Asia/Shanghai",
       },
     });
     expect(unauthorized.statusCode).toBe(401);
@@ -45,6 +53,7 @@ it("protects the capture → course → item API, persists provenance, and repla
       source: "QUICK_CAPTURE",
       raw_text: "找学姐要笔记",
       captured_at: "2026-09-22T08:00:00Z",
+      captured_tz: "Asia/Shanghai",
     };
     const capture = await server.inject({
       method: "POST",
@@ -88,9 +97,14 @@ it("protects the capture → course → item API, persists provenance, and repla
       course_id: courseId,
       status: "INCOMPLETE",
       start_at: null,
+      start_date: null,
       occurrence_start_at: null,
+      occurrence_start_date: null,
       occurrence_end_at: null,
+      occurrence_end_date: null,
       due_at: null,
+      due_date: null,
+      time_zone: "UTC",
       reminder_level: "NORMAL",
       raw_capture_id: rawId,
     };

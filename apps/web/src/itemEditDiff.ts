@@ -6,17 +6,26 @@ export interface ItemEditValues {
   detail: string | null;
   course_id: string | null;
   start_at: string | null;
+  start_date: string | null;
   occurrence_start_at: string | null;
+  occurrence_start_date: string | null;
   occurrence_end_at: string | null;
+  occurrence_end_date: string | null;
   due_at: string | null;
+  due_date: string | null;
+  time_zone: string | null;
   reminder_level: Item["reminder_level"];
 }
 
 const TIME_KEYS = new Set<string>([
   "start_at",
+  "start_date",
   "occurrence_start_at",
+  "occurrence_start_date",
   "occurrence_end_at",
+  "occurrence_end_date",
   "due_at",
+  "due_date",
 ]);
 
 function sameValue(before: unknown, after: unknown): boolean {

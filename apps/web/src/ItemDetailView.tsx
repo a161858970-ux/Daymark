@@ -63,9 +63,13 @@ export function ItemDetailView({
   const course = courses.find((value) => value.id === item.course_id);
   const hasTime = Boolean(
     item.start_at ||
+    item.start_date ||
     item.occurrence_start_at ||
+    item.occurrence_start_date ||
     item.occurrence_end_at ||
-    item.due_at,
+    item.occurrence_end_date ||
+    item.due_at ||
+    item.due_date,
   );
   const notesId = `${headingId}-notes`;
   const deleteId = `${headingId}-delete`;
@@ -106,35 +110,45 @@ export function ItemDetailView({
             <dd>{t("item.noTime")}</dd>
           </div>
         )}
-        {item.start_at && (
+        {(item.start_at || item.start_date) && (
           <div>
             <dt>{t("item.start")}</dt>
-            <dd>{stamp(item.start_at)}</dd>
+            <dd>{stamp(item.start_date || item.start_at!)}</dd>
           </div>
         )}
-        {item.occurrence_start_at && (
+        {(item.occurrence_start_at || item.occurrence_start_date) && (
           <div>
             <dt>{t("item.occur")}</dt>
             <dd>
-              {item.occurrence_end_at
+              {item.occurrence_end_at || item.occurrence_end_date
                 ? t("item.tagRange", {
-                    start: stamp(item.occurrence_start_at),
-                    end: stamp(item.occurrence_end_at),
+                    start: stamp(
+                      item.occurrence_start_date || item.occurrence_start_at!,
+                    ),
+                    end: stamp(
+                      item.occurrence_end_date || item.occurrence_end_at!,
+                    ),
                   })
-                : stamp(item.occurrence_start_at)}
+                : stamp(
+                    item.occurrence_start_date || item.occurrence_start_at!,
+                  )}
             </dd>
           </div>
         )}
-        {!item.occurrence_start_at && item.occurrence_end_at && (
-          <div>
-            <dt>{t("item.occurEnd")}</dt>
-            <dd>{stamp(item.occurrence_end_at)}</dd>
-          </div>
-        )}
-        {item.due_at && (
+        {!item.occurrence_start_at &&
+          !item.occurrence_start_date &&
+          (item.occurrence_end_at || item.occurrence_end_date) && (
+            <div>
+              <dt>{t("item.occurEnd")}</dt>
+              <dd>
+                {stamp(item.occurrence_end_date || item.occurrence_end_at!)}
+              </dd>
+            </div>
+          )}
+        {(item.due_at || item.due_date) && (
           <div>
             <dt>{t("item.due")}</dt>
-            <dd>{stamp(item.due_at)}</dd>
+            <dd>{stamp(item.due_date || item.due_at!)}</dd>
           </div>
         )}
         <div>

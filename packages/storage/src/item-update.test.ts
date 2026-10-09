@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 import { afterEach, expect, it } from "vitest";
-import { Daymark, type Item } from "@daymark/application";
+import { Daymark } from "@daymark/application";
+import type { Item } from "@daymark/domain";
 import { DaymarkDb, DexieLocalRepository } from "./index.js";
 
 /**

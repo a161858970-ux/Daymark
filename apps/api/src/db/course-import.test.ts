@@ -26,6 +26,7 @@ async function harness(parser: CourseImportParser, limiter?: RateLimiter) {
     "003_course_import.sql",
     "005_schedule_times_nullable.sql",
     "006_course_import_parse_cache.sql",
+    "007_date_precision.sql",
   ]) {
     const path = fileURLToPath(
       new URL(`../../../../backend/migrations/${name}`, import.meta.url),
@@ -154,9 +155,14 @@ it("imports a persisted preview atomically, requires duplicate decisions, and de
       course_id: priorCourse.id,
       status: "INCOMPLETE",
       start_at: null,
+      start_date: null,
       occurrence_start_at: null,
+      occurrence_start_date: null,
       occurrence_end_at: null,
+      occurrence_end_date: null,
       due_at: null,
+      due_date: null,
+      time_zone: "UTC",
       reminder_level: "NORMAL",
       raw_capture_id: null,
     });

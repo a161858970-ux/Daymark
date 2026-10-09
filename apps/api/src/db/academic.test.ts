@@ -31,6 +31,13 @@ it("serves owner-scoped Semester weeks and atomic Course schedules on the canoni
     ),
   );
   await db.exec(await readFile(nullableMigration, "utf8"));
+  const datePrecisionMigration = fileURLToPath(
+    new URL(
+      "../../../../backend/migrations/007_date_precision.sql",
+      import.meta.url,
+    ),
+  );
+  await db.exec(await readFile(datePrecisionMigration, "utf8"));
   const port: CloudDatabase = {
     query: async (sql, params) => db.query(sql, params),
     transaction: (work) =>

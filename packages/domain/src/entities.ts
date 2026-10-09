@@ -52,15 +52,25 @@ export interface CourseInformation extends EntityBase {
 export type ItemStatus = "INCOMPLETE" | "COMPLETE";
 export type ReminderLevel = "OFF" | "NORMAL" | "HIGH";
 
+/**
+ * Per semantic endpoint at most one of the DATE / DATETIME pair is non-null.
+ * DATE = calendar day (`YYYY-MM-DD`); DATETIME = UTC instant (`*_at`).
+ * `time_zone` interprets date-only fields and local-day reminder boundaries.
+ */
 export interface Item extends EntityBase {
   course_id: UUID | null;
   title: string;
   detail: string | null;
   status: ItemStatus;
   start_at: IsoDateTime | null;
+  start_date: DateOnly | null;
   occurrence_start_at: IsoDateTime | null;
+  occurrence_start_date: DateOnly | null;
   occurrence_end_at: IsoDateTime | null;
+  occurrence_end_date: DateOnly | null;
   due_at: IsoDateTime | null;
+  due_date: DateOnly | null;
+  time_zone: string | null;
   reminder_level: ReminderLevel;
   completed_at: IsoDateTime | null;
   raw_capture_id: UUID | null;
@@ -83,6 +93,8 @@ export interface RawCapture extends Omit<
   source: RawCaptureSource;
   raw_text: string;
   captured_at: IsoDateTime;
+  /** IANA timezone at capture. New writes required; historical rows may be null. */
+  captured_tz: string | null;
   processing_status: RawCaptureStatus;
   unresolved_reason: string | null;
 }

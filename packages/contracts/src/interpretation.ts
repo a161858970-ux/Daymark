@@ -25,15 +25,39 @@ export const interpretationSchema = z
     detail: z.string().max(20000).nullable(),
     course_candidate: z.string().max(300).nullable(),
     start_at: z.string().datetime({ offset: true }).nullable(),
+    start_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable(),
     occurrence_start_at: z.string().datetime({ offset: true }).nullable(),
+    occurrence_start_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable(),
     occurrence_end_at: z.string().datetime({ offset: true }).nullable(),
+    occurrence_end_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable(),
     due_at: z.string().datetime({ offset: true }).nullable(),
+    due_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable(),
     course_information: z.string().max(20000).nullable(),
     split_candidates: z.array(z.string().min(1).max(500)).max(20),
     confidence: z.number().min(0).max(1),
     uncertainty: z.string().max(2000).nullable(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (value) =>
+      !(value.start_at && value.start_date) &&
+      !(value.occurrence_start_at && value.occurrence_start_date) &&
+      !(value.occurrence_end_at && value.occurrence_end_date) &&
+      !(value.due_at && value.due_date),
+    { message: "DATE and DATETIME cannot both be set for one endpoint" },
+  );
 
 export type CaptureInterpretation = z.infer<typeof interpretationSchema>;
 export type InterpretationRequest = z.infer<typeof interpretationRequestSchema>;

@@ -220,10 +220,17 @@ export class CloudSync {
             const value = createRawCaptureSchema.parse(input);
             const result = await q.query<{ value: Record<string, unknown> }>(
               `WITH inserted AS (INSERT INTO raw_captures
-               (id, owner_id, source, raw_text, captured_at, processing_status, unresolved_reason, deleted_at, row_version)
-               VALUES ($1,$2,$3,$4,$5,'RAW',NULL,NULL,1) RETURNING *)
+               (id, owner_id, source, raw_text, captured_at, captured_tz, processing_status, unresolved_reason, deleted_at, row_version)
+               VALUES ($1,$2,$3,$4,$5,$6,'RAW',NULL,NULL,1) RETURNING *)
                SELECT row_to_json(inserted) AS value FROM inserted`,
-              [id, ownerId, value.source, value.raw_text, value.captured_at],
+              [
+                id,
+                ownerId,
+                value.source,
+                value.raw_text,
+                value.captured_at,
+                value.captured_tz ?? null,
+              ],
             );
             row = result.rows[0]?.value;
             break;
@@ -335,10 +342,12 @@ export class CloudSync {
               );
             const result = await q.query<{ value: Record<string, unknown> }>(
               `WITH inserted AS (INSERT INTO items
-               (id,owner_id,course_id,title,detail,status,start_at,occurrence_start_at,
-                occurrence_end_at,due_at,reminder_level,created_at,updated_at,completed_at,
+               (id,owner_id,course_id,title,detail,status,
+                start_at,start_date,occurrence_start_at,occurrence_start_date,
+                occurrence_end_at,occurrence_end_date,due_at,due_date,time_zone,
+                reminder_level,created_at,updated_at,completed_at,
                 deleted_at,row_version,raw_capture_id)
-               VALUES ($1,$2,$3,$4,$5,'INCOMPLETE',$6,$7,$8,$9,$10,$12,$13,NULL,NULL,1,$11)
+               VALUES ($1,$2,$3,$4,$5,'INCOMPLETE',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NULL,NULL,1,$18)
                RETURNING *) SELECT row_to_json(inserted) AS value FROM inserted`,
               [
                 id,
@@ -346,14 +355,19 @@ export class CloudSync {
                 value.course_id,
                 value.title,
                 value.detail,
-                value.start_at,
-                value.occurrence_start_at,
-                value.occurrence_end_at,
-                value.due_at,
+                value.start_at ?? null,
+                value.start_date ?? null,
+                value.occurrence_start_at ?? null,
+                value.occurrence_start_date ?? null,
+                value.occurrence_end_at ?? null,
+                value.occurrence_end_date ?? null,
+                value.due_at ?? null,
+                value.due_date ?? null,
+                value.time_zone ?? null,
                 value.reminder_level,
-                value.raw_capture_id,
                 createdAt,
                 updatedAt,
+                value.raw_capture_id,
               ],
             );
             row = result.rows[0]?.value;

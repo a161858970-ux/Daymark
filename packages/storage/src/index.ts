@@ -409,6 +409,14 @@ export class DaymarkDb extends Dexie {
             });
         }
       });
+    // DATE/DATETIME precision fields (ADR-010). Non-indexed columns persist
+    // automatically; indexes only add due_date for date-sorted queries.
+    // Legacy rows keep *_at DATETIME semantics; new date fields stay null.
+    this.version(7).stores({
+      items:
+        "id, owner_id, course_id, status, created_at, due_at, due_date, occurrence_start_at, occurrence_start_date, start_at, deleted_at",
+      raw_captures: "id, owner_id, processing_status, captured_at, deleted_at",
+    });
   }
 }
 

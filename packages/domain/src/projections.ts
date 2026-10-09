@@ -3,19 +3,34 @@ import type { Course, Item, Semester, SemesterWeek } from "./entities.js";
 export function hasItemTime(item: Item): boolean {
   return Boolean(
     item.start_at ||
+    item.start_date ||
     item.occurrence_start_at ||
+    item.occurrence_start_date ||
     item.occurrence_end_at ||
-    item.due_at,
+    item.occurrence_end_date ||
+    item.due_at ||
+    item.due_date,
   );
 }
 
-/** Canonical query-time key from 15_DATABASE_SCHEMA §9.3. */
+/**
+ * Canonical query-time key from 15_DATABASE_SCHEMA §9.3.
+ * DATE values sort as their local calendar day start for ordering only.
+ */
 export function overviewSortAt(item: Item, now: string): string | null {
   const times = [
     item.due_at,
     item.occurrence_start_at,
     item.start_at,
     item.occurrence_end_at,
+    item.due_date ? `${item.due_date}T00:00:00.000Z` : null,
+    item.occurrence_start_date
+      ? `${item.occurrence_start_date}T00:00:00.000Z`
+      : null,
+    item.occurrence_end_date
+      ? `${item.occurrence_end_date}T00:00:00.000Z`
+      : null,
+    item.start_date ? `${item.start_date}T00:00:00.000Z` : null,
   ]
     .filter((value): value is string => value !== null)
     .sort();
@@ -56,16 +71,53 @@ export interface CalendarProjection {
   start: string;
   end: string;
   kind: "RANGE" | "POINT";
+  /** DATE / all-day — render as full-day, never a fake clock. */
+  all_day: boolean;
+}
+
+function dateAsUtcMidnight(date: string): string {
+  return `${date}T00:00:00.000Z`;
+}
+
+function nextDateAsUtcMidnight(date: string): string {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + 1);
+  return value.toISOString();
 }
 
 export function projectItemToCalendar(item: Item): CalendarProjection | null {
   if (item.deleted_at !== null) return null;
+
+  // DATE occurrence range / point — all-day inclusive calendar days.
+  if (item.occurrence_start_date || item.occurrence_end_date) {
+    const startDate = item.occurrence_start_date ?? item.occurrence_end_date!;
+    const endDate = item.occurrence_end_date ?? item.occurrence_start_date!;
+    return {
+      item_id: item.id,
+      start: dateAsUtcMidnight(startDate),
+      // Exclusive end-of-range for continuous spanning: use next midnight of end date.
+      end: nextDateAsUtcMidnight(endDate),
+      kind: startDate === endDate ? "POINT" : "RANGE",
+      all_day: true,
+    };
+  }
   if (item.occurrence_start_at && item.occurrence_end_at) {
     return {
       item_id: item.id,
       start: item.occurrence_start_at,
       end: item.occurrence_end_at,
       kind: "RANGE",
+      all_day: false,
+    };
+  }
+  // DATE start + due as a span
+  if (item.start_date && item.due_date) {
+    return {
+      item_id: item.id,
+      start: dateAsUtcMidnight(item.start_date),
+      end: nextDateAsUtcMidnight(item.due_date),
+      kind: "RANGE",
+      all_day: true,
     };
   }
   if (item.start_at && item.due_at) {
@@ -74,8 +126,40 @@ export function projectItemToCalendar(item: Item): CalendarProjection | null {
       start: item.start_at,
       end: item.due_at,
       kind: "RANGE",
+      all_day: false,
     };
   }
+
+  // Point cases
+  if (
+    item.due_date &&
+    !item.due_at &&
+    !item.occurrence_start_at &&
+    !item.start_at
+  ) {
+    return {
+      item_id: item.id,
+      start: dateAsUtcMidnight(item.due_date),
+      end: nextDateAsUtcMidnight(item.due_date),
+      kind: "POINT",
+      all_day: true,
+    };
+  }
+  if (
+    item.start_date &&
+    !item.start_at &&
+    !item.due_at &&
+    !item.occurrence_start_at
+  ) {
+    return {
+      item_id: item.id,
+      start: dateAsUtcMidnight(item.start_date),
+      end: nextDateAsUtcMidnight(item.start_date),
+      kind: "POINT",
+      all_day: true,
+    };
+  }
+
   const point = [
     item.occurrence_start_at,
     item.due_at,
@@ -85,7 +169,13 @@ export function projectItemToCalendar(item: Item): CalendarProjection | null {
     .filter((value): value is string => value !== null)
     .sort()[0];
   return point
-    ? { item_id: item.id, start: point, end: point, kind: "POINT" }
+    ? {
+        item_id: item.id,
+        start: point,
+        end: point,
+        kind: "POINT",
+        all_day: false,
+      }
     : null;
 }
 

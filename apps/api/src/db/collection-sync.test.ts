@@ -17,6 +17,7 @@ async function setup() {
     "001_initial.sql",
     "002_collection_sync.sql",
     "005_schedule_times_nullable.sql",
+    "007_date_precision.sql",
   ]) {
     const path = fileURLToPath(
       new URL(`../../../../backend/migrations/${name}`, import.meta.url),
@@ -295,9 +296,14 @@ it("syncs ItemAssociation create and tombstone with canonical pair ordering", as
       course_id: null,
       status: "INCOMPLETE",
       start_at: null,
+      start_date: null,
       occurrence_start_at: null,
+      occurrence_start_date: null,
       occurrence_end_at: null,
+      occurrence_end_date: null,
       due_at: null,
+      due_date: null,
+      time_zone: "UTC",
       reminder_level: "NORMAL",
       raw_capture_id: null,
       created_at: now,

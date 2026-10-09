@@ -17,6 +17,13 @@ it("replays local UUIDs, protects ownership, preserves provenance, and pulls ord
     new URL("../../../../backend/migrations/001_initial.sql", import.meta.url),
   );
   await db.exec(await readFile(migration, "utf8"));
+  const datePrecisionMigration = fileURLToPath(
+    new URL(
+      "../../../../backend/migrations/007_date_precision.sql",
+      import.meta.url,
+    ),
+  );
+  await db.exec(await readFile(datePrecisionMigration, "utf8"));
   const port: CloudDatabase = {
     query: async (sql, params) => db.query(sql, params),
     transaction: (work) =>
@@ -54,6 +61,7 @@ it("replays local UUIDs, protects ownership, preserves provenance, and pulls ord
     source: "QUICK_CAPTURE",
     raw_text: "找学姐要笔记",
     captured_at: "2026-09-22T08:00:00Z",
+    captured_tz: "Asia/Shanghai",
     processing_status: "RAW",
     deleted_at: null,
   });
@@ -70,9 +78,14 @@ it("replays local UUIDs, protects ownership, preserves provenance, and pulls ord
     course_id: courseId,
     status: "INCOMPLETE",
     start_at: null,
+    start_date: null,
     occurrence_start_at: null,
+    occurrence_start_date: null,
     occurrence_end_at: null,
+    occurrence_end_date: null,
     due_at: null,
+    due_date: null,
+    time_zone: "UTC",
     reminder_level: "NORMAL",
     raw_capture_id: rawId,
     created_at: "2026-09-22T08:00:00Z",
@@ -228,6 +241,7 @@ it("replays local UUIDs, protects ownership, preserves provenance, and pulls ord
       source: "QUICK_CAPTURE",
       raw_text: "第四周前交作业",
       captured_at: "2026-09-22T09:00:00Z",
+      captured_tz: "Asia/Shanghai",
     });
     const unresolved = {
       mutation_id: randomUUID(),
@@ -421,6 +435,13 @@ it("syncs CourseSchedule as a separate course fact with owner and version checks
     ),
   );
   await db.exec(await readFile(nullableMigration, "utf8"));
+  const datePrecisionMigration = fileURLToPath(
+    new URL(
+      "../../../../backend/migrations/007_date_precision.sql",
+      import.meta.url,
+    ),
+  );
+  await db.exec(await readFile(datePrecisionMigration, "utf8"));
   const port: CloudDatabase = {
     query: async (sql, params) => db.query(sql, params),
     transaction: (work) =>
@@ -546,6 +567,13 @@ it("syncs Item complete, tombstone and bounded Undo through the same identity", 
     new URL("../../../../backend/migrations/001_initial.sql", import.meta.url),
   );
   await db.exec(await readFile(migration, "utf8"));
+  const datePrecisionMigration = fileURLToPath(
+    new URL(
+      "../../../../backend/migrations/007_date_precision.sql",
+      import.meta.url,
+    ),
+  );
+  await db.exec(await readFile(datePrecisionMigration, "utf8"));
   const port: CloudDatabase = {
     query: async (sql, params) => db.query(sql, params),
     transaction: (work) =>
@@ -587,9 +615,14 @@ it("syncs Item complete, tombstone and bounded Undo through the same identity", 
         course_id: null,
         status: "INCOMPLETE",
         start_at: null,
+        start_date: null,
         occurrence_start_at: null,
+        occurrence_start_date: null,
         occurrence_end_at: null,
+        occurrence_end_date: null,
         due_at: null,
+        due_date: null,
+        time_zone: null,
         reminder_level: "NORMAL",
         raw_capture_id: null,
         created_at: "2026-09-22T08:00:00Z",
