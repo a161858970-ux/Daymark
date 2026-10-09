@@ -9,6 +9,9 @@ export default tseslint.config(
       "**/coverage/**",
       // Cargo build output and generated Tauri assets (gitignored anyway).
       "src-tauri/**",
+      // Local visual-check scripts and browser session dumps.
+      "output/**",
+      ".playwright-cli/**",
     ],
   },
   js.configs.recommended,

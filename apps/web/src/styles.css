@@ -3103,6 +3103,11 @@ h2 {
 .language-switcher {
   position: relative;
 }
+/* Desktop: children keep their own layout (nav utility / floating compact).
+   Mobile: one top-right cluster so language never sits under the sync pill. */
+.top-tools {
+  display: contents;
+}
 .language-switcher-nav {
   margin-top: 8px;
 }
@@ -3194,11 +3199,30 @@ h2 {
   font-weight: 700;
 }
 @media (max-width: 767px) {
-  .language-switcher-compact {
+  .top-tools {
+    display: flex;
     position: fixed;
     top: calc(env(safe-area-inset-top, 0px) + 18px);
-    right: calc(clamp(18px, 5vw, 28px) + 52px);
-    z-index: 13;
+    right: clamp(18px, 5vw, 28px);
+    left: auto;
+    z-index: 12;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .top-tools .language-switcher-compact {
+    position: static;
+    top: auto;
+    right: auto;
+    z-index: auto;
+  }
+  .top-tools .account-control {
+    position: static;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    max-width: min(200px, calc(100vw - 96px));
   }
 }
 .account-popover {

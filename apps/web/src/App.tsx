@@ -969,14 +969,16 @@ export function App() {
           </div>
         </div>
       ) : null}
-      <LanguageSwitcher variant="compact" />
-      <AccountControl
-        online={online}
-        status={syncStatus}
-        attentionCount={syncConflicts.length + syncIssues.length}
-        onOpenRepair={() => setRepairOpenSignal((value) => value + 1)}
-        onOpenCompletedTask={openCompletedAiTask}
-      />
+      <div className="top-tools">
+        <LanguageSwitcher variant="compact" />
+        <AccountControl
+          online={online}
+          status={syncStatus}
+          attentionCount={syncConflicts.length + syncIssues.length}
+          onOpenRepair={() => setRepairOpenSignal((value) => value + 1)}
+          onOpenCompletedTask={openCompletedAiTask}
+        />
+      </div>
       <AppNavigation page={page} onNavigate={navigate} onSearch={openSearch} />
       <main className="main-content">
         {!online && (
