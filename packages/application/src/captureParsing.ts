@@ -36,7 +36,8 @@ export interface PreprocessInput {
   courses: Course[];
   /** Parse-time context for deterministic time resolution */
   capturedAt: string;
-  timeZone: string;
+  /** IANA zone at capture; null for historical rows without captured_tz. */
+  timeZone: string | null;
   semesterWeeks?: ParseTimeInput["semesterWeeks"];
   semester?: ParseTimeInput["semester"];
   semesterYear?: number | null;

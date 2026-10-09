@@ -195,8 +195,9 @@ export class Daymark {
       (semester) => semester.owner_id === capture.owner_id,
     );
     const capturedAt = capture.captured_at;
-    const capturedTz =
-      capture.captured_tz ?? runtimeTimeZone(this.runtime) ?? "UTC";
+    // Historical captures without captured_tz must not invent relative dates
+    // (ADR-010). New captures always store the zone at capture().
+    const capturedTz = capture.captured_tz;
     // Prefer semester of the resolved course for year-less dates.
     const contextCourse = contextCourseId
       ? courses.find((course) => course.id === contextCourseId)
@@ -476,10 +477,7 @@ export class Daymark {
         occurrence_end_date: resolution.occurrence_end_date ?? null,
         due_at: resolution.due_at ?? null,
         due_date: resolution.due_date ?? null,
-        time_zone:
-          resolution.time_zone ??
-          capture.captured_tz ??
-          runtimeTimeZone(this.runtime),
+        time_zone: resolution.time_zone ?? capture.captured_tz ?? null,
         reminder_level: resolution.reminder_level,
         raw_capture_id: capture.id,
       });
@@ -651,10 +649,7 @@ export class Daymark {
         occurrence_end_date: resolution.occurrence_end_date ?? null,
         due_at: resolution.due_at ?? null,
         due_date: resolution.due_date ?? null,
-        time_zone:
-          resolution.time_zone ??
-          capture.captured_tz ??
-          runtimeTimeZone(this.runtime),
+        time_zone: resolution.time_zone ?? capture.captured_tz ?? null,
         reminder_level: resolution.reminder_level,
         raw_capture_id: capture.id,
       });

@@ -57,7 +57,7 @@ export function ItemDetailView({
   onAssociate,
   onRemoveAssociation,
 }: Props) {
-  const { t, formatDateTime } = useI18n();
+  const { t, formatDateTime, formatDateOnly } = useI18n();
   const [showRaw, setShowRaw] = useState(false);
   const [associationId, setAssociationId] = useState("");
   const course = courses.find((value) => value.id === item.course_id);
@@ -78,7 +78,10 @@ export function ItemDetailView({
     NORMAL: t("item.reminderNormal"),
     HIGH: t("item.reminderHigh"),
   };
-  const stamp = (value: string) => formatDateTime(value, dateTimeOptions);
+  /** DATE → calendar day only; DATETIME → real date+time. */
+  const stampDate = (value: string) => formatDateOnly(value);
+  const stampInstant = (value: string) =>
+    formatDateTime(value, dateTimeOptions);
 
   return (
     <>
@@ -113,25 +116,31 @@ export function ItemDetailView({
         {(item.start_at || item.start_date) && (
           <div>
             <dt>{t("item.start")}</dt>
-            <dd>{stamp(item.start_date || item.start_at!)}</dd>
+            <dd>
+              {item.start_date
+                ? stampDate(item.start_date)
+                : stampInstant(item.start_at!)}
+            </dd>
           </div>
         )}
         {(item.occurrence_start_at || item.occurrence_start_date) && (
           <div>
             <dt>{t("item.occur")}</dt>
             <dd>
-              {item.occurrence_end_at || item.occurrence_end_date
-                ? t("item.tagRange", {
-                    start: stamp(
-                      item.occurrence_start_date || item.occurrence_start_at!,
-                    ),
-                    end: stamp(
-                      item.occurrence_end_date || item.occurrence_end_at!,
-                    ),
-                  })
-                : stamp(
-                    item.occurrence_start_date || item.occurrence_start_at!,
-                  )}
+              {item.occurrence_start_date
+                ? item.occurrence_end_date &&
+                  item.occurrence_end_date !== item.occurrence_start_date
+                  ? t("item.tagRange", {
+                      start: stampDate(item.occurrence_start_date),
+                      end: stampDate(item.occurrence_end_date),
+                    })
+                  : stampDate(item.occurrence_start_date)
+                : item.occurrence_end_at
+                  ? t("item.tagRange", {
+                      start: stampInstant(item.occurrence_start_at!),
+                      end: stampInstant(item.occurrence_end_at),
+                    })
+                  : stampInstant(item.occurrence_start_at!)}
             </dd>
           </div>
         )}
@@ -141,14 +150,20 @@ export function ItemDetailView({
             <div>
               <dt>{t("item.occurEnd")}</dt>
               <dd>
-                {stamp(item.occurrence_end_date || item.occurrence_end_at!)}
+                {item.occurrence_end_date
+                  ? stampDate(item.occurrence_end_date)
+                  : stampInstant(item.occurrence_end_at!)}
               </dd>
             </div>
           )}
         {(item.due_at || item.due_date) && (
           <div>
             <dt>{t("item.due")}</dt>
-            <dd>{stamp(item.due_date || item.due_at!)}</dd>
+            <dd>
+              {item.due_date
+                ? stampDate(item.due_date)
+                : stampInstant(item.due_at!)}
+            </dd>
           </div>
         )}
         <div>

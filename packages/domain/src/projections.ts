@@ -65,7 +65,14 @@ export function sortOverview(items: readonly Item[], now: string): Item[] {
     });
 }
 
-/** An Item has one identity even when its visual range covers several dates. */
+/**
+ * An Item has one identity even when its visual range covers several dates.
+ *
+ * DATE / all-day items carry **inclusive** calendar days in
+ * `calendar_start` / `calendar_end`. Those strings are calendar bodies
+ * (`YYYY-MM-DD`) and must never be re-derived by converting a UTC-midnight
+ * instant through a timezone. `start`/`end` remain sort/filter keys only.
+ */
 export interface CalendarProjection {
   item_id: string;
   start: string;
@@ -73,33 +80,40 @@ export interface CalendarProjection {
   kind: "RANGE" | "POINT";
   /** DATE / all-day — render as full-day, never a fake clock. */
   all_day: boolean;
+  /** Inclusive calendar day when all_day; null for DATETIME. */
+  calendar_start: string | null;
+  calendar_end: string | null;
 }
 
-function dateAsUtcMidnight(date: string): string {
+/** Sort key for a calendar day body: treat the day as a stable UTC date token. */
+function dateSortKey(date: string): string {
   return `${date}T00:00:00.000Z`;
 }
 
-function nextDateAsUtcMidnight(date: string): string {
-  const value = new Date(`${date}T00:00:00Z`);
-  value.setUTCDate(value.getUTCDate() + 1);
-  return value.toISOString();
+function allDayProjection(
+  itemId: string,
+  startDate: string,
+  endDate: string,
+): CalendarProjection {
+  return {
+    item_id: itemId,
+    start: dateSortKey(startDate),
+    end: dateSortKey(endDate),
+    kind: startDate === endDate ? "POINT" : "RANGE",
+    all_day: true,
+    calendar_start: startDate,
+    calendar_end: endDate,
+  };
 }
 
 export function projectItemToCalendar(item: Item): CalendarProjection | null {
   if (item.deleted_at !== null) return null;
 
-  // DATE occurrence range / point — all-day inclusive calendar days.
+  // DATE occurrence range / point — inclusive calendar days, never UTC instants.
   if (item.occurrence_start_date || item.occurrence_end_date) {
     const startDate = item.occurrence_start_date ?? item.occurrence_end_date!;
     const endDate = item.occurrence_end_date ?? item.occurrence_start_date!;
-    return {
-      item_id: item.id,
-      start: dateAsUtcMidnight(startDate),
-      // Exclusive end-of-range for continuous spanning: use next midnight of end date.
-      end: nextDateAsUtcMidnight(endDate),
-      kind: startDate === endDate ? "POINT" : "RANGE",
-      all_day: true,
-    };
+    return allDayProjection(item.id, startDate, endDate);
   }
   if (item.occurrence_start_at && item.occurrence_end_at) {
     return {
@@ -108,17 +122,13 @@ export function projectItemToCalendar(item: Item): CalendarProjection | null {
       end: item.occurrence_end_at,
       kind: "RANGE",
       all_day: false,
+      calendar_start: null,
+      calendar_end: null,
     };
   }
-  // DATE start + due as a span
+  // DATE start + due as an inclusive calendar span
   if (item.start_date && item.due_date) {
-    return {
-      item_id: item.id,
-      start: dateAsUtcMidnight(item.start_date),
-      end: nextDateAsUtcMidnight(item.due_date),
-      kind: "RANGE",
-      all_day: true,
-    };
+    return allDayProjection(item.id, item.start_date, item.due_date);
   }
   if (item.start_at && item.due_at) {
     return {
@@ -127,6 +137,8 @@ export function projectItemToCalendar(item: Item): CalendarProjection | null {
       end: item.due_at,
       kind: "RANGE",
       all_day: false,
+      calendar_start: null,
+      calendar_end: null,
     };
   }
 
@@ -137,13 +149,7 @@ export function projectItemToCalendar(item: Item): CalendarProjection | null {
     !item.occurrence_start_at &&
     !item.start_at
   ) {
-    return {
-      item_id: item.id,
-      start: dateAsUtcMidnight(item.due_date),
-      end: nextDateAsUtcMidnight(item.due_date),
-      kind: "POINT",
-      all_day: true,
-    };
+    return allDayProjection(item.id, item.due_date, item.due_date);
   }
   if (
     item.start_date &&
@@ -151,13 +157,7 @@ export function projectItemToCalendar(item: Item): CalendarProjection | null {
     !item.due_at &&
     !item.occurrence_start_at
   ) {
-    return {
-      item_id: item.id,
-      start: dateAsUtcMidnight(item.start_date),
-      end: nextDateAsUtcMidnight(item.start_date),
-      kind: "POINT",
-      all_day: true,
-    };
+    return allDayProjection(item.id, item.start_date, item.start_date);
   }
 
   const point = [
@@ -175,8 +175,35 @@ export function projectItemToCalendar(item: Item): CalendarProjection | null {
         end: point,
         kind: "POINT",
         all_day: false,
+        calendar_start: null,
+        calendar_end: null,
       }
     : null;
+}
+
+/** Inclusive calendar-day span for filtering, independent of timezone. */
+export function projectionCalendarSpan(projection: CalendarProjection): {
+  start: string;
+  end: string;
+  all_day: boolean;
+} {
+  if (
+    projection.all_day &&
+    projection.calendar_start &&
+    projection.calendar_end
+  ) {
+    return {
+      start: projection.calendar_start,
+      end: projection.calendar_end,
+      all_day: true,
+    };
+  }
+  // Timed items: callers convert instants with the display timezone.
+  return {
+    start: projection.start,
+    end: projection.end,
+    all_day: false,
+  };
 }
 
 export function calendarItems(
@@ -186,9 +213,21 @@ export function calendarItems(
 ): CalendarProjection[] {
   return items.flatMap((item) => {
     const projection = projectItemToCalendar(item);
-    return projection && projection.start <= to && projection.end >= from
-      ? [projection]
-      : [];
+    if (!projection) return [];
+    if (
+      projection.all_day &&
+      projection.calendar_start &&
+      projection.calendar_end
+    ) {
+      // from/to may be YYYY-MM-DD or ISO; compare on the calendar-day body.
+      const fromDay = from.slice(0, 10);
+      const toDay = to.slice(0, 10);
+      return projection.calendar_end >= fromDay &&
+        projection.calendar_start <= toDay
+        ? [projection]
+        : [];
+    }
+    return projection.start <= to && projection.end >= from ? [projection] : [];
   });
 }
 

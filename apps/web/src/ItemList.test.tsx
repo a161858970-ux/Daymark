@@ -60,6 +60,68 @@ it("keeps completion and item detail as separate targets", () => {
   expect(markup).toContain("环境经济学 · 截止");
 });
 
+it("shows DATE fields as calendar days without inventing 00:00", () => {
+  const dueDateItem: Item = {
+    ...item,
+    due_at: null,
+    due_date: "2026-10-12",
+  };
+  const markup = renderToStaticMarkup(
+    <I18nProvider>
+      <ItemList
+        items={[dueDateItem]}
+        courses={[course]}
+        pendingMoveIds={new Set()}
+        onOpen={() => undefined}
+        onComplete={() => undefined}
+      />
+    </I18nProvider>,
+  );
+  expect(markup).toContain("10月12日");
+  expect(markup).not.toContain("00:00");
+  expect(markup).not.toContain("T00:00");
+});
+
+it("shows DATE occurrence spans without fake clocks", () => {
+  const range: Item = {
+    ...item,
+    due_at: null,
+    due_date: null,
+    occurrence_start_date: "2026-10-12",
+    occurrence_end_date: "2026-10-14",
+  };
+  const markup = renderToStaticMarkup(
+    <I18nProvider>
+      <ItemList
+        items={[range]}
+        courses={[course]}
+        pendingMoveIds={new Set()}
+        onOpen={() => undefined}
+        onComplete={() => undefined}
+      />
+    </I18nProvider>,
+  );
+  expect(markup).toContain("10月12日");
+  expect(markup).toContain("10月14日");
+  expect(markup).not.toContain("00:00");
+});
+
+it("still shows DATETIME dues with a real clock", () => {
+  const markup = renderToStaticMarkup(
+    <I18nProvider>
+      <ItemList
+        items={[item]}
+        courses={[course]}
+        pendingMoveIds={new Set()}
+        onOpen={() => undefined}
+        onComplete={() => undefined}
+      />
+    </I18nProvider>,
+  );
+  // due_at = 2026-09-30T10:00:00.000Z — must include a clock, not only a day.
+  expect(markup).toMatch(/截止[^<]*\d{1,2}:\d{2}/);
+});
+
 it("exposes the short delete and same-identity re-entry motion states", () => {
   const deleting = renderToStaticMarkup(
     <I18nProvider>

@@ -75,3 +75,4 @@
 - domain / contracts / storage / API / UI / calendar / reminder 需同步感知精度。
 - 标题提纯仅在时间成分被 `*_at` 或 `*_date` 真实承接后才允许移除。
 - 发布后需一轮真机/桌面人工验收（全天日历、日期截止提醒、跨时区）。
+- **日历投影（2026-10-09 复审修正）**：`CalendarProjection` 对 all-day 项携带**含端** `calendar_start`/`calendar_end`（`YYYY-MM-DD` 日历本体）；`buildCalendarMonth` / `calendarItemsForDay` 不得对 DATE 再做 `localDateOfInstant(UTC 午夜)`，否则西时区会偏日、排他 `end` 会多画一天。

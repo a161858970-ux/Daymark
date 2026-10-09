@@ -37,6 +37,8 @@ type I18nValue = {
     value: Date | string | number,
     options?: Intl.DateTimeFormatOptions,
   ) => string;
+  /** DATE calendar body (YYYY-MM-DD) — no timezone shift, no fake clock. */
+  formatDateOnly: (value: string) => string;
   formatMonthDay: (value: Date | string | number) => string;
   formatWeekday: (
     value: Date | string | number,
@@ -86,6 +88,7 @@ export function I18nProvider({
       formatTime: (value, options) => fmt.formatTime(value, locale, options),
       formatDateTime: (value, options) =>
         fmt.formatDateTime(value, locale, options),
+      formatDateOnly: (value) => fmt.formatDateOnly(value, locale),
       formatMonthDay: (value) => fmt.formatMonthDay(value, locale),
       formatWeekday: (value, options) =>
         fmt.formatWeekday(value, locale, options),

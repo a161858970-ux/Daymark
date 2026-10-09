@@ -224,3 +224,51 @@ it("addDays crosses month boundaries", () => {
   expect(addDays("2026-10-31", 1)).toBe("2026-11-01");
   expect(addDays("2028-02-28", 1)).toBe("2028-02-29");
 });
+
+it("does not invent relative dates for historical captures without captured_tz", () => {
+  const relative = parseTimes({
+    text: "明天下午3点交报告",
+    capturedAt: CAPTURE,
+    timeZone: null,
+  });
+  expect(relative.resolved).toHaveLength(0);
+  expect(relative.unresolved.some((u) => u.rawPhrase.includes("明天"))).toBe(
+    true,
+  );
+
+  const weekday = parseTimes({
+    text: "下周三课堂展示",
+    capturedAt: CAPTURE,
+    timeZone: null,
+  });
+  expect(weekday.resolved).toHaveLength(0);
+  expect(weekday.unresolved.length).toBeGreaterThan(0);
+
+  const yearless = parseTimes({
+    text: "10.12截止",
+    capturedAt: CAPTURE,
+    timeZone: null,
+  });
+  expect(yearless.resolved).toHaveLength(0);
+});
+
+it("still parses absolute dated expressions without captured_tz", () => {
+  const absolute = parseTimes({
+    text: "2026年10月12日截止",
+    capturedAt: CAPTURE,
+    timeZone: null,
+  });
+  expect(absolute.resolved).toHaveLength(1);
+  expect(absolute.resolved[0]!.precision).toBe("DATE");
+  expect(absolute.resolved[0]!.date).toBe("2026-10-12");
+
+  // Semester year can complete year-less dates without capture tz.
+  const withSemester = parseTimes({
+    text: "10.12截止",
+    capturedAt: CAPTURE,
+    timeZone: null,
+    semesterYear: 2026,
+    semester: { start_date: "2026-09-01", end_date: "2027-01-15" },
+  });
+  expect(withSemester.resolved[0]?.date).toBe("2026-10-12");
+});

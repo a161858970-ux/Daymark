@@ -432,6 +432,8 @@ describe("local-first persistence and Item identity", () => {
       end: "2026-09-27T12:00:00Z",
       kind: "RANGE",
       all_day: false,
+      calendar_start: null,
+      calendar_end: null,
     });
 
     const completed = await manager.completeItem(item.id);

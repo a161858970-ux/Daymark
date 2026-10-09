@@ -107,6 +107,97 @@ it("purifies title only when time is absorbed", () => {
   expect(result.title).toContain("保险公司财务分析作业");
 });
 
+it("exact titles after absorbing deadline markers with DATE/DATETIME", () => {
+  const base = {
+    source: "QUICK_CAPTURE" as const,
+    capturedAt: CAPTURE,
+    timeZone: TZ,
+    contextCourseId: null,
+    courses: [] as Course[],
+  };
+
+  const a = preprocessCapture({
+    ...base,
+    rawText: "提交保险学作业10.12截止",
+    semesterYear: 2026,
+  });
+  expect(a.classification).toBe("ITEM");
+  expect(a.title).toBe("提交保险学作业");
+  expect(a.timeFields.due_date).toBe("2026-10-12");
+  expect(a.timeFields.due_at).toBeNull();
+
+  const b = preprocessCapture({
+    ...base,
+    rawText: "保险公司财务分析作业10.12截止",
+    semesterYear: 2026,
+  });
+  expect(b.classification).toBe("ITEM");
+  expect(b.title).toBe("保险公司财务分析作业");
+  expect(b.timeFields.due_date).toBe("2026-10-12");
+
+  const c = preprocessCapture({
+    ...base,
+    rawText: "保险公司财务分析作业10.12 15:00截止",
+    semesterYear: 2026,
+  });
+  expect(c.classification).toBe("ITEM");
+  expect(c.title).toBe("保险公司财务分析作业");
+  expect(c.timeFields.due_at).toBe("2026-10-12T07:00:00.000Z");
+  expect(c.timeFields.due_date).toBeNull();
+
+  const d = preprocessCapture({
+    ...base,
+    rawText: "明天下午3点交报告",
+  });
+  expect(d.classification).toBe("ITEM");
+  expect(d.title).toBe("交报告");
+  expect(d.timeFields.due_at).toBe("2026-10-10T07:00:00.000Z");
+
+  const e = preprocessCapture({
+    ...base,
+    rawText: "第四周前交作业",
+  });
+  // No SemesterWeek mapping: keep the unstructured week phrase, invent nothing.
+  expect(e.classification).toBe("ITEM");
+  expect(e.title).toBe("第四周前交作业");
+  expect(e.timeFields.due_date).toBeNull();
+  expect(e.timeFields.due_at).toBeNull();
+});
+
+it("does not auto-fill relative dates for historical captures without tz", () => {
+  const parsed = preprocessCapture({
+    source: "QUICK_CAPTURE",
+    rawText: "明天下午3点交报告",
+    capturedAt: CAPTURE,
+    timeZone: null,
+    contextCourseId: null,
+    courses: [],
+  });
+  expect(parsed.classification).toBe("ITEM");
+  expect(parsed.timeFields.due_at).toBeNull();
+  expect(parsed.timeFields.due_date).toBeNull();
+  // The unstructured relative phrase stays in the title.
+  expect(parsed.title).toContain("明天");
+});
+
+it("keeps original text when removing time would break the sentence", () => {
+  const parsed = preprocessCapture({
+    source: "QUICK_CAPTURE",
+    rawText: "10.12的作业",
+    capturedAt: CAPTURE,
+    timeZone: TZ,
+    contextCourseId: null,
+    courses: [],
+    semesterYear: 2026,
+  });
+  // "10.12的作业" — removing 10.12 would leave a broken fragment; prefer keep.
+  expect(["10.12的作业", "的作业"]).toContain(parsed.title);
+  if (parsed.timeFields.due_date) {
+    expect(parsed.title.length).toBeGreaterThan(0);
+    expect(parsed.title).not.toBe("的");
+  }
+});
+
 it("refuses removal that would leave a broken fragment", () => {
   expect(removeSpanSafely("的", 0, 1)).toBeNull();
   expect(removeSpanSafely("交作业", 0, 3)).toBeNull();

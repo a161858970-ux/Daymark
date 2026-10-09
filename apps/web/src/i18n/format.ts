@@ -35,6 +35,26 @@ export function formatMonthDay(
   return formatTime(value, locale, { month: "long", day: "numeric" });
 }
 
+/**
+ * Format a DATE calendar body (`YYYY-MM-DD`) as a localized date.
+ * Never constructs a UTC-midnight instant for local-timezone conversion —
+ * the day body is already the user's calendar day (ADR-010 / spec 22).
+ */
+export function formatDateOnly(value: string, locale: Locale): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return "";
+  const date = new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+  );
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(bcp47(locale), {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
+
 export function formatWeekday(
   value: Date | string | number,
   locale: Locale,

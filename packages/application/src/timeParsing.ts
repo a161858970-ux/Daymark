@@ -23,7 +23,7 @@ export interface ParsedTimeValue {
   rawPhrase: string;
   span: SourceSpan;
   /** IANA zone used for interpretation */
-  timeZone: string;
+  timeZone: string | null;
   evidence: string;
   /** Strict "before target day" → deadline is previous local day end */
   beforeTarget: boolean;
@@ -44,8 +44,13 @@ export interface ParseTimeInput {
   text: string;
   /** Capture instant (ISO). Local calendar day is derived from this + timeZone. */
   capturedAt: string;
-  /** IANA timezone at capture. Required for relative expressions. */
-  timeZone: string;
+  /**
+   * IANA timezone at capture. Required for relative days/weekdays and
+   * year-less date completion without semester context. Historical captures
+   * without `captured_tz` pass null — relative phrases stay unresolved
+   * (ADR-010). Absolute dates with an explicit year still parse.
+   */
+  timeZone: string | null;
   /** Optional semester week ranges for 第 N 周 */
   semesterWeeks?: readonly {
     week_number: number;
@@ -221,19 +226,23 @@ export function completeYearlessMonthDay(
   month: number,
   day: number,
   input: ParseTimeInput,
-  captureLocalDate: string,
+  captureLocalDate: string | null,
 ): { date: string; evidence: string } | null {
   const candidates: { year: number; evidence: string }[] = [];
   const semesterYear = input.semesterYear ?? null;
   if (semesterYear != null) {
     candidates.push({ year: semesterYear, evidence: "semester-year" });
   }
-  const captureYear = Number(captureLocalDate.slice(0, 4));
-  candidates.push(
-    { year: captureYear, evidence: "capture-year" },
-    { year: captureYear + 1, evidence: "next-year" },
-    { year: captureYear - 1, evidence: "prev-year" },
-  );
+  // Historical missing tz and no semester year → do not guess a year.
+  if (!captureLocalDate && semesterYear == null) return null;
+  if (captureLocalDate) {
+    const captureYear = Number(captureLocalDate.slice(0, 4));
+    candidates.push(
+      { year: captureYear, evidence: "capture-year" },
+      { year: captureYear + 1, evidence: "next-year" },
+      { year: captureYear - 1, evidence: "prev-year" },
+    );
+  }
   const seen = new Set<number>();
   const evaluated: { date: string; evidence: string; rank: number }[] = [];
   for (const candidate of candidates) {
@@ -241,8 +250,6 @@ export function completeYearlessMonthDay(
     seen.add(candidate.year);
     const value = dateOnly(candidate.year, month, day);
     if (!value) continue;
-    // Semester preference: if semester exists and the date falls inside or
-    // the year matches the semester, rank it first.
     let rank: number;
     if (candidate.evidence === "semester-year") rank = 0;
     else if (
@@ -251,7 +258,8 @@ export function completeYearlessMonthDay(
       value <= input.semester.end_date
     )
       rank = 0;
-    else if (value >= captureLocalDate) rank = 1;
+    else if (captureLocalDate && value >= captureLocalDate) rank = 1;
+    else if (!captureLocalDate) rank = 0;
     else rank = 3;
     evaluated.push({ date: value, evidence: candidate.evidence, rank });
   }
@@ -262,9 +270,11 @@ export function completeYearlessMonthDay(
       a.evidence.localeCompare(b.evidence),
   );
   const preferred = evaluated.find((entry) => entry.rank === 0);
-  const future = evaluated
-    .filter((entry) => entry.date >= captureLocalDate)
-    .sort((a, b) => a.date.localeCompare(b.date))[0];
+  const future = captureLocalDate
+    ? evaluated
+        .filter((entry) => entry.date >= captureLocalDate)
+        .sort((a, b) => a.date.localeCompare(b.date))[0]
+    : preferred;
   const chosen = preferred ?? future;
   if (!chosen) return null;
   // Two substantively different high-rank readings → refuse.
@@ -372,7 +382,7 @@ function parseClock(
 function findDateAnchors(
   text: string,
   input: ParseTimeInput,
-  captureLocalDate: string,
+  captureLocalDate: string | null,
 ): DateAnchor[] {
   const anchors: DateAnchor[] = [];
   const patterns: {
@@ -468,8 +478,10 @@ function findDateAnchors(
 function findRelativeAnchors(
   text: string,
   input: ParseTimeInput,
-  captureLocalDate: string,
+  captureLocalDate: string | null,
 ): DateAnchor[] {
+  // Relative days/weekdays require a known capture local date (captured_tz).
+  if (!captureLocalDate) return [];
   const anchors: DateAnchor[] = [];
   const relatives: { re: RegExp; offsetDays: number; label: string }[] = [
     { re: /大后天/g, offsetDays: 3, label: "relative-day" },
@@ -652,6 +664,34 @@ function detectSemantic(
   return { semantic: "occurrence", beforeTarget: false };
 }
 
+/**
+ * Expand a resolved time span to absorb trailing deadline markers that are
+ * part of the temporal expression (`10.12截止`, `…15:00截止`, `…之前`).
+ * Action verbs with objects (`交报告`, `提交作业`) are NOT absorbed.
+ */
+function expandDeadlineMarker(
+  text: string,
+  span: SourceSpan,
+  semantic: TimeSemantic,
+): SourceSpan {
+  if (semantic !== "due") return span;
+  let end = span.end;
+  // Optional single space before the marker.
+  const rest = text.slice(end);
+  const spaced = /^\s*(截止|之前)/.exec(rest);
+  if (spaced) {
+    end += spaced[0].length;
+    return { start: span.start, end };
+  }
+  // Bare trailing 交/截止 at end of input (`10.12交`) is a deadline marker.
+  const bare = /^\s*(交|截止)$/.exec(rest);
+  if (bare) {
+    end += bare[0].length;
+    return { start: span.start, end };
+  }
+  return span;
+}
+
 function refineSemanticFromContext(
   text: string,
   span: SourceSpan,
@@ -693,12 +733,30 @@ export function parseTimes(input: ParseTimeInput): TimeParseResult {
   const text = input.text;
   const resolved: ParsedTimeValue[] = [];
   const unresolved: UnresolvedTimePhrase[] = [];
-  const captureLocalDate = localDateOfInstant(input.capturedAt, input.timeZone);
+  const tz = input.timeZone;
+  const captureLocalDate = tz ? localDateOfInstant(input.capturedAt, tz) : null;
 
-  const anchors = [
-    ...findDateAnchors(text, input, captureLocalDate),
-    ...findRelativeAnchors(text, input, captureLocalDate),
-  ].sort((a, b) => a.span.start - b.span.start);
+  const dateAnchors = findDateAnchors(text, input, captureLocalDate);
+  const relativeAnchors = findRelativeAnchors(text, input, captureLocalDate);
+  const anchors = [...dateAnchors, ...relativeAnchors].sort(
+    (a, b) => a.span.start - b.span.start,
+  );
+
+  // Historical captures without captured_tz: leave relative phrases in text.
+  if (!captureLocalDate) {
+    const relativeHint =
+      /(今天|今日|明天|明日|后天|大后天|昨天|昨日|下周|本周|这周|星期[一二三四五六日天]|周[一二三四五六日天])/;
+    if (relativeHint.test(text)) {
+      const match = relativeHint.exec(text);
+      if (match) {
+        unresolved.push({
+          rawPhrase: match[0],
+          span: { start: match.index, end: match.index + match[0].length },
+          reason: "历史记录缺少捕获时区，相对日期不自动补全",
+        });
+      }
+    }
+  }
 
   const { weekAnchors } = findSemesterWeekAnchors(text, input);
 
@@ -710,53 +768,42 @@ export function parseTimes(input: ParseTimeInput): TimeParseResult {
     let semanticInfo = detectSemantic(text, anchor.span);
     semanticInfo = refineSemanticFromContext(text, anchor.span, semanticInfo);
 
-    // Expand phrase for "X前"
+    // Expand phrase for "X前" and trailing deadline markers (截止/之前).
     let span = anchor.span;
-    let rawPhrase = anchor.rawPhrase;
     let beforeTarget = semanticInfo.beforeTarget;
     if (text.slice(span.end, span.end + 1) === "前") {
       span = { start: span.start, end: span.end + 1 };
-      rawPhrase = text.slice(span.start, span.end);
       beforeTarget = true;
       semanticInfo = { semantic: "due", beforeTarget: true };
     }
+    span = expandDeadlineMarker(text, span, semanticInfo.semantic);
+    const rawPhrase = text.slice(span.start, span.end);
 
-    if (anchor.hasClock && anchor.hour != null) {
-      const localDate = beforeTarget ? addDays(anchor.date, -1) : anchor.date;
+    // DATETIME (clock) requires a known capture timezone to build an instant.
+    if (anchor.hasClock && anchor.hour != null && tz) {
       const instant = beforeTarget
-        ? endOfLocalDayInstant(anchor.date, input.timeZone)
-        : instantFromLocal(
-            anchor.date,
-            anchor.hour,
-            anchor.minute ?? 0,
-            input.timeZone,
-          );
+        ? endOfLocalDayInstant(anchor.date, tz)
+        : instantFromLocal(anchor.date, anchor.hour, anchor.minute ?? 0, tz);
+      // For "X 15:00前" treat as DATETIME deadline at that clock, not day-end.
+      const finalInstant =
+        beforeTarget && anchor.hasClock
+          ? instantFromLocal(anchor.date, anchor.hour, anchor.minute ?? 0, tz)
+          : instant;
       resolved.push({
         semantic: semanticInfo.semantic,
         precision: "DATETIME",
         date: null,
-        instant,
+        instant: finalInstant,
         rawPhrase,
         span,
-        timeZone: input.timeZone,
+        timeZone: tz,
         evidence: `${anchor.evidence}+clock`,
         beforeTarget,
       });
-      // For "X 15:00前" treat as DATETIME deadline at that clock, not day-end.
-      if (beforeTarget && anchor.hasClock) {
-        resolved[resolved.length - 1]!.instant = instantFromLocal(
-          anchor.date,
-          anchor.hour,
-          anchor.minute ?? 0,
-          input.timeZone,
-        );
-        resolved[resolved.length - 1]!.precision = "DATETIME";
-        void localDate;
-      }
       continue;
     }
 
-    // DATE precision
+    // DATE precision (clock without tz stays in the title, date only if proven).
     let dateValue = anchor.date;
     if (beforeTarget) {
       dateValue = addDays(anchor.date, -1);
@@ -768,7 +815,7 @@ export function parseTimes(input: ParseTimeInput): TimeParseResult {
       instant: null,
       rawPhrase,
       span,
-      timeZone: input.timeZone,
+      timeZone: tz ?? "",
       evidence: anchor.evidence,
       beforeTarget,
     });
@@ -801,7 +848,7 @@ export function parseTimes(input: ParseTimeInput): TimeParseResult {
         instant: null,
         rawPhrase: week.rawPhrase,
         span: week.span,
-        timeZone: input.timeZone,
+        timeZone: tz,
         evidence: "semester-week-before",
         beforeTarget: true,
       });

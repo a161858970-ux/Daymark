@@ -88,7 +88,7 @@ export class CaptureInterpretationService {
       contextCourseId: currentCourse?.id ?? null,
       courses: knownCourses,
       capturedAt: capture.captured_at,
-      timeZone: capture.captured_tz ?? "UTC",
+      timeZone: capture.captured_tz,
     });
     const empty = {
       title: null,

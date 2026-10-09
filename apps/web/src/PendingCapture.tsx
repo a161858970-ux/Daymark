@@ -65,7 +65,7 @@ export function PendingCapture({
     contextCourseId,
     courses,
     capturedAt: capture.captured_at,
-    timeZone: capture.captured_tz ?? "UTC",
+    timeZone: capture.captured_tz,
   });
   const splitCandidates = prepared.splitCandidates;
   const [kind, setKind] = useState<
