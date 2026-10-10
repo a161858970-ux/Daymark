@@ -217,7 +217,7 @@ it("rehearses v5 row outbox upgrade into atomic collection commands without data
   const upgraded = new DaymarkDb(name);
   await upgraded.open();
   const repo = new DexieLocalRepository(upgraded);
-  expect(upgraded.verno).toBe(6);
+  expect(upgraded.verno).toBe(7);
   expect(await repo.listSemesterWeeks(semesterId)).toEqual([newWeek]);
   expect(await repo.listCourseSchedules(courseId)).toEqual([
     oldSchedule,

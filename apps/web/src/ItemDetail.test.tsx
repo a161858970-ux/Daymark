@@ -25,9 +25,14 @@ const item: Item = {
   detail: "附上参考文献。",
   status: "INCOMPLETE",
   start_at: null,
+  start_date: null,
   occurrence_start_at: null,
+  occurrence_start_date: null,
   occurrence_end_at: null,
+  occurrence_end_date: null,
   due_at: "2026-09-30T10:00:00.000Z",
+  due_date: null,
+  time_zone: "UTC",
   reminder_level: "NORMAL",
   completed_at: null,
   raw_capture_id: "44444444-4444-4444-8444-444444444444",
@@ -43,6 +48,7 @@ const rawCapture: RawCapture = {
   source: "QUICK_CAPTURE",
   raw_text: "环境经济学报告 9月30日交",
   captured_at: "2026-09-24T08:00:00.000Z",
+  captured_tz: "Asia/Shanghai",
   processing_status: "RESOLVED",
   unresolved_reason: null,
   deleted_at: null,
@@ -109,4 +115,85 @@ it("announces the mobile bottom sheet as modal and hides its pointer backdrop", 
   );
   expect(markup).toContain('role="dialog" aria-modal="true"');
   expect(markup).toContain('class="detail-backdrop " aria-hidden="true"');
+});
+
+it("shows DATE due as a calendar day without inventing 00:00", () => {
+  const dateItem: Item = {
+    ...item,
+    due_at: null,
+    due_date: "2026-10-12",
+  };
+  const markup = renderToStaticMarkup(
+    <I18nProvider>
+      <ItemDetail
+        item={dateItem}
+        courses={[course]}
+        rawCapture={rawCapture}
+        associations={[]}
+        associationCandidates={[]}
+        onClose={() => undefined}
+        onComplete={() => undefined}
+        onRestore={() => undefined}
+        onDelete={async () => true}
+        onSave={async () => undefined}
+        onAssociate={async () => undefined}
+        onRemoveAssociation={async () => undefined}
+      />
+    </I18nProvider>,
+  );
+  expect(markup).toContain("10月12日");
+  expect(markup).not.toContain("00:00");
+});
+
+it("shows DATE occurrence as calendar days without fake clocks", () => {
+  const dateItem: Item = {
+    ...item,
+    due_at: null,
+    due_date: null,
+    occurrence_start_date: "2026-10-12",
+    occurrence_end_date: "2026-10-14",
+  };
+  const markup = renderToStaticMarkup(
+    <I18nProvider>
+      <ItemDetail
+        item={dateItem}
+        courses={[course]}
+        rawCapture={rawCapture}
+        associations={[]}
+        associationCandidates={[]}
+        onClose={() => undefined}
+        onComplete={() => undefined}
+        onRestore={() => undefined}
+        onDelete={async () => true}
+        onSave={async () => undefined}
+        onAssociate={async () => undefined}
+        onRemoveAssociation={async () => undefined}
+      />
+    </I18nProvider>,
+  );
+  expect(markup).toContain("10月12日");
+  expect(markup).toContain("10月14日");
+  expect(markup).not.toContain("00:00");
+});
+
+it("keeps DATETIME dues showing a real clock", () => {
+  const markup = renderToStaticMarkup(
+    <I18nProvider>
+      <ItemDetail
+        item={item}
+        courses={[course]}
+        rawCapture={rawCapture}
+        associations={[]}
+        associationCandidates={[]}
+        onClose={() => undefined}
+        onComplete={() => undefined}
+        onRestore={() => undefined}
+        onDelete={async () => true}
+        onSave={async () => undefined}
+        onAssociate={async () => undefined}
+        onRemoveAssociation={async () => undefined}
+      />
+    </I18nProvider>,
+  );
+  expect(markup).toMatch(/截止[\s\S]*?\d{1,2}:\d{2}/);
 });

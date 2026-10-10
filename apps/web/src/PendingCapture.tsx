@@ -8,7 +8,12 @@ import type { Course, RawCapture } from "@daymark/domain";
 import { useT } from "./i18n/index.js";
 import { SelectField } from "./SelectField.js";
 import { TimeBlock } from "./TimeBlock.js";
-import { fromLocalInput, toLocalInput } from "./timeInputs.js";
+import {
+  fromDateOnly,
+  fromLocalInput,
+  toDateOnly,
+  toLocalInput,
+} from "./timeInputs.js";
 import type { CaptureInterpretation } from "./authSync.js";
 import { toUserMessage } from "./errors.js";
 
@@ -54,23 +59,50 @@ export function PendingCapture({
   onDelete,
 }: Props) {
   const t = useT();
-  const splitCandidates = preprocessCapture({
+  const prepared = preprocessCapture({
     rawText: capture.raw_text,
     source: capture.source,
     contextCourseId,
     courses,
-  }).splitCandidates;
+    capturedAt: capture.captured_at,
+    timeZone: capture.captured_tz,
+  });
+  const splitCandidates = prepared.splitCandidates;
   const [kind, setKind] = useState<
     "ITEM" | "COURSE_INFORMATION" | "SPLIT" | null
   >(null);
   const [splitTitles, setSplitTitles] = useState(splitCandidates);
-  const [courseId, setCourseId] = useState(contextCourseId ?? "");
-  const [title, setTitle] = useState(capture.raw_text.trim());
+  const [courseId, setCourseId] = useState(
+    prepared.resolvedCourseId ?? contextCourseId ?? "",
+  );
+  const [title, setTitle] = useState(
+    prepared.classification === "COURSE_INFORMATION"
+      ? (prepared.content ?? capture.raw_text.trim())
+      : prepared.title || capture.raw_text.trim(),
+  );
   const [detail, setDetail] = useState("");
-  const [startAt, setStartAt] = useState("");
-  const [occurrenceStartAt, setOccurrenceStartAt] = useState("");
-  const [occurrenceEndAt, setOccurrenceEndAt] = useState("");
-  const [dueAt, setDueAt] = useState("");
+  const [startAt, setStartAt] = useState(
+    toLocalInput(prepared.timeFields.start_at),
+  );
+  const [startDate, setStartDate] = useState(
+    toDateOnly(prepared.timeFields.start_date),
+  );
+  const [occurrenceStartAt, setOccurrenceStartAt] = useState(
+    toLocalInput(prepared.timeFields.occurrence_start_at),
+  );
+  const [occurrenceStartDate, setOccurrenceStartDate] = useState(
+    toDateOnly(prepared.timeFields.occurrence_start_date),
+  );
+  const [occurrenceEndAt, setOccurrenceEndAt] = useState(
+    toLocalInput(prepared.timeFields.occurrence_end_at),
+  );
+  const [occurrenceEndDate, setOccurrenceEndDate] = useState(
+    toDateOnly(prepared.timeFields.occurrence_end_date),
+  );
+  const [dueAt, setDueAt] = useState(toLocalInput(prepared.timeFields.due_at));
+  const [dueDate, setDueDate] = useState(
+    toDateOnly(prepared.timeFields.due_date),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<string | null>(null);
@@ -100,9 +132,15 @@ export function PendingCapture({
         setTitle(result.title ?? capture.raw_text.trim());
         setDetail(result.detail ?? "");
         setStartAt(toLocalInput(result.start_at));
+        setStartDate(toDateOnly(result.start_date ?? null));
         setOccurrenceStartAt(toLocalInput(result.occurrence_start_at));
+        setOccurrenceStartDate(
+          toDateOnly(result.occurrence_start_date ?? null),
+        );
         setOccurrenceEndAt(toLocalInput(result.occurrence_end_at));
+        setOccurrenceEndDate(toDateOnly(result.occurrence_end_date ?? null));
         setDueAt(toLocalInput(result.due_at));
+        setDueDate(toDateOnly(result.due_date ?? null));
         setKind("ITEM");
       } else if (result.classification === "COURSE_INFORMATION") {
         setTitle(result.course_information ?? capture.raw_text.trim());
@@ -124,14 +162,19 @@ export function PendingCapture({
       try {
         await onSplit(
           splitTitles.map((part) => ({
-            kind: "ITEM",
+            kind: "ITEM" as const,
             title: part.trim(),
             detail: null,
             course_id: courseId || null,
             start_at: null,
+            start_date: null,
             occurrence_start_at: null,
+            occurrence_start_date: null,
             occurrence_end_at: null,
+            occurrence_end_date: null,
             due_at: null,
+            due_date: null,
+            time_zone: capture.captured_tz,
             reminder_level: reminderLevelForCapture(capture.raw_text),
           })),
         );
@@ -156,9 +199,14 @@ export function PendingCapture({
               detail: detail.trim() || null,
               course_id: courseId || null,
               start_at: fromLocalInput(startAt),
+              start_date: fromDateOnly(startDate),
               occurrence_start_at: fromLocalInput(occurrenceStartAt),
+              occurrence_start_date: fromDateOnly(occurrenceStartDate),
               occurrence_end_at: fromLocalInput(occurrenceEndAt),
+              occurrence_end_date: fromDateOnly(occurrenceEndDate),
               due_at: fromLocalInput(dueAt),
+              due_date: fromDateOnly(dueDate),
+              time_zone: capture.captured_tz,
               reminder_level: reminderLevelForCapture(capture.raw_text),
             }
           : { kind, course_id: courseId, content: title.trim() };
@@ -285,15 +333,23 @@ export function PendingCapture({
               <TimeBlock
                 value={{
                   startAt,
+                  startDate,
                   occurrenceStartAt,
+                  occurrenceStartDate,
                   occurrenceEndAt,
+                  occurrenceEndDate,
                   dueAt,
+                  dueDate,
                 }}
                 onChange={(next) => {
                   setStartAt(next.startAt);
+                  setStartDate(next.startDate);
                   setOccurrenceStartAt(next.occurrenceStartAt);
+                  setOccurrenceStartDate(next.occurrenceStartDate);
                   setOccurrenceEndAt(next.occurrenceEndAt);
+                  setOccurrenceEndDate(next.occurrenceEndDate);
                   setDueAt(next.dueAt);
+                  setDueDate(next.dueDate);
                 }}
               />
               <label>

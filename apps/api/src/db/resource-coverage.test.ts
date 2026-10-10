@@ -14,6 +14,13 @@ it("covers Course update, CourseInformation writes, and symmetric ItemAssociatio
     new URL("../../../../backend/migrations/001_initial.sql", import.meta.url),
   );
   await db.exec(await readFile(migration, "utf8"));
+  const datePrecisionMigration = fileURLToPath(
+    new URL(
+      "../../../../backend/migrations/007_date_precision.sql",
+      import.meta.url,
+    ),
+  );
+  await db.exec(await readFile(datePrecisionMigration, "utf8"));
   const port: CloudDatabase = {
     query: async (sql, params) => db.query(sql, params),
     transaction: (work) =>
@@ -47,9 +54,14 @@ it("covers Course update, CourseInformation writes, and symmetric ItemAssociatio
     course_id: null,
     status: "INCOMPLETE",
     start_at: null,
+    start_date: null,
     occurrence_start_at: null,
+    occurrence_start_date: null,
     occurrence_end_at: null,
+    occurrence_end_date: null,
     due_at: null,
+    due_date: null,
+    time_zone: "UTC",
     reminder_level: "NORMAL",
     raw_capture_id: null,
   });
@@ -155,6 +167,7 @@ it("covers Course update, CourseInformation writes, and symmetric ItemAssociatio
         source: "QUICK_CAPTURE",
         raw_text: "待确认原文",
         captured_at: "2026-09-24T00:00:00.000Z",
+        captured_tz: "Asia/Shanghai",
       })
     ).json().data as { id: string; row_version: number };
     const rawDelete = await request(

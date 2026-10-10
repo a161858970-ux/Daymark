@@ -1,4 +1,4 @@
-import { preprocessCapture } from "@daymark/application";
+import { addDays, parseTimes, preprocessCapture } from "@daymark/application";
 import {
   interpretationSchema,
   type CaptureInterpretation,
@@ -9,6 +9,22 @@ import { CloudDaymark, CloudError } from "../db/cloud.js";
 import { CloudAcademicManager } from "../db/academic.js";
 import type { RateLimiter } from "../rateLimit.js";
 
+/**
+ * Relative temporal expressions that can only be anchored to a capture-local
+ * day (captured_tz). Mirrors the relative-phrase rules in
+ * `packages/application/src/timeParsing.ts` (明天/后天/大后天/今天/昨天/下周
+ * (含下下周)/本周/星期X/周X).
+ */
+const RELATIVE_TIME_HINT =
+  /(今天|今日|明天|明日|后天|大后天|昨天|昨日|下周|本周|这周|星期[一二三四五六日天]|周[一二三四五六日天])/u;
+
+/** Source facts needed to judge whether an AI time suggestion is anchored. */
+interface TemporalSourceContext {
+  capturedAt: string;
+  capturedTimeZone: string | null;
+  semester: { start_date: string; end_date: string } | null;
+}
+
 export interface InterpretationProvider {
   interpret(input: {
     rawText: string;
@@ -16,7 +32,14 @@ export interface InterpretationProvider {
     currentCourseName: string | null;
     candidateCourseNames: string[];
     semesterDates: { start: string; end: string } | null;
-    currentDate: string;
+    /** Capture instant (ISO) and IANA zone — not "server today". */
+    capturedAt: string;
+    capturedTimeZone: string | null;
+    /**
+     * Capture-local calendar day when capturedTimeZone is known; otherwise
+     * null so the model must not invent relative dates.
+     */
+    captureLocalDate: string | null;
   }): Promise<unknown>;
 }
 
@@ -87,19 +110,35 @@ export class CaptureInterpretationService {
       source: capture.source,
       contextCourseId: currentCourse?.id ?? null,
       courses: knownCourses,
+      capturedAt: capture.captured_at,
+      timeZone: capture.captured_tz,
     });
     const empty = {
       title: null,
       detail: null,
       course_candidate: currentCourse?.name ?? null,
       start_at: null,
+      start_date: null,
       occurrence_start_at: null,
+      occurrence_start_date: null,
       occurrence_end_at: null,
+      occurrence_end_date: null,
       due_at: null,
+      due_date: null,
       course_information: null,
       split_candidates: [] as string[],
       confidence: 1,
       uncertainty: null,
+    };
+    const timeFromParse = {
+      start_at: parsed.timeFields.start_at,
+      start_date: parsed.timeFields.start_date,
+      occurrence_start_at: parsed.timeFields.occurrence_start_at,
+      occurrence_start_date: parsed.timeFields.occurrence_start_date,
+      occurrence_end_at: parsed.timeFields.occurrence_end_at,
+      occurrence_end_date: parsed.timeFields.occurrence_end_date,
+      due_at: parsed.timeFields.due_at,
+      due_date: parsed.timeFields.due_date,
     };
     if (parsed.classification === "ITEM")
       return {
@@ -107,6 +146,7 @@ export class CaptureInterpretationService {
         requires_confirmation: false,
         interpretation: interpretationSchema.parse({
           ...empty,
+          ...timeFromParse,
           classification: "ITEM",
           title: parsed.title,
           course_candidate:
@@ -145,6 +185,16 @@ export class CaptureInterpretationService {
       );
     let value: unknown;
     this.gateAi(ownerId);
+    // Capture-local day for relative-date guidance — never "server today".
+    const captureTz = capture.captured_tz;
+    const captureLocalDate = captureTz
+      ? new Intl.DateTimeFormat("en-CA", {
+          timeZone: captureTz,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date(capture.captured_at))
+      : null;
     try {
       value = await this.provider.interpret({
         rawText: capture.raw_text,
@@ -154,7 +204,9 @@ export class CaptureInterpretationService {
         semesterDates: semester
           ? { start: semester.start_date, end: semester.end_date }
           : null,
-        currentDate: new Date().toISOString().slice(0, 10),
+        capturedAt: capture.captured_at,
+        capturedTimeZone: captureTz,
+        captureLocalDate,
       });
     } catch (error) {
       throw new CloudError(
@@ -173,6 +225,13 @@ export class CaptureInterpretationService {
         knownCourses,
         currentCourse,
         result.data,
+        {
+          capturedAt: capture.captured_at,
+          capturedTimeZone: capture.captured_tz,
+          semester: semester
+            ? { start_date: semester.start_date, end_date: semester.end_date }
+            : null,
+        },
       )
     )
       throw new CloudError(
@@ -198,6 +257,7 @@ export class CaptureInterpretationService {
     courses: Course[],
     currentCourse: Course | null,
     value: CaptureInterpretation,
+    temporal: TemporalSourceContext,
   ): boolean {
     const normalized = rawText.trim().replace(/\s+/g, " ");
     const sourceContains = (candidate: string | null) =>
@@ -230,10 +290,26 @@ export class CaptureInterpretationService {
       !hasTime &&
       [
         value.start_at,
+        value.start_date,
         value.occurrence_start_at,
+        value.occurrence_start_date,
         value.occurrence_end_at,
+        value.occurrence_end_date,
         value.due_at,
+        value.due_date,
       ].some(Boolean)
+    )
+      return false;
+    // Historical capture without captured_tz: a relative phrase (明天/下周三/…)
+    // has no reliable anchor, so concrete dates/times derived from it must not
+    // enter a valid interpretation. Only values the deterministic parser can
+    // prove from the text (explicit full dates, or year-less dates completed
+    // from reliable semester context) may pass — the AI prompt alone is not
+    // trusted to obey this (22_NATURAL_LANGUAGE_TIME_SPEC / ADR-010).
+    if (
+      !temporal.capturedTimeZone &&
+      RELATIVE_TIME_HINT.test(normalized) &&
+      !this.timeSuggestionsAnchored(value, normalized, temporal)
     )
       return false;
     if (
@@ -247,6 +323,65 @@ export class CaptureInterpretationService {
       !value.course_information
     )
       return false;
+    return true;
+  }
+
+  /**
+   * Deterministic anchor check for historical captures without captured_tz:
+   * re-run the shared time parser with no capture-local day, so relative
+   * phrases resolve to nothing, and accept AI time values only when they are
+   * provable from the text itself (explicit full Y-M-D, or year-less dates
+   * completed from reliable semester context per existing rules).
+   */
+  private timeSuggestionsAnchored(
+    value: CaptureInterpretation,
+    text: string,
+    temporal: TemporalSourceContext,
+  ): boolean {
+    const proposedDates = [
+      value.start_date,
+      value.occurrence_start_date,
+      value.occurrence_end_date,
+      value.due_date,
+    ];
+    const proposedInstants = [
+      value.start_at,
+      value.occurrence_start_at,
+      value.occurrence_end_at,
+      value.due_at,
+    ];
+    if (
+      proposedDates.every((date) => date === null) &&
+      proposedInstants.every((instant) => instant === null)
+    )
+      return true;
+    const proven = parseTimes({
+      text,
+      capturedAt: temporal.capturedAt,
+      timeZone: null,
+      semester: temporal.semester,
+      semesterYear: temporal.semester
+        ? Number(temporal.semester.start_date.slice(0, 4))
+        : null,
+    }).resolved;
+    const provenDates = new Set<string>();
+    const provenInstants = new Set<number>();
+    for (const time of proven) {
+      if (time.date) {
+        provenDates.add(time.date);
+        // "X前" maps the deadline to the previous local day; the anchored
+        // target day itself is equally source-backed.
+        if (time.beforeTarget) provenDates.add(addDays(time.date, 1));
+      }
+      if (time.instant) provenInstants.add(Date.parse(time.instant));
+    }
+    for (const date of proposedDates)
+      if (date && !provenDates.has(date)) return false;
+    for (const instant of proposedInstants) {
+      if (!instant) continue;
+      const ms = Date.parse(instant);
+      if (Number.isNaN(ms) || !provenInstants.has(ms)) return false;
+    }
     return true;
   }
 }

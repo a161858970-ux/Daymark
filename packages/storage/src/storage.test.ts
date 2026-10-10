@@ -1,6 +1,11 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
-import { Daymark, preprocessCapture, type Runtime } from "@daymark/application";
+import {
+  Daymark,
+  preprocessCapture,
+  resolveItemReminderTimes,
+  type Runtime,
+} from "@daymark/application";
 import {
   projectItemToCalendar,
   semesterWeekForDate,
@@ -43,6 +48,8 @@ it("preprocesses clear input without changing raw text or asking AI", () => {
       source: "QUICK_CAPTURE",
       contextCourseId: null,
       courses: [],
+      capturedAt: "2026-09-22T08:00:00.000Z",
+      timeZone: "UTC",
     }),
   ).toMatchObject({ classification: "ITEM", title: "找学姐要笔记" });
   expect(rawText).toBe("  找学姐要笔记   ");
@@ -52,6 +59,8 @@ it("preprocesses clear input without changing raw text or asking AI", () => {
       source: "QUICK_CAPTURE",
       contextCourseId: null,
       courses: [],
+      capturedAt: "2026-09-22T08:00:00.000Z",
+      timeZone: "UTC",
     }),
   ).toMatchObject({
     classification: "UNRESOLVED",
@@ -75,6 +84,8 @@ it("preprocesses clear input without changing raw text or asking AI", () => {
       source: "COURSE_INFORMATION",
       contextCourseId: course.id,
       courses: [course],
+      capturedAt: "2026-09-22T08:00:00.000Z",
+      timeZone: "UTC",
     }),
   ).toMatchObject({ classification: "COURSE_INFORMATION" });
 });
@@ -89,9 +100,14 @@ it("keeps one or splits only according to the recorded user decision", async () 
     detail: null,
     course_id: null,
     start_at: null,
+    start_date: null,
     occurrence_start_at: null,
+    occurrence_start_date: null,
     occurrence_end_at: null,
+    occurrence_end_date: null,
     due_at: null,
+    due_date: null,
+    time_zone: "UTC",
     reminder_level: "NORMAL" as const,
   };
   const single = await manager.resolveRawCapture(
@@ -420,6 +436,9 @@ describe("local-first persistence and Item identity", () => {
       start: "2026-09-23T08:00:00Z",
       end: "2026-09-27T12:00:00Z",
       kind: "RANGE",
+      all_day: false,
+      calendar_start: null,
+      calendar_end: null,
     });
 
     const completed = await manager.completeItem(item.id);
@@ -455,16 +474,18 @@ describe("local-first persistence and Item identity", () => {
     );
   });
 
-  it("keeps time-bearing or uncertain text as unresolved RawCapture instead of dropping facts", async () => {
+  it("creates a clear item from time-bearing text and never drops facts", async () => {
     const { manager, repo } = setup();
     const capture = await manager.capture("提交课程报告，9月28日前");
-    expect(await manager.processClearCapture(capture.id)).toBeNull();
-    expect(
-      (await manager.unresolvedCaptures()).map((value) => value.id),
-    ).toEqual([capture.id]);
-    expect(await repo.listOutputs(capture.id)).toHaveLength(0);
-    await manager.deleteUnresolvedCapture(capture.id);
-    expect(await manager.unresolvedCaptures()).toHaveLength(0);
+    // Spec 22 §2.1: a clear ITEM with a trusted date is not blocked by time.
+    const item = await manager.processClearCapture(capture.id);
+    expect(item).not.toBeNull();
+    expect((item as Item).title).toContain("提交课程报告");
+    expect((item as Item).due_date).toBe("2026-09-27"); // 9月28日前 → previous day
+    expect((await repo.getRawCapture(capture.id))?.raw_text).toBe(
+      "提交课程报告，9月28日前",
+    );
+    expect(await repo.listOutputs(capture.id)).toHaveLength(1);
   });
 
   it("stores course information independently of Item status and preserves edits", async () => {
@@ -596,29 +617,40 @@ describe("local-first persistence and Item identity", () => {
     expect(await reopened.items.count()).toBe(1);
   });
 
-  it("records a user's resolution and preserves time rather than inventing a date", async () => {
+  it("records a clear ITEM for 第四周前 without inventing a date", async () => {
     const { manager, db, repo } = setup();
     const raw = await manager.capture("第四周前交作业");
+    // Clear type; missing SemesterWeek mapping must not block the Item.
+    const created = await manager.processClearCapture(raw.id);
+    expect(created).not.toBeNull();
+    expect((created as Item).title).toContain("第四周");
+    expect((created as Item).due_at).toBeNull();
+    expect((created as Item).due_date).toBeNull();
+    expect((await repo.getRawCapture(raw.id))?.raw_text).toBe("第四周前交作业");
+    expect(await db.raw_capture_decisions.count()).toBe(0);
+  });
+
+  it("records a user's explicit resolution and preserves time", async () => {
+    const { manager, db, repo } = setup();
+    const raw = await manager.capture("老师让我们关注第三章");
     expect(await manager.processClearCapture(raw.id)).toBeNull();
-    await manager.deferRawCapture(raw.id);
-    expect(await manager.unresolvedCaptures()).toHaveLength(1);
-    const item = await manager.resolveRawCapture(raw.id, {
+    await manager.resolveRawCapture(raw.id, {
       kind: "ITEM",
-      title: "交作业",
+      title: "关注第三章",
       detail: null,
       course_id: null,
       start_at: null,
+      start_date: null,
       occurrence_start_at: null,
+      occurrence_start_date: null,
       occurrence_end_at: null,
+      occurrence_end_date: null,
       due_at: "2026-10-09T12:00:00.000Z",
+      due_date: null,
+      time_zone: "UTC",
       reminder_level: "NORMAL",
     });
-    expect(item).toMatchObject({
-      title: "交作业",
-      due_at: "2026-10-09T12:00:00.000Z",
-      raw_capture_id: raw.id,
-    });
-    expect(await db.raw_capture_decisions.count()).toBe(2);
+    expect(await db.raw_capture_decisions.count()).toBe(1);
     expect(await repo.listOutputs(raw.id)).toHaveLength(1);
     await expect(
       manager.resolveRawCapture(raw.id, {
@@ -730,4 +762,109 @@ it("removes a Semester with its courses locally and queues the cascade for sync"
   await expect(manager.deleteSemester(doomed.id)).rejects.toThrow(
     "Semester not found",
   );
+});
+
+describe("NL capture e2e (processClearCapture)", () => {
+  function setupWithZone(zone: string | null) {
+    const name = `daymark-test-${crypto.randomUUID()}`;
+    const db = new DaymarkDb(name);
+    databases.push(db);
+    const repo = new DexieLocalRepository(db);
+    let time = "2026-10-09T02:00:00.000Z";
+    const runtime: Runtime = {
+      now: () => time,
+      id: () => crypto.randomUUID(),
+      timeZone: () => zone ?? "Asia/Shanghai",
+    };
+    return {
+      db,
+      repo,
+      manager: new Daymark(repo, runtime),
+      setTime: (value: string) => {
+        time = value;
+      },
+    };
+  }
+
+  it("creates an Item for 下周三课堂展示 with DATE occurrence, no extra prompt", async () => {
+    const { manager, repo } = setupWithZone("Asia/Shanghai");
+    const raw = await manager.capture(
+      "下周三课堂展示",
+      "QUICK_CAPTURE",
+      null,
+      "Asia/Shanghai",
+    );
+    expect(raw.captured_tz).toBe("Asia/Shanghai");
+    const item = (await manager.processClearCapture(raw.id)) as Item;
+    expect(item).toBeTruthy();
+    expect(item.title).toBe("课堂展示");
+    expect(item.occurrence_start_date).toBe("2026-10-14");
+    expect(item.occurrence_start_at).toBeNull();
+    expect(item.time_zone).toBe("Asia/Shanghai");
+    expect((await repo.getRawCapture(raw.id))?.raw_text).toBe("下周三课堂展示");
+    expect((await repo.getRawCapture(raw.id))?.processing_status).toBe(
+      "RESOLVED",
+    );
+  });
+
+  it("keeps 老师让我们关注一下第三章 unresolved", async () => {
+    const { manager } = setupWithZone("Asia/Shanghai");
+    const raw = await manager.capture(
+      "老师让我们关注一下第三章",
+      "QUICK_CAPTURE",
+      null,
+      "Asia/Shanghai",
+    );
+    expect(await manager.processClearCapture(raw.id)).toBeNull();
+    expect(
+      (await manager.unresolvedCaptures()).map((value) => value.id),
+    ).toEqual([raw.id]);
+  });
+
+  it("historical no-tz absolute DATE gets device time_zone for reminders", async () => {
+    const { manager, repo } = setupWithZone("Asia/Tokyo");
+    // Simulate a historical row: captured_tz missing (null).
+    const raw = await manager.capture("2026年10月12日截止");
+    await repo.putRawCapture({ ...raw, captured_tz: null });
+    const item = (await manager.processClearCapture(raw.id)) as Item;
+    expect(item.due_date).toBe("2026-10-12");
+    expect(item.due_at).toBeNull();
+    // Item.time_zone uses the device zone so day-end reminders work.
+    expect(item.time_zone).toBe("Asia/Tokyo");
+    const times = resolveItemReminderTimes(item);
+    // End of 2026-10-12 in Asia/Tokyo = 2026-10-12T15:00:00.000Z
+    expect(times.dueInstant).toBe("2026-10-12T15:00:00.000Z");
+    expect(times.dueDateOnly).toBe(true);
+  });
+
+  it("historical no-tz relative phrase invents no formal date", async () => {
+    const { manager, repo } = setupWithZone("Asia/Tokyo");
+    const raw = await manager.capture("明天下午3点交报告");
+    await repo.putRawCapture({ ...raw, captured_tz: null });
+    const item = (await manager.processClearCapture(raw.id)) as Item;
+    expect(item.due_at).toBeNull();
+    expect(item.due_date).toBeNull();
+    expect(item.title).toContain("明天");
+    expect((await repo.getRawCapture(raw.id))?.raw_text).toBe(
+      "明天下午3点交报告",
+    );
+  });
+
+  it("purifies course-information content when context course prefixes the text", async () => {
+    const { manager, repo } = setupWithZone("Asia/Shanghai");
+    const course = await manager.createCourse("零基础日语听说");
+    const raw = await manager.capture(
+      "零基础日语听说，老师会点名回答",
+      "COURSE_INFORMATION",
+      course.id,
+      "Asia/Shanghai",
+    );
+    const info = await manager.processClearCapture(raw.id);
+    expect(info && "content" in info ? info.content : null).toBe(
+      "老师会点名回答",
+    );
+    expect((await repo.getRawCapture(raw.id))?.raw_text).toBe(
+      "零基础日语听说，老师会点名回答",
+    );
+  });
 });

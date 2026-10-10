@@ -10,9 +10,14 @@ const item = (id: string, patch: Partial<Item> = {}): Item => ({
   detail: null,
   status: "INCOMPLETE",
   start_at: null,
+  start_date: null,
   occurrence_start_at: null,
+  occurrence_start_date: null,
   occurrence_end_at: null,
+  occurrence_end_date: null,
   due_at: null,
+  due_date: null,
+  time_zone: "UTC",
   reminder_level: "NORMAL",
   completed_at: null,
   raw_capture_id: null,
@@ -156,4 +161,120 @@ it("orders the single-day projection by the item's actual time", () => {
       "Asia/Hong_Kong",
     ).map((value) => value.id),
   ).toEqual(["spanning", "earlier", "later"]);
+});
+
+/** Collect every day column that carries a segment for `itemId`. */
+function daysWithSegment(
+  month: ReturnType<typeof buildCalendarMonth>,
+  itemId: string,
+): string[] {
+  const days: string[] = [];
+  for (const week of month.weeks) {
+    for (const segment of week.segments) {
+      if (segment.item_id !== itemId) continue;
+      for (let col = segment.start_column; col <= segment.end_column; col++) {
+        const day = week.days[col - 1];
+        if (day) days.push(day.date);
+      }
+    }
+  }
+  return [...new Set(days)].sort();
+}
+
+it("keeps a single DATE occurrence on exactly one calendar day in every timezone", () => {
+  const single = item("date-single", {
+    occurrence_start_date: "2026-10-12",
+  });
+  for (const timeZone of [
+    "Asia/Shanghai",
+    "America/Los_Angeles",
+    "UTC",
+  ] as const) {
+    const month = buildCalendarMonth(2026, 10, [single], [], [], timeZone);
+    expect(daysWithSegment(month, single.id), timeZone).toEqual(["2026-10-12"]);
+    expect(
+      calendarItemsForDay("2026-10-11", [single], timeZone),
+      `${timeZone} day-before`,
+    ).toEqual([]);
+    expect(
+      calendarItemsForDay("2026-10-12", [single], timeZone),
+      `${timeZone} day-of`,
+    ).toEqual([single]);
+    expect(
+      calendarItemsForDay("2026-10-13", [single], timeZone),
+      `${timeZone} day-after`,
+    ).toEqual([]);
+  }
+});
+
+it("covers exactly the inclusive days of a DATE occurrence range", () => {
+  const range = item("date-range", {
+    occurrence_start_date: "2026-10-12",
+    occurrence_end_date: "2026-10-14",
+  });
+  for (const timeZone of [
+    "Asia/Shanghai",
+    "America/Los_Angeles",
+    "UTC",
+  ] as const) {
+    const month = buildCalendarMonth(2026, 10, [range], [], [], timeZone);
+    expect(daysWithSegment(month, range.id), timeZone).toEqual([
+      "2026-10-12",
+      "2026-10-13",
+      "2026-10-14",
+    ]);
+    expect(calendarItemsForDay("2026-10-11", [range], timeZone)).toEqual([]);
+    expect(calendarItemsForDay("2026-10-15", [range], timeZone)).toEqual([]);
+    expect(
+      calendarItemsForDay("2026-10-12", [range], timeZone).map((v) => v.id),
+    ).toEqual([range.id]);
+    expect(
+      calendarItemsForDay("2026-10-14", [range], timeZone).map((v) => v.id),
+    ).toEqual([range.id]);
+  }
+});
+
+it("splits a DATE range across week rows without adding extra days", () => {
+  // 2026-10-12 Mon … 2026-10-18 Sun is one natural week; 12–18 spans two weeks.
+  const range = item("cross-week", {
+    occurrence_start_date: "2026-10-12",
+    occurrence_end_date: "2026-10-18",
+  });
+  const month = buildCalendarMonth(2026, 10, [range], [], [], "UTC");
+  expect(daysWithSegment(month, range.id)).toEqual([
+    "2026-10-12",
+    "2026-10-13",
+    "2026-10-14",
+    "2026-10-15",
+    "2026-10-16",
+    "2026-10-17",
+    "2026-10-18",
+  ]);
+  const segments = month.weeks.flatMap((week) =>
+    week.segments.filter((s) => s.item_id === range.id),
+  );
+  expect(segments.length).toBeGreaterThanOrEqual(1);
+  expect(segments.every((s) => s.kind === "RANGE")).toBe(true);
+});
+
+it("does not shift DATE due/start points across timezones", () => {
+  const due = item("date-due", { due_date: "2026-10-12" });
+  for (const timeZone of [
+    "America/Los_Angeles",
+    "UTC",
+    "Asia/Tokyo",
+  ] as const) {
+    expect(
+      calendarItemsForDay("2026-10-12", [due], timeZone).map((v) => v.id),
+      timeZone,
+    ).toEqual([due.id]);
+    expect(
+      calendarItemsForDay("2026-10-11", [due], timeZone),
+      `${timeZone} before`,
+    ).toEqual([]);
+    expect(
+      calendarItemsForDay("2026-10-13", [due], timeZone),
+      `${timeZone} after`,
+    ).toEqual([]);
+  }
 });

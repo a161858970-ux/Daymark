@@ -1,16 +1,23 @@
 import { useState } from "react";
 import { useI18n } from "./i18n/index.js";
-import { formatMonthDay } from "./i18n/format.js";
+import { formatItemDateOnly } from "./i18n/format.js";
 import { getMessage } from "./i18n/messages/index.js";
 import type { Locale } from "./i18n/locale.js";
 import { DateTimeField } from "./DateTimeField.js";
 
-/** The four underlying fields, unchanged — presentation only. */
+/**
+ * Time editing surface. Each semantic is DATE (`*Date`) or DATETIME (`*At`),
+ * never both (ADR-010). Empty string means unset.
+ */
 export interface TimeFields {
   startAt: string;
+  startDate: string;
   occurrenceStartAt: string;
+  occurrenceStartDate: string;
   occurrenceEndAt: string;
+  occurrenceEndDate: string;
   dueAt: string;
+  dueDate: string;
 }
 
 interface Props {
@@ -18,35 +25,49 @@ interface Props {
   onChange: (next: TimeFields) => void;
 }
 
-/** "2026-09-20T00:00" → "9月20日"; midnight reads as a date only. */
+/**
+ * "2026-09-20" → "9月20日" (year only outside the current local year, the
+ * frozen list rule via the shared formatter); "2026-09-20T15:00" keeps the
+ * clock.
+ */
 export function formatStamp(
   local: string,
   locale: Locale,
   forceTime = false,
+  now: Date = new Date(),
 ): string {
   if (!local) return "";
   const [date = "", time = ""] = local.split("T");
   const [year = 0, month = 0, day = 0] = date.split("-").map(Number);
   if (!year || !month || !day) return "";
-  const stamp = formatMonthDay(new Date(year, month - 1, day), locale);
+  const stamp = formatItemDateOnly(date, locale, now);
   return time && (time !== "00:00" || forceTime) ? `${stamp} ${time}` : stamp;
 }
 
-/** 发生 is the one semantic that may be a point or a span. */
 export function formatOccurrence(
-  start: string,
-  end: string,
+  startDate: string,
+  startAt: string,
+  endDate: string,
+  endAt: string,
   locale: Locale,
+  now: Date = new Date(),
 ): string {
-  if (!start) return "";
-  if (!end)
+  if (!startDate && !startAt) return "";
+  if (startDate) {
+    const span =
+      endDate && endDate !== startDate
+        ? `${formatStamp(startDate, locale, false, now)}–${formatStamp(endDate, locale, false, now)}`
+        : formatStamp(startDate, locale, false, now);
+    return getMessage(locale, "item.occurAt", { value: span });
+  }
+  if (!endAt)
     return getMessage(locale, "item.occurAt", {
-      value: formatStamp(start, locale),
+      value: formatStamp(startAt, locale, false, now),
     });
-  const sameDay = end.slice(0, 10) === start.slice(0, 10);
+  const sameDay = endAt.slice(0, 10) === startAt.slice(0, 10);
   const span = sameDay
-    ? `${formatStamp(start, locale, true)}–${end.slice(11, 16)}`
-    : `${formatStamp(start, locale)}–${formatStamp(end, locale)}`;
+    ? `${formatStamp(startAt, locale, true, now)}–${endAt.slice(11, 16)}`
+    : `${formatStamp(startAt, locale, false, now)}–${formatStamp(endAt, locale, false, now)}`;
   return getMessage(locale, "item.occurAt", { value: span });
 }
 
@@ -59,29 +80,40 @@ export interface TimeSummary {
 export function timeSummaries(
   value: TimeFields,
   locale: Locale,
+  now: Date = new Date(),
 ): TimeSummary[] {
   const summaries: TimeSummary[] = [];
-  if (value.startAt)
+  if (value.startAt || value.startDate)
     summaries.push({
-      key: "startAt",
+      key: value.startDate ? "startDate" : "startAt",
       text: getMessage(locale, "item.startAt", {
-        value: formatStamp(value.startAt, locale),
+        value: formatStamp(
+          value.startDate || value.startAt,
+          locale,
+          false,
+          now,
+        ),
       }),
     });
-  if (value.occurrenceStartAt)
+  if (value.occurrenceStartAt || value.occurrenceStartDate)
     summaries.push({
-      key: "occurrenceStartAt",
+      key: value.occurrenceStartDate
+        ? "occurrenceStartDate"
+        : "occurrenceStartAt",
       text: formatOccurrence(
+        value.occurrenceStartDate,
         value.occurrenceStartAt,
+        value.occurrenceEndDate,
         value.occurrenceEndAt,
         locale,
+        now,
       ),
     });
-  if (value.dueAt)
+  if (value.dueAt || value.dueDate)
     summaries.push({
-      key: "dueAt",
+      key: value.dueDate ? "dueDate" : "dueAt",
       text: getMessage(locale, "item.dueAt", {
-        value: formatStamp(value.dueAt, locale),
+        value: formatStamp(value.dueDate || value.dueAt, locale, false, now),
       }),
     });
   return summaries;
@@ -98,14 +130,20 @@ export function timeSummaries(
  * stays optional.
  */
 export function TimeBlock({ value, onChange }: Props) {
-  const { t, locale } = useI18n();
+  const { t, locale, now } = useI18n();
   const [open, setOpen] = useState(false);
-  const summaries = timeSummaries(value, locale);
+  const summaries = timeSummaries(value, locale, now);
 
-  const clearStart = () => onChange({ ...value, startAt: "" });
+  const clearStart = () => onChange({ ...value, startAt: "", startDate: "" });
   const clearOccurrence = () =>
-    onChange({ ...value, occurrenceStartAt: "", occurrenceEndAt: "" });
-  const clearDue = () => onChange({ ...value, dueAt: "" });
+    onChange({
+      ...value,
+      occurrenceStartAt: "",
+      occurrenceStartDate: "",
+      occurrenceEndAt: "",
+      occurrenceEndDate: "",
+    });
+  const clearDue = () => onChange({ ...value, dueAt: "", dueDate: "" });
 
   return (
     <div className="time-block">
@@ -144,13 +182,32 @@ export function TimeBlock({ value, onChange }: Props) {
           <label className="time-block-row">
             <span className="time-block-kind">{t("item.start")}</span>
             <DateTimeField
+              mode="date"
+              label={t("item.startTimeField")}
+              placeholder={t("item.startHint")}
+              value={value.startDate}
+              onChange={(next) =>
+                onChange({
+                  ...value,
+                  startDate: next,
+                  startAt: next ? "" : value.startAt,
+                })
+              }
+            />
+            <DateTimeField
               mode="datetime"
               label={t("item.startTimeField")}
               placeholder={t("item.startHint")}
               value={value.startAt}
-              onChange={(next) => onChange({ ...value, startAt: next })}
+              onChange={(next) =>
+                onChange({
+                  ...value,
+                  startAt: next,
+                  startDate: next ? "" : value.startDate,
+                })
+              }
             />
-            {value.startAt && (
+            {(value.startAt || value.startDate) && (
               <button
                 type="button"
                 className="quiet-button"
@@ -164,22 +221,46 @@ export function TimeBlock({ value, onChange }: Props) {
           <label className="time-block-row">
             <span className="time-block-kind">{t("item.occur")}</span>
             <DateTimeField
+              mode="date"
+              label={t("item.occurStartField")}
+              placeholder={t("item.occurHint")}
+              value={value.occurrenceStartDate}
+              onChange={(next) =>
+                onChange({
+                  ...value,
+                  occurrenceStartDate: next,
+                  occurrenceStartAt: next ? "" : value.occurrenceStartAt,
+                  occurrenceEndDate: next ? value.occurrenceEndDate : "",
+                  occurrenceEndAt: next ? "" : value.occurrenceEndAt,
+                })
+              }
+            />
+            <DateTimeField
               mode="datetime"
               label={t("item.occurStartField")}
-              placeholder={
-                value.occurrenceStartAt
-                  ? t("item.occurStartField")
-                  : t("item.occurHint")
-              }
+              placeholder={t("item.occurHint")}
               value={value.occurrenceStartAt}
               onChange={(next) =>
                 onChange({
                   ...value,
                   occurrenceStartAt: next,
+                  occurrenceStartDate: next ? "" : value.occurrenceStartDate,
                   occurrenceEndAt: next ? value.occurrenceEndAt : "",
+                  occurrenceEndDate: next ? "" : value.occurrenceEndDate,
                 })
               }
             />
+            {value.occurrenceStartDate && (
+              <DateTimeField
+                mode="date"
+                label={t("item.occurEnd")}
+                placeholder={t("item.occurEndLabel")}
+                value={value.occurrenceEndDate}
+                onChange={(next) =>
+                  onChange({ ...value, occurrenceEndDate: next })
+                }
+              />
+            )}
             {value.occurrenceStartAt && (
               <DateTimeField
                 mode="datetime"
@@ -191,7 +272,7 @@ export function TimeBlock({ value, onChange }: Props) {
                 }
               />
             )}
-            {value.occurrenceStartAt && (
+            {(value.occurrenceStartAt || value.occurrenceStartDate) && (
               <button
                 type="button"
                 className="quiet-button"
@@ -205,13 +286,32 @@ export function TimeBlock({ value, onChange }: Props) {
           <label className="time-block-row">
             <span className="time-block-kind">{t("item.due")}</span>
             <DateTimeField
+              mode="date"
+              label={t("item.dueTimeField")}
+              placeholder={t("item.dueHint")}
+              value={value.dueDate}
+              onChange={(next) =>
+                onChange({
+                  ...value,
+                  dueDate: next,
+                  dueAt: next ? "" : value.dueAt,
+                })
+              }
+            />
+            <DateTimeField
               mode="datetime"
               label={t("item.dueTimeField")}
               placeholder={t("item.dueHint")}
               value={value.dueAt}
-              onChange={(next) => onChange({ ...value, dueAt: next })}
+              onChange={(next) =>
+                onChange({
+                  ...value,
+                  dueAt: next,
+                  dueDate: next ? "" : value.dueDate,
+                })
+              }
             />
-            {value.dueAt && (
+            {(value.dueAt || value.dueDate) && (
               <button type="button" className="quiet-button" onClick={clearDue}>
                 {t("common.clear")}
               </button>

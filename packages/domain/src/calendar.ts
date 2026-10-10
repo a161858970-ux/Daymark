@@ -72,6 +72,22 @@ export function buildCalendarMonth(
   const projections = items.flatMap((item) => {
     const projection = projectItemToCalendar(item);
     if (!projection) return [];
+    // DATE items carry inclusive calendar-day bodies; never convert them
+    // through a timezone (that shifted days west of UTC / extended ranges).
+    if (
+      projection.all_day &&
+      projection.calendar_start &&
+      projection.calendar_end
+    ) {
+      return [
+        {
+          item_id: item.id,
+          kind: projection.kind,
+          start_date: projection.calendar_start,
+          end_date: projection.calendar_end,
+        },
+      ];
+    }
     return [
       {
         item_id: item.id,
@@ -134,6 +150,15 @@ export function calendarItemsForDay(
     .filter((item) => {
       const projection = projectItemToCalendar(item);
       if (!projection) return false;
+      if (
+        projection.all_day &&
+        projection.calendar_start &&
+        projection.calendar_end
+      ) {
+        return (
+          projection.calendar_start <= date && projection.calendar_end >= date
+        );
+      }
       return (
         localDateOfInstant(projection.start, timeZone) <= date &&
         localDateOfInstant(projection.end, timeZone) >= date

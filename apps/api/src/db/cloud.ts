@@ -116,6 +116,11 @@ export class CloudDaymark {
       occurrence_start_at: iso(value.occurrence_start_at),
       occurrence_end_at: iso(value.occurrence_end_at),
       due_at: iso(value.due_at),
+      start_date: value.start_date ?? null,
+      occurrence_start_date: value.occurrence_start_date ?? null,
+      occurrence_end_date: value.occurrence_end_date ?? null,
+      due_date: value.due_date ?? null,
+      time_zone: value.time_zone ?? null,
     }));
   }
 
@@ -557,12 +562,19 @@ export class CloudDaymark {
           q,
           `WITH inserted AS (
            INSERT INTO raw_captures
-             (id, owner_id, source, raw_text, captured_at, processing_status,
+             (id, owner_id, source, raw_text, captured_at, captured_tz, processing_status,
               unresolved_reason, deleted_at, row_version)
-           VALUES ($1, $2, $3, $4, $5, 'RAW', NULL, NULL, 1)
+           VALUES ($1, $2, $3, $4, $5, $6, 'RAW', NULL, NULL, 1)
            RETURNING *
          ) SELECT row_to_json(inserted) AS value FROM inserted`,
-          [id, ownerId, input.source, input.raw_text, input.captured_at],
+          [
+            id,
+            ownerId,
+            input.source,
+            input.raw_text,
+            input.captured_at,
+            (input as { captured_tz?: string | null }).captured_tz ?? null,
+          ],
         );
         if (!capture)
           throw new CloudError("SERVER_ERROR", 500, "Capture insert failed");
@@ -649,11 +661,13 @@ export class CloudDaymark {
         q,
         `WITH inserted AS (
            INSERT INTO items
-             (id, owner_id, course_id, title, detail, status, start_at,
-              occurrence_start_at, occurrence_end_at, due_at, reminder_level,
+             (id, owner_id, course_id, title, detail, status, start_at, start_date,
+              occurrence_start_at, occurrence_start_date,
+              occurrence_end_at, occurrence_end_date,
+              due_at, due_date, time_zone, reminder_level,
               created_at, updated_at, completed_at, deleted_at, row_version, raw_capture_id)
-           VALUES ($1, $2, $3, $4, $5, 'INCOMPLETE', $6, $7, $8, $9, $10,
-                   now(), now(), NULL, NULL, 1, $11)
+           VALUES ($1, $2, $3, $4, $5, 'INCOMPLETE', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+                   now(), now(), NULL, NULL, 1, $16)
            RETURNING *
          ) SELECT row_to_json(inserted) AS value FROM inserted`,
         [
@@ -662,10 +676,17 @@ export class CloudDaymark {
           input.course_id,
           input.title,
           input.detail,
-          input.start_at,
-          input.occurrence_start_at,
-          input.occurrence_end_at,
-          input.due_at,
+          input.start_at ?? null,
+          (input as { start_date?: string | null }).start_date ?? null,
+          input.occurrence_start_at ?? null,
+          (input as { occurrence_start_date?: string | null })
+            .occurrence_start_date ?? null,
+          input.occurrence_end_at ?? null,
+          (input as { occurrence_end_date?: string | null })
+            .occurrence_end_date ?? null,
+          input.due_at ?? null,
+          (input as { due_date?: string | null }).due_date ?? null,
+          (input as { time_zone?: string | null }).time_zone ?? null,
           input.reminder_level,
           input.raw_capture_id,
         ],
@@ -856,7 +877,21 @@ export class CloudDaymark {
               ),
             };
         }
-        const next = { ...item, ...changes };
+        const next = { ...item, ...changes } as Item;
+        const precisionPairs = [
+          ["start_at", "start_date"],
+          ["occurrence_start_at", "occurrence_start_date"],
+          ["occurrence_end_at", "occurrence_end_date"],
+          ["due_at", "due_date"],
+        ] as const;
+        for (const [at, date] of precisionPairs) {
+          if (next[at] && next[date])
+            throw new CloudError(
+              "VALIDATION_ERROR",
+              400,
+              "Each time endpoint is either DATE or DATETIME, not both",
+            );
+        }
         if (
           next.occurrence_start_at &&
           next.occurrence_end_at &&
@@ -866,6 +901,16 @@ export class CloudDaymark {
             "VALIDATION_ERROR",
             400,
             "Occurrence end precedes start",
+          );
+        if (
+          next.occurrence_start_date &&
+          next.occurrence_end_date &&
+          next.occurrence_start_date > next.occurrence_end_date
+        )
+          throw new CloudError(
+            "VALIDATION_ERROR",
+            400,
+            "Occurrence end date precedes start date",
           );
         const updates = fields.map(
           (field, index) => `${field} = $${index + 3}`,

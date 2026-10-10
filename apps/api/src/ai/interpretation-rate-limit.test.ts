@@ -20,9 +20,13 @@ const ambiguousProposal = {
   detail: null,
   course_candidate: null,
   start_at: null,
+  start_date: null,
   occurrence_start_at: null,
+  occurrence_start_date: null,
   occurrence_end_at: null,
+  occurrence_end_date: null,
   due_at: null,
+  due_date: null,
   course_information: null,
   split_candidates: [],
   confidence: 0.5,
@@ -36,6 +40,17 @@ async function harness(limit: number) {
       fileURLToPath(
         new URL(
           "../../../../backend/migrations/001_initial.sql",
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    ),
+  );
+  await db.exec(
+    await readFile(
+      fileURLToPath(
+        new URL(
+          "../../../../backend/migrations/007_date_precision.sql",
           import.meta.url,
         ),
       ),
@@ -74,6 +89,7 @@ async function harness(limit: number) {
       source: "QUICK_CAPTURE",
       raw_text: text,
       captured_at: "2026-09-22T08:00:00.000Z",
+      captured_tz: "Asia/Shanghai",
     });
   const request = (id: string, token = "one") =>
     server.inject({

@@ -23,6 +23,13 @@ it("removes a Semester with its courses, items and timetable rows, and exposes t
     ),
   );
   await db.exec(await readFile(collectionMigration, "utf8"));
+  const datePrecisionMigration = fileURLToPath(
+    new URL(
+      "../../../../backend/migrations/007_date_precision.sql",
+      import.meta.url,
+    ),
+  );
+  await db.exec(await readFile(datePrecisionMigration, "utf8"));
   const port: CloudDatabase = {
     query: async (sql, params) => db.query(sql, params),
     transaction: (work) =>
@@ -98,9 +105,14 @@ it("removes a Semester with its courses, items and timetable rows, and exposes t
         detail: null,
         status: "INCOMPLETE",
         start_at: null,
+        start_date: null,
         occurrence_start_at: null,
+        occurrence_start_date: null,
         occurrence_end_at: null,
+        occurrence_end_date: null,
         due_at: null,
+        due_date: null,
+        time_zone: "UTC",
         reminder_level: "NORMAL",
         raw_capture_id: null,
       },

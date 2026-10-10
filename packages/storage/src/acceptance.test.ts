@@ -69,7 +69,7 @@ afterEach(async () => {
 
 it("T-AI-004/005/010 and T-REC-004 keep deferred ambiguity across restart until explicit deletion", async () => {
   const { name, db, manager } = setup();
-  const raw = await manager.capture("第四周前交作业");
+  const raw = await manager.capture("老师让我们关注一下第三章");
   expect(await manager.processClearCapture(raw.id)).toBeNull();
   await manager.deferRawCapture(raw.id);
   expect((await manager.unresolvedCaptures()).map((value) => value.id)).toEqual(
@@ -129,19 +129,22 @@ it("T-ITEM-001..007 keeps one canonical Item through capture, projections, remin
   );
   expect(deriveReminderSchedule([noTime!], policy, reminderWindow)).toEqual([]);
 
-  const timedRaw = await manager.capture(
-    "管理学原理，第一次作业，9月28日前提交",
-  );
+  const timedRaw = await manager.capture("老师说关注管理学原理展示");
   expect(await manager.processClearCapture(timedRaw.id)).toBeNull();
   const timed = await manager.resolveRawCapture(timedRaw.id, {
     kind: "ITEM",
-    title: "第一次作业",
+    title: "管理学原理展示",
     detail: null,
     course_id: course.id,
     start_at: null,
+    start_date: null,
     occurrence_start_at: null,
+    occurrence_start_date: null,
     occurrence_end_at: null,
+    occurrence_end_date: null,
     due_at: "2026-09-23T12:00:00.000Z",
+    due_date: null,
+    time_zone: "UTC",
     reminder_level: "NORMAL",
   });
   expect(projectItemToCalendar(timed)).toMatchObject({ item_id: timed.id });
@@ -198,7 +201,7 @@ it("T-ITEM-001..007 keeps one canonical Item through capture, projections, remin
     timed.id,
   );
   expect((await repo.getRawCapture(timedRaw.id))?.raw_text).toBe(
-    "管理学原理，第一次作业，9月28日前提交",
+    "老师说关注管理学原理展示",
   );
   expect(
     deriveReminderSchedule([deleted.item], policy, reminderWindow),

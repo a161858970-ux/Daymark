@@ -17,9 +17,14 @@ const item = (id: string, patch: Partial<Item> = {}): Item => ({
   detail: null,
   status: "INCOMPLETE",
   start_at: null,
+  start_date: null,
   occurrence_start_at: null,
+  occurrence_start_date: null,
   occurrence_end_at: null,
+  occurrence_end_date: null,
   due_at: null,
+  due_date: null,
+  time_zone: "UTC",
   reminder_level: "NORMAL",
   completed_at: null,
   raw_capture_id: null,
@@ -96,11 +101,45 @@ describe("Item projections", () => {
       start: "2026-09-23T00:00:00Z",
       end: "2026-09-27T00:00:00Z",
       kind: "RANGE",
+      all_day: false,
+      calendar_start: null,
+      calendar_end: null,
     });
     expect(
       calendarItems([value], "2026-09-25T00:00:00Z", "2026-09-25T23:59:59Z"),
     ).toHaveLength(1);
     expect(projectItemToCalendar(item("no-time"))).toBeNull();
+  });
+
+  it("keeps DATE projections as inclusive calendar-day bodies, not UTC instants", () => {
+    const single = item("date-single", {
+      occurrence_start_date: "2026-10-12",
+    });
+    expect(projectItemToCalendar(single)).toEqual({
+      item_id: "date-single",
+      start: "2026-10-12T00:00:00.000Z",
+      end: "2026-10-12T00:00:00.000Z",
+      kind: "POINT",
+      all_day: true,
+      calendar_start: "2026-10-12",
+      calendar_end: "2026-10-12",
+    });
+    const range = item("date-range", {
+      occurrence_start_date: "2026-10-12",
+      occurrence_end_date: "2026-10-14",
+    });
+    const projection = projectItemToCalendar(range)!;
+    expect(projection.calendar_start).toBe("2026-10-12");
+    expect(projection.calendar_end).toBe("2026-10-14");
+    expect(projection.all_day).toBe(true);
+    // Range filter must not treat the exclusive next-day boundary as inside.
+    expect(
+      calendarItems([range], "2026-10-11", "2026-10-11T23:59:59Z"),
+    ).toHaveLength(0);
+    expect(calendarItems([range], "2026-10-12", "2026-10-14")).toHaveLength(1);
+    expect(
+      calendarItems([range], "2026-10-15", "2026-10-15T23:59:59Z"),
+    ).toHaveLength(0);
   });
 
   it("keeps no-course and old unfinished Items, excluding old completed course Items", () => {

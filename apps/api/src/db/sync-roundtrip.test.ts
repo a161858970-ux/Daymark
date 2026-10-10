@@ -26,6 +26,13 @@ it("round-trips local capture through authenticated API without changing Item id
     ),
   );
   await postgres.exec(await readFile(collectionMigration, "utf8"));
+  const datePrecisionMigration = fileURLToPath(
+    new URL(
+      "../../../../backend/migrations/007_date_precision.sql",
+      import.meta.url,
+    ),
+  );
+  await postgres.exec(await readFile(datePrecisionMigration, "utf8"));
   const port: CloudDatabase = {
     query: async (sql, params) => postgres.query(sql, params),
     transaction: (work) =>

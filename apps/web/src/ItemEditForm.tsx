@@ -4,7 +4,12 @@ import { useI18n } from "./i18n/index.js";
 import { changedItemFields } from "./itemEditDiff.js";
 import { SelectField } from "./SelectField.js";
 import { TimeBlock } from "./TimeBlock.js";
-import { fromLocalInput, toLocalInput } from "./timeInputs.js";
+import {
+  fromDateOnly,
+  fromLocalInput,
+  toDateOnly,
+  toLocalInput,
+} from "./timeInputs.js";
 
 export type EditableItemFields = Partial<
   Pick<
@@ -13,9 +18,14 @@ export type EditableItemFields = Partial<
     | "detail"
     | "course_id"
     | "start_at"
+    | "start_date"
     | "occurrence_start_at"
+    | "occurrence_start_date"
     | "occurrence_end_at"
+    | "occurrence_end_date"
     | "due_at"
+    | "due_date"
+    | "time_zone"
     | "reminder_level"
   >
 >;
@@ -46,13 +56,21 @@ export function ItemEditForm({
   const [detail, setDetail] = useState(item.detail ?? "");
   const [courseId, setCourseId] = useState(item.course_id ?? "");
   const [startAt, setStartAt] = useState(toLocalInput(item.start_at));
+  const [startDate, setStartDate] = useState(toDateOnly(item.start_date));
   const [occurrenceStartAt, setOccurrenceStartAt] = useState(
     toLocalInput(item.occurrence_start_at),
+  );
+  const [occurrenceStartDate, setOccurrenceStartDate] = useState(
+    toDateOnly(item.occurrence_start_date),
   );
   const [occurrenceEndAt, setOccurrenceEndAt] = useState(
     toLocalInput(item.occurrence_end_at),
   );
+  const [occurrenceEndDate, setOccurrenceEndDate] = useState(
+    toDateOnly(item.occurrence_end_date),
+  );
   const [dueAt, setDueAt] = useState(toLocalInput(item.due_at));
+  const [dueDate, setDueDate] = useState(toDateOnly(item.due_date));
   const [reminderLevel, setReminderLevel] = useState<Item["reminder_level"]>(
     item.reminder_level,
   );
@@ -72,9 +90,14 @@ export function ItemEditForm({
       detail: detail.trim() || null,
       course_id: courseId || null,
       start_at: fromLocalInput(startAt),
+      start_date: fromDateOnly(startDate),
       occurrence_start_at: fromLocalInput(occurrenceStartAt),
+      occurrence_start_date: fromDateOnly(occurrenceStartDate),
       occurrence_end_at: fromLocalInput(occurrenceEndAt),
+      occurrence_end_date: fromDateOnly(occurrenceEndDate),
       due_at: fromLocalInput(dueAt),
+      due_date: fromDateOnly(dueDate),
+      time_zone: item.time_zone,
       reminder_level: reminderLevel,
     });
     if (Object.keys(fields).length === 0) {
@@ -143,15 +166,23 @@ export function ItemEditForm({
         <TimeBlock
           value={{
             startAt,
+            startDate,
             occurrenceStartAt,
+            occurrenceStartDate,
             occurrenceEndAt,
+            occurrenceEndDate,
             dueAt,
+            dueDate,
           }}
           onChange={(next) => {
             setStartAt(next.startAt);
+            setStartDate(next.startDate);
             setOccurrenceStartAt(next.occurrenceStartAt);
+            setOccurrenceStartDate(next.occurrenceStartDate);
             setOccurrenceEndAt(next.occurrenceEndAt);
+            setOccurrenceEndDate(next.occurrenceEndDate);
             setDueAt(next.dueAt);
+            setDueDate(next.dueDate);
           }}
         />
         <label className="detail-field-wide">

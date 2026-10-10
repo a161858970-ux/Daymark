@@ -10,29 +10,39 @@ import {
 
 const empty = {
   startAt: "",
+  startDate: "",
   occurrenceStartAt: "",
+  occurrenceStartDate: "",
   occurrenceEndAt: "",
+  occurrenceEndDate: "",
   dueAt: "",
+  dueDate: "",
 };
 
-it("reads midnight as a date and keeps any real clock time", () => {
-  expect(formatStamp("2026-09-20T00:00", "zh-CN")).toBe("9月20日");
+it("keeps any real clock time and formats date-only without inventing 00:00", () => {
   expect(formatStamp("2026-09-24T23:59", "zh-CN")).toBe("9月24日 23:59");
+  expect(formatStamp("2026-09-20", "zh-CN")).toBe("9月20日");
   expect(formatStamp("2026-09-20T00:00", "zh-CN", true)).toBe("9月20日 00:00");
   expect(formatStamp("", "zh-CN")).toBe("");
 });
 
-it("speaks 发生 as a point or a span", () => {
-  expect(formatOccurrence("2026-09-25T19:00", "", "zh-CN")).toBe(
+it("speaks 发生 as a DATE span or DATETIME point/span", () => {
+  expect(formatOccurrence("", "2026-09-25T19:00", "", "", "zh-CN")).toBe(
     "9月25日 19:00 发生",
   );
   expect(
-    formatOccurrence("2026-09-25T19:00", "2026-09-25T20:30", "zh-CN"),
+    formatOccurrence("", "2026-09-25T19:00", "", "2026-09-25T20:30", "zh-CN"),
   ).toBe("9月25日 19:00–20:30 发生");
   expect(
-    formatOccurrence("2026-09-25T19:00", "2026-09-26T08:30", "zh-CN"),
+    formatOccurrence("", "2026-09-25T19:00", "", "2026-09-26T08:30", "zh-CN"),
   ).toBe("9月25日 19:00–9月26日 08:30 发生");
-  expect(formatOccurrence("", "2026-09-26T08:30", "zh-CN")).toBe("");
+  expect(formatOccurrence("2026-10-14", "", "", "", "zh-CN")).toBe(
+    "10月14日 发生",
+  );
+  expect(formatOccurrence("2026-10-14", "", "2026-10-16", "", "zh-CN")).toBe(
+    "10月14日–10月16日 发生",
+  );
+  expect(formatOccurrence("", "", "", "2026-09-26T08:30", "zh-CN")).toBe("");
 });
 
 it("summarises whichever semantics are set, in 开始/发生/截止 order", () => {
@@ -40,10 +50,14 @@ it("summarises whichever semantics are set, in 开始/发生/截止 order", () =
   expect(
     timeSummaries(
       {
-        startAt: "2026-09-20T00:00",
+        startAt: "",
+        startDate: "2026-09-20",
         occurrenceStartAt: "2026-09-25T19:00",
+        occurrenceStartDate: "",
         occurrenceEndAt: "2026-09-25T20:30",
+        occurrenceEndDate: "",
         dueAt: "2026-09-24T23:59",
+        dueDate: "",
       },
       "zh-CN",
     ).map((entry) => entry.text),
@@ -75,9 +89,8 @@ it("shows the set semantics as prose with an entry point to edit", () => {
     <I18nProvider>
       <TimeBlock
         value={{
-          startAt: "2026-09-20T00:00",
-          occurrenceStartAt: "",
-          occurrenceEndAt: "",
+          ...empty,
+          startDate: "2026-09-20",
           dueAt: "2026-09-24T23:59",
         }}
         onChange={() => undefined}

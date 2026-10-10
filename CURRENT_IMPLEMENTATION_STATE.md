@@ -2,13 +2,14 @@
 
 > **口径说明（2026-10-09 对齐）**：文首「事实基准」是唯一现行口径，**覆盖下文一切历史快照**。§1–§7 保留开发期定稿原文供追溯，其中的「当前」「仍缺」「BLOCKED」只反映当时；§8 起是按日期的史实流水。与本文冲突时，以 **文首事实基准 + [`AGENTS.md`](AGENTS.md) + §25–§26** 为准。待修 bug 见 [`docs/POST_RELEASE_BUGS.md`](docs/POST_RELEASE_BUGS.md)。
 
-## 事实基准（现行，2026-10-08 收官后）
+## 事实基准（现行，2026-10-09 NL 时间升级后）
 
 - **项目**：拾序 Daymark——面向学生的课程事务应用（Windows Tauri 2 + 安卓 APK + 云端 API；本地优先、登录后云同步）。代码/文件侧 `daymark`。
-- **当前阶段**：**发布后维护更新阶段**（2026-10-08 开发阶段收官）。工作模式 = 发现/修复 bug → 小步发版 → 记档，不再有开发期大待办。
-- **产品/发布**：GitHub `violetsnowl/Daymark`；0.1.0 期间单 release 覆盖 + 应用内 semver 爬升（现役 **0.1.15**）；发版与热更新见 [`docs/HOT_UPDATE_RELEASE.md`](docs/HOT_UPDATE_RELEASE.md)。
-- **门控基线（现行）**：`pnpm format:check` / `lint` / `typecheck` / `test` 全 0（**316+1**：web162、api80+1、storage44、domain11、application19）+ `src-tauri` 下 `cargo check` 0 警告。
-- **外部 lane**：A–F 已全部 `VERIFIED REAL`（见 [`docs/FINAL_RELEASE_VALIDATION.md`](docs/FINAL_RELEASE_VALIDATION.md)）；**不再存在**「RELEASE INFRASTRUCTURE VERIFICATION: BLOCKED BY EXTERNAL CONFIGURATION」状态。
+- **当前阶段**：**发布后维护更新阶段** + **自然语言记录与时间语义升级（2026-10-09，实现完成、待用户验收、未发版）**。
+- **产品/发布**：GitHub `violetsnowl/Daymark`；0.1.0 期间单 release 覆盖 + 应用内 semver 爬升（发版基线仍 **0.1.15**，本轮升级**未发版**）；见 [`docs/HOT_UPDATE_RELEASE.md`](docs/HOT_UPDATE_RELEASE.md)。
+- **门控基线（升级后）**：`pnpm format:check` / `lint` / `typecheck` / `test` + `src-tauri` `cargo check`。application 测试增至 **46**（含 timeParsing 16 + captureParsing 12）；完整套件数字见 §28。
+- **DATE/DATETIME**：Item 增加 `start_date` / `occurrence_start_date` / `occurrence_end_date` / `due_date` / `time_zone`；RawCapture 增加 `captured_tz`。互斥不变量与行为见 `docs/ADR-010-date-datetime-precision.md` 与母稿 `22_NATURAL_LANGUAGE_TIME_SPEC.md`。
+- **外部 lane**：A–F 已全部 `VERIFIED REAL`；**007 迁移尚未应用到生产库**（本轮明确禁止）。
 - **数据安全红线**：Dexie 库名 `"course-manager"` 与 `course_manager_device_id` 是本机/设备持久化键，**改名工程永不得触碰**。
 - **证据分层**：PGlite/fake IndexedDB 证据与真实 PostgreSQL/Supabase 证据始终严格分开；「skipped」不算真实 PASS。
 
@@ -620,3 +621,12 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 - **本轮踩坑**：① `BuildTask.kt` 走 `pnpm tauri` 可能落到**未打补丁** npm CLI → 并行 rustBuild 部分任务仍符号链接失败——已改为直连补丁版 `cargo-tauri.exe`；② `cargo-mobile2` `force_symlink` 对 `TargetStyle::File` **一律 `fs::copy`**（标准用户无 SeCreateSymbolicLinkPrivilege）；③ `publish_release.py` 的 `github_token` 原走 bash+grep，Windows 无 bash 直接挂——改 `git credential fill` / `GITHUB_TOKEN`。
 - **门控基线（本窗口收官）**：**316+1**（web162、api80+1、storage44、domain11、application19；+9 为 i18n 用例）、cargo check 0；0.1.15 双产物回读通过。
 - **未决**：PR-001 安装选择器仍被第三方接住（用户实测 0.1.13/0.1.14 后**搁置**，记在 `POST_RELEASE_BUGS.md` 勿关单）；PR-002 带宽；L-02/03/06 等。
+
+## 28. ��Ȼ���Լ�¼��ʱ������������2026-10-09��ʵ����ɡ������ա�δ���棩
+
+- **��Ʒĸ��**������ `course_manager_spec_v0_1/22_NATURAL_LANGUAGE_TIME_SPEC.md`��Ψһʱ���������Դ����ͬ������ 00/02/05/06/07/15/19/README��
+- **���� ADR**��`docs/ADR-010-date-datetime-precision.md`��DATE xor DATETIME������ʱ����ȫ��ͶӰ������Ǩ�ƣ���
+- **����ʵ��**��`packages/application/src/timeParsing.ts`��ȷ��������/�����/����/ѧ����/��ݲ�ȫ/���ȣ�+ `captureParsing.ts` ���ݷ������﷨��ȫ�����ᴿ��`processClearCapture` д��ʱ���ֶ��� `captured_tz`��
+- **����ģ��**��Item `start_date`/`occurrence_*_date`/`due_date`/`time_zone`��RawCapture `captured_tz`��Postgres `007_date_precision.sql`��**δӦ�õ�����**����Dexie v7 ������չ��
+- **��Ϊ**������������������ʱ��δ����������ȷ�ϣ�DATE due=�������ա�DATE occurrence Ԥ����ê 09:00��DATE start ���Զ� start reminder��AI ���û�����������
+- **���ֽ�ֹ������أ�**��δǨ�������⡢δ�� APK/EXE��δ�����ϸ��¡�δ�� `course-manager`/`course_manager_device_id`��δ��д RawCapture ԭ�ġ�
