@@ -2,7 +2,20 @@ import { z } from "zod";
 
 export const uuidSchema = z.string().uuid();
 export const isoDateTimeSchema = z.string().datetime({ offset: true });
-export const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+// Format alone is not enough: "2026-13-45" matches the pattern but is not a
+// calendar date and would only fail inside the database (500). Reject it at
+// the contract boundary with a proper validation error.
+function realCalendarDate(value: string): boolean {
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
+}
+export const dateOnlySchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(realCalendarDate, { message: "Invalid calendar date" });
 export const itemStatusSchema = z.enum(["INCOMPLETE", "COMPLETE"]);
 export const reminderLevelSchema = z.enum(["OFF", "NORMAL", "HIGH"]);
 export const rawCaptureStatusSchema = z.enum([
