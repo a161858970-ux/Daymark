@@ -38,9 +38,14 @@ const allowedFields: Record<SupportedType, Set<string>> = {
     "detail",
     "course_id",
     "start_at",
+    "start_date",
     "occurrence_start_at",
+    "occurrence_start_date",
     "occurrence_end_at",
+    "occurrence_end_date",
     "due_at",
+    "due_date",
+    "time_zone",
     "reminder_level",
     "status",
     "deleted_at",
@@ -328,7 +333,13 @@ export class CloudConflictManager {
             400,
             "Deleted capture needs a matching tombstone and status",
           );
-        if (selected.deleted_at && current.processing_status !== "UNRESOLVED")
+        // Re-stating an existing tombstone (delete-vs-delete conflict) is not
+        // a new deletion; only a transition INTO deletion needs UNRESOLVED.
+        if (
+          selected.deleted_at &&
+          !current.deleted_at &&
+          current.processing_status !== "UNRESOLVED"
+        )
           throw new CloudError(
             "VALIDATION_ERROR",
             400,
