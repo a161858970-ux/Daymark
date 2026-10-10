@@ -26,3 +26,4 @@ output/
 apk-build-*.log
 latest.json
 release_body.json
+__pycache__/
