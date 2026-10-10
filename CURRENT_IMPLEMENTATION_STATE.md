@@ -622,11 +622,13 @@ Gate 实测（2026-09-29 11:18）：`pnpm format:check` / `pnpm lint` / `pnpm ty
 - **门控基线（本窗口收官）**：**316+1**（web162、api80+1、storage44、domain11、application19；+9 为 i18n 用例）、cargo check 0；0.1.15 双产物回读通过。
 - **未决**：PR-001 安装选择器仍被第三方接住（用户实测 0.1.13/0.1.14 后**搁置**，记在 `POST_RELEASE_BUGS.md` 勿关单）；PR-002 带宽；L-02/03/06 等。
 
-## 28. ��Ȼ���Լ�¼��ʱ������������2026-10-09��ʵ����ɡ������ա�δ���棩
+## 28. 自然语言记录与时间语义升级（2026-10-09 立项实施；2026-10-11 已合并 main；验收未清零，未发版）
 
-- **��Ʒĸ��**������ `course_manager_spec_v0_1/22_NATURAL_LANGUAGE_TIME_SPEC.md`��Ψһʱ���������Դ����ͬ������ 00/02/05/06/07/15/19/README��
-- **���� ADR**��`docs/ADR-010-date-datetime-precision.md`��DATE xor DATETIME������ʱ����ȫ��ͶӰ������Ǩ�ƣ���
-- **����ʵ��**��`packages/application/src/timeParsing.ts`��ȷ��������/�����/����/ѧ����/��ݲ�ȫ/���ȣ�+ `captureParsing.ts` ���ݷ������﷨��ȫ�����ᴿ��`processClearCapture` д��ʱ���ֶ��� `captured_tz`��
-- **����ģ��**��Item `start_date`/`occurrence_*_date`/`due_date`/`time_zone`��RawCapture `captured_tz`��Postgres `007_date_precision.sql`��**δӦ�õ�����**����Dexie v7 ������չ��
-- **��Ϊ**������������������ʱ��δ����������ȷ�ϣ�DATE due=�������ա�DATE occurrence Ԥ����ê 09:00��DATE start ���Զ� start reminder��AI ���û�����������
-- **���ֽ�ֹ������أ�**��δǨ�������⡢δ�� APK/EXE��δ�����ϸ��¡�δ�� `course-manager`/`course_manager_device_id`��δ��д RawCapture ԭ�ġ�
+- **状态**：实施完成并经四轮独立复审、真实 PostgreSQL 集成验证与 Release Candidate Gate（PASS）；feature 分支 `feat/nl-capture-time-semantics` 已合并 `main`（合并提交 `c0d4c2140f131daa84f4449025e617a6fb4f76a6`）。门控（该提交实跑）：format:check / lint / typecheck PASS，测试 399 passed + 2 skipped（2 skip = 真实 PG 集成用例，已在一次性 PostgreSQL 单独实测 2/2），cargo check 0 警告。
+- **产品母稿**：`course_manager_spec_v0_1/22_NATURAL_LANGUAGE_TIME_SPEC.md`（唯一时间语义来源，同步覆盖 00/02/05/06/07/15/19/README）。
+- **核心 ADR**：`docs/ADR-010-date-datetime-precision.md`：DATE xor DATETIME、不伪造时刻；全套影响与迁移（契约/存储/同步/API/UI）。
+- **解析实现**：`packages/application/src/timeParsing.ts`（确定性解析：星期/下周/下下周/学期上下文补全/相对日期/时间跨度最长匹配去重）+ `captureParsing.ts`（分类规则与标题净化）；`processClearCapture` 写入时间字段并记录 `captured_tz`；AI 解释服务端硬校验（`apps/api/src/ai/interpretation.ts` 的 `timeSuggestionsAnchored`）。
+- **数据模型**：Item `start_date`/`occurrence_*_date`/`due_date`/`time_zone`；RawCapture `captured_tz`；Postgres `007_date_precision.sql`（**尚未应用到生产库**）；Dexie v7 仅本地扩展。
+- **行为**：纯日期事项不造时间；解析不出不臆造；DATE due=当日日终；DATE occurrence 预警锚 09:00；DATE start 只起 start reminder；AI 整理由用户点击触发、不自动执行。
+- **发布前人工实机项（NOT RUN，未清零）**：双端录入/编辑/重启读取、DATE 提醒实机、双端差异、线上同步（待新后端部署后验）——见第三阶段报告「未完成实机验收清单」。
+- **禁止事项（执行人）**：**未迁移生产库、未打包正式 APK/EXE、未推热更新**；永不改 `course-manager`/`course_manager_device_id`、永不改写 RawCapture 原文。
