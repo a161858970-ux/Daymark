@@ -21,20 +21,33 @@ export const createRawCaptureSchema = z.object({
   captured_tz: z.string().min(1).max(64).nullish(),
 });
 
+// New fields introduced by 007/ADR-010: pre-007 clients omit these keys
+// entirely in sync payloads. ADR-010 §4 requires "缺省视为 null", so absence
+// is normalized to null instead of rejected.
+const dateOnlyOrMissing = dateOnlySchema
+  .nullish()
+  .transform((value) => value ?? null);
+const zoneOrMissing = z
+  .string()
+  .min(1)
+  .max(64)
+  .nullish()
+  .transform((value) => value ?? null);
+
 export const itemFieldsSchema = z.object({
   title: z.string().trim().min(1).max(500),
   detail: z.string().max(20000).nullable(),
   course_id: uuidSchema.nullable(),
   status: itemStatusSchema,
   start_at: isoDateTimeSchema.nullable(),
-  start_date: dateOnlySchema.nullable(),
+  start_date: dateOnlyOrMissing,
   occurrence_start_at: isoDateTimeSchema.nullable(),
-  occurrence_start_date: dateOnlySchema.nullable(),
+  occurrence_start_date: dateOnlyOrMissing,
   occurrence_end_at: isoDateTimeSchema.nullable(),
-  occurrence_end_date: dateOnlySchema.nullable(),
+  occurrence_end_date: dateOnlyOrMissing,
   due_at: isoDateTimeSchema.nullable(),
-  due_date: dateOnlySchema.nullable(),
-  time_zone: z.string().min(1).max(64).nullable(),
+  due_date: dateOnlyOrMissing,
+  time_zone: zoneOrMissing,
   reminder_level: reminderLevelSchema,
   raw_capture_id: uuidSchema.nullable(),
 });

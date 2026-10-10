@@ -673,3 +673,64 @@ it("syncs Item complete, tombstone and bounded Undo through the same identity", 
     await db.close();
   }
 });
+
+it("accepts pre-007 ITEM payloads that omit the new date fields (ADR-010 缺省视为 null)", async () => {
+  const db = new PGlite();
+  for (const name of ["001_initial.sql", "007_date_precision.sql"]) {
+    const migration = fileURLToPath(
+      new URL(`../../../../backend/migrations/${name}`, import.meta.url),
+    );
+    await db.exec(await readFile(migration, "utf8"));
+  }
+  const port: CloudDatabase = {
+    query: async (sql, params) => db.query(sql, params),
+    transaction: (work) =>
+      db.transaction((tx) =>
+        work({ query: async (sql, params) => tx.query(sql, params) }),
+      ),
+  };
+  const sync = new CloudSync(port);
+  try {
+    const owner = randomUUID();
+    const itemId = randomUUID();
+    const now = new Date().toISOString();
+    // Shape sent by clients released before 007: no *_date / time_zone keys.
+    const pushed = await sync.pushOne(owner, {
+      mutation_id: randomUUID(),
+      entity_type: "ITEM",
+      entity_id: itemId,
+      operation: "CREATE",
+      base_version: null,
+      changed_fields: {
+        title: "旧客户端事项",
+        detail: null,
+        course_id: null,
+        status: "INCOMPLETE",
+        start_at: null,
+        occurrence_start_at: null,
+        occurrence_end_at: null,
+        due_at: "2026-10-25T02:00:00.000Z",
+        reminder_level: "NORMAL",
+        raw_capture_id: null,
+        created_at: now,
+        updated_at: now,
+      },
+    });
+    expect(pushed).toMatchObject({ result: "ACK", entity_version: 1 });
+    const row = await db.query<{
+      due_date: string | null;
+      time_zone: string | null;
+      due_at: Date;
+    }>(
+      "SELECT due_date::text AS due_date, time_zone, due_at FROM items WHERE id = $1",
+      [itemId],
+    );
+    expect(row.rows[0]?.due_date).toBeNull();
+    expect(row.rows[0]?.time_zone).toBeNull();
+    expect(new Date(row.rows[0]!.due_at).toISOString()).toBe(
+      "2026-10-25T02:00:00.000Z",
+    );
+  } finally {
+    await db.close();
+  }
+});
