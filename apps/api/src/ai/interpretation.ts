@@ -1,4 +1,4 @@
-import { preprocessCapture } from "@daymark/application";
+import { addDays, parseTimes, preprocessCapture } from "@daymark/application";
 import {
   interpretationSchema,
   type CaptureInterpretation,
@@ -8,6 +8,22 @@ import type { Course, RawCapture } from "@daymark/domain";
 import { CloudDaymark, CloudError } from "../db/cloud.js";
 import { CloudAcademicManager } from "../db/academic.js";
 import type { RateLimiter } from "../rateLimit.js";
+
+/**
+ * Relative temporal expressions that can only be anchored to a capture-local
+ * day (captured_tz). Mirrors the relative-phrase rules in
+ * `packages/application/src/timeParsing.ts` (明天/后天/大后天/今天/昨天/下周
+ * (含下下周)/本周/星期X/周X).
+ */
+const RELATIVE_TIME_HINT =
+  /(今天|今日|明天|明日|后天|大后天|昨天|昨日|下周|本周|这周|星期[一二三四五六日天]|周[一二三四五六日天])/u;
+
+/** Source facts needed to judge whether an AI time suggestion is anchored. */
+interface TemporalSourceContext {
+  capturedAt: string;
+  capturedTimeZone: string | null;
+  semester: { start_date: string; end_date: string } | null;
+}
 
 export interface InterpretationProvider {
   interpret(input: {
@@ -209,6 +225,13 @@ export class CaptureInterpretationService {
         knownCourses,
         currentCourse,
         result.data,
+        {
+          capturedAt: capture.captured_at,
+          capturedTimeZone: capture.captured_tz,
+          semester: semester
+            ? { start_date: semester.start_date, end_date: semester.end_date }
+            : null,
+        },
       )
     )
       throw new CloudError(
@@ -234,6 +257,7 @@ export class CaptureInterpretationService {
     courses: Course[],
     currentCourse: Course | null,
     value: CaptureInterpretation,
+    temporal: TemporalSourceContext,
   ): boolean {
     const normalized = rawText.trim().replace(/\s+/g, " ");
     const sourceContains = (candidate: string | null) =>
@@ -276,6 +300,18 @@ export class CaptureInterpretationService {
       ].some(Boolean)
     )
       return false;
+    // Historical capture without captured_tz: a relative phrase (明天/下周三/…)
+    // has no reliable anchor, so concrete dates/times derived from it must not
+    // enter a valid interpretation. Only values the deterministic parser can
+    // prove from the text (explicit full dates, or year-less dates completed
+    // from reliable semester context) may pass — the AI prompt alone is not
+    // trusted to obey this (22_NATURAL_LANGUAGE_TIME_SPEC / ADR-010).
+    if (
+      !temporal.capturedTimeZone &&
+      RELATIVE_TIME_HINT.test(normalized) &&
+      !this.timeSuggestionsAnchored(value, normalized, temporal)
+    )
+      return false;
     if (
       value.classification === "MULTI_ITEM_CANDIDATE" &&
       value.split_candidates.length < 2
@@ -287,6 +323,65 @@ export class CaptureInterpretationService {
       !value.course_information
     )
       return false;
+    return true;
+  }
+
+  /**
+   * Deterministic anchor check for historical captures without captured_tz:
+   * re-run the shared time parser with no capture-local day, so relative
+   * phrases resolve to nothing, and accept AI time values only when they are
+   * provable from the text itself (explicit full Y-M-D, or year-less dates
+   * completed from reliable semester context per existing rules).
+   */
+  private timeSuggestionsAnchored(
+    value: CaptureInterpretation,
+    text: string,
+    temporal: TemporalSourceContext,
+  ): boolean {
+    const proposedDates = [
+      value.start_date,
+      value.occurrence_start_date,
+      value.occurrence_end_date,
+      value.due_date,
+    ];
+    const proposedInstants = [
+      value.start_at,
+      value.occurrence_start_at,
+      value.occurrence_end_at,
+      value.due_at,
+    ];
+    if (
+      proposedDates.every((date) => date === null) &&
+      proposedInstants.every((instant) => instant === null)
+    )
+      return true;
+    const proven = parseTimes({
+      text,
+      capturedAt: temporal.capturedAt,
+      timeZone: null,
+      semester: temporal.semester,
+      semesterYear: temporal.semester
+        ? Number(temporal.semester.start_date.slice(0, 4))
+        : null,
+    }).resolved;
+    const provenDates = new Set<string>();
+    const provenInstants = new Set<number>();
+    for (const time of proven) {
+      if (time.date) {
+        provenDates.add(time.date);
+        // "X前" maps the deadline to the previous local day; the anchored
+        // target day itself is equally source-backed.
+        if (time.beforeTarget) provenDates.add(addDays(time.date, 1));
+      }
+      if (time.instant) provenInstants.add(Date.parse(time.instant));
+    }
+    for (const date of proposedDates)
+      if (date && !provenDates.has(date)) return false;
+    for (const instant of proposedInstants) {
+      if (!instant) continue;
+      const ms = Date.parse(instant);
+      if (Number.isNaN(ms) || !provenInstants.has(ms)) return false;
+    }
     return true;
   }
 }

@@ -272,3 +272,51 @@ it("still parses absolute dated expressions without captured_tz", () => {
   });
   expect(withSemester.resolved[0]?.date).toBe("2026-10-12");
 });
+
+it("parses 下下周三课堂展示 as DATE occurrence two weeks out", () => {
+  const result = parseTimes({
+    text: "下下周三课堂展示",
+    capturedAt: CAPTURE,
+    timeZone: TZ,
+  });
+  const occ = result.resolved.find((t) => t.semantic === "occurrence");
+  expect(occ?.precision).toBe("DATE");
+  expect(occ?.instant).toBeNull();
+  // Capture local 2026-10-09 (Friday); the natural week starts Mon 2026-10-05.
+  // 下下周三 = week start + 14 days + Wednesday → 2026-10-21.
+  expect(occ?.date).toBe("2026-10-21");
+  const fields = timesToItemFields(result.resolved);
+  expect(fields.occurrence_start_date).toBe("2026-10-21");
+  // DATE/DATETIME mutual exclusion: no fabricated clock values.
+  expect(fields.occurrence_start_at).toBeNull();
+  expect(fields.occurrence_end_date).toBeNull();
+  expect(fields.occurrence_end_at).toBeNull();
+  expect(fields.start_date).toBeNull();
+  expect(fields.start_at).toBeNull();
+  expect(fields.due_date).toBeNull();
+  expect(fields.due_at).toBeNull();
+});
+
+it("parses 星期三课堂展示 as the nearest future Wednesday DATE", () => {
+  const result = parseTimes({
+    text: "星期三课堂展示",
+    capturedAt: CAPTURE,
+    timeZone: TZ,
+  });
+  const occ = result.resolved.find((t) => t.semantic === "occurrence");
+  expect(occ?.precision).toBe("DATE");
+  expect(occ?.instant).toBeNull();
+  // 2026-10-09 is Friday; this week's Wednesday (10-07) is already past →
+  // the nearest future Wednesday is 2026-10-14.
+  expect(occ?.date).toBe("2026-10-14");
+  const fields = timesToItemFields(result.resolved);
+  expect(fields.occurrence_start_date).toBe("2026-10-14");
+  // DATE/DATETIME mutual exclusion: no fabricated clock values.
+  expect(fields.occurrence_start_at).toBeNull();
+  expect(fields.occurrence_end_date).toBeNull();
+  expect(fields.occurrence_end_at).toBeNull();
+  expect(fields.start_date).toBeNull();
+  expect(fields.start_at).toBeNull();
+  expect(fields.due_date).toBeNull();
+  expect(fields.due_at).toBeNull();
+});

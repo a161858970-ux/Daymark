@@ -10,6 +10,7 @@ import {
   type InterpretationProvider,
 } from "./interpretation.js";
 import { ChatCompletionsInterpretationProvider } from "./chat-provider.js";
+import { CloudAcademicManager } from "../db/academic.js";
 
 const ownerOne = "11111111-1111-4111-8111-111111111111";
 const ownerTwo = "22222222-2222-4222-8222-222222222222";
@@ -379,4 +380,217 @@ it("sends minimal context through a strict structured response request", async (
     },
   });
   expect(JSON.stringify(sent)).not.toContain("server-secret");
+});
+
+async function setupAiHarness() {
+  const db = new PGlite();
+  const migration = fileURLToPath(
+    new URL("../../../../backend/migrations/001_initial.sql", import.meta.url),
+  );
+  await db.exec(await readFile(migration, "utf8"));
+  await db.exec(
+    await readFile(
+      fileURLToPath(
+        new URL(
+          "../../../../backend/migrations/007_date_precision.sql",
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    ),
+  );
+  const port: CloudDatabase = {
+    query: async (sql, params) => db.query(sql, params),
+    transaction: (work) =>
+      db.transaction((tx) =>
+        work({ query: async (sql, params) => tx.query(sql, params) }),
+      ),
+  };
+  const cloud = new CloudDaymark(port);
+  const academic = new CloudAcademicManager(port);
+  let providerValue: unknown = null;
+  const provider: InterpretationProvider = {
+    interpret: async () => providerValue,
+  };
+  const server = buildServer({
+    cloud,
+    interpretation: new CaptureInterpretationService(cloud, academic, provider),
+    verifyToken: async (token) => (token === "one" ? ownerOne : null),
+  });
+  return {
+    db,
+    cloud,
+    academic,
+    server,
+    setProviderValue: (value: unknown) => {
+      providerValue = value;
+    },
+  };
+}
+
+function proposalFor(
+  rawText: string,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    classification: "ITEM",
+    title: rawText,
+    detail: null,
+    course_candidate: null,
+    start_at: null,
+    start_date: null,
+    occurrence_start_at: null,
+    occurrence_start_date: null,
+    occurrence_end_at: null,
+    occurrence_end_date: null,
+    due_at: null,
+    due_date: null,
+    course_information: null,
+    split_candidates: [],
+    confidence: 0.5,
+    uncertainty: null,
+    ...overrides,
+  };
+}
+
+it("blocks AI time values that only come from relative phrases when captured_tz is missing", async () => {
+  const { db, cloud, server, setProviderValue } = await setupAiHarness();
+  try {
+    const rawText = "老师让我们关注一下第三章，明天再说";
+    const historical = await cloud.createRawCapture(ownerOne, randomUUID(), {
+      source: "QUICK_CAPTURE",
+      raw_text: rawText,
+      captured_at: "2026-10-09T02:00:00.000Z",
+      captured_tz: null,
+    });
+    const request = () =>
+      server.inject({
+        method: "POST",
+        url: "/api/v1/ai/capture-interpretations",
+        headers: { authorization: "Bearer one" },
+        payload: {
+          raw_capture_id: historical.id,
+          context: {
+            candidate_course_ids: [],
+            current_course_id: null,
+            current_semester_id: null,
+          },
+        },
+      });
+    // Adversarial: the provider deliberately violates the prompt and returns
+    // concrete values derived from 明天 (capture day 2026-10-09 → 10-10)
+    // although there is no captured_tz to anchor them. The server must refuse
+    // even though the model misbehaves.
+    for (const violation of [
+      { due_date: "2026-10-10" },
+      { due_at: "2026-10-10T07:00:00.000Z" },
+      { occurrence_start_date: "2026-10-10" },
+      { occurrence_start_at: "2026-10-10T07:00:00.000Z" },
+      { start_date: "2026-10-10" },
+    ]) {
+      setProviderValue(proposalFor(rawText, violation));
+      const response = await request();
+      expect(response.statusCode, JSON.stringify(violation)).toBe(502);
+      expect(response.json().error.code).toBe("AI_INVALID_OUTPUT");
+    }
+    // A compliant suggestion that keeps the temporal phrase in the text is
+    // still a valid, reviewable proposal.
+    setProviderValue(proposalFor(rawText));
+    const compliant = await request();
+    expect(compliant.statusCode).toBe(200);
+    expect(compliant.json().data).toMatchObject({
+      source: "AI",
+      requires_confirmation: true,
+      interpretation: { due_date: null, due_at: null, start_date: null },
+    });
+    // The raw text is never rewritten and no formal object is auto-created.
+    expect((await cloud.getRawCapture(ownerOne, historical.id))?.raw_text).toBe(
+      rawText,
+    );
+    expect((await db.query("SELECT id FROM items")).rows).toHaveLength(0);
+  } finally {
+    await server.close();
+    await db.close();
+  }
+});
+
+it("keeps anchored dates valid: full Y-M-D, semester-completed years and capture-local relative days", async () => {
+  const { db, cloud, academic, server, setProviderValue } =
+    await setupAiHarness();
+  try {
+    const request = (id: string, semesterId: string | null = null) =>
+      server.inject({
+        method: "POST",
+        url: "/api/v1/ai/capture-interpretations",
+        headers: { authorization: "Bearer one" },
+        payload: {
+          raw_capture_id: id,
+          context: {
+            candidate_course_ids: [],
+            current_course_id: null,
+            current_semester_id: semesterId,
+          },
+        },
+      });
+
+    // (1) A user-written full date is anchored even without captured_tz and
+    // even when a relative phrase is also present.
+    const datedText = "老师让我们关注一下第三章，2026年10月15日交，明天再说";
+    const dated = await cloud.createRawCapture(ownerOne, randomUUID(), {
+      source: "QUICK_CAPTURE",
+      raw_text: datedText,
+      captured_at: "2026-10-09T02:00:00.000Z",
+      captured_tz: null,
+    });
+    setProviderValue(proposalFor(datedText, { due_date: "2026-10-15" }));
+    const fullDate = await request(dated.id);
+    expect(fullDate.statusCode, JSON.stringify(fullDate.json())).toBe(200);
+    expect(fullDate.json().data.interpretation.due_date).toBe("2026-10-15");
+
+    // (2) Year-less completion is kept only with reliable semester context.
+    const semester = await academic.createSemester(ownerOne, randomUUID(), {
+      name: "2026秋季学期",
+      start_date: "2026-09-01",
+      end_date: "2027-01-15",
+    });
+    const yearlessText = "老师让我们关注一下第三章，10.12交，明天再说";
+    const yearless = await cloud.createRawCapture(ownerOne, randomUUID(), {
+      source: "QUICK_CAPTURE",
+      raw_text: yearlessText,
+      captured_at: "2026-10-09T02:00:00.000Z",
+      captured_tz: null,
+    });
+    setProviderValue(proposalFor(yearlessText, { due_date: "2026-10-12" }));
+    // Without semester context the year would be a guess → blocked.
+    expect((await request(yearless.id)).statusCode).toBe(502);
+    // With the semester context the approved completion rule allows it.
+    const semesterBacked = await request(yearless.id, semester.id);
+    expect(
+      semesterBacked.statusCode,
+      JSON.stringify(semesterBacked.json()),
+    ).toBe(200);
+    expect(semesterBacked.json().data.interpretation.due_date).toBe(
+      "2026-10-12",
+    );
+
+    // (3) With captured_tz the relative day is anchored to the capture-local
+    // day (2026-10-09 Asia/Shanghai → 明天 = 2026-10-10) and stays valid.
+    const zonedText = "老师让我们关注一下第三章，明天再说";
+    const zoned = await cloud.createRawCapture(ownerOne, randomUUID(), {
+      source: "QUICK_CAPTURE",
+      raw_text: zonedText,
+      captured_at: "2026-10-09T02:00:00.000Z",
+      captured_tz: "Asia/Shanghai",
+    });
+    setProviderValue(proposalFor(zonedText, { due_date: "2026-10-10" }));
+    const relative = await request(zoned.id);
+    expect(relative.statusCode, JSON.stringify(relative.json())).toBe(200);
+    expect(relative.json().data.interpretation.due_date).toBe("2026-10-10");
+
+    // AI results are review suggestions only: nothing formal was created.
+    expect((await db.query("SELECT id FROM items")).rows).toHaveLength(0);
+  } finally {
+    await server.close();
+    await db.close();
+  }
 });
