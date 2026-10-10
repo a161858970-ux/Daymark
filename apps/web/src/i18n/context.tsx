@@ -78,8 +78,12 @@ const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 function useDisplayNow(): Date {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const schedule = () => {
+      // Always drop the previous timer first so recalibration can never leave
+      // two rollover timers running side by side.
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
       const current = new Date();
       const nextYear = new Date(current.getFullYear() + 1, 0, 1);
       const delay = Math.min(
@@ -87,11 +91,17 @@ function useDisplayNow(): Date {
         MAX_TIMEOUT_MS,
       );
       timer = setTimeout(() => {
+        timer = undefined;
         setNow(new Date());
         schedule();
       }, delay);
     };
-    const calibrate = () => setNow(new Date());
+    // Calibrate the clock AND re-aim the rollover timer: after a long sleep
+    // or a system clock change the old delay may point at the wrong moment.
+    const calibrate = () => {
+      setNow(new Date());
+      schedule();
+    };
     schedule();
     window.addEventListener("focus", calibrate);
     document.addEventListener("visibilitychange", calibrate);

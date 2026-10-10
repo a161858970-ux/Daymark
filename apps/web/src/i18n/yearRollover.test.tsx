@@ -138,3 +138,63 @@ it("recalibrates when the app becomes visible again", async () => {
   });
   container.remove();
 });
+
+it("keeps exactly one pending timer across recalibrations and firings", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 11, 31, 20, 0, 0));
+  const { container, root } = await mountList([
+    itemOf("33333333-3333-4333-8333-333333333335", "2026-10-21", "本年事项"),
+  ]);
+  const baseline = vi.getTimerCount();
+  expect(baseline).toBe(1);
+  // Recalibration must re-aim the single rollover timer, never stack timers.
+  for (let i = 0; i < 3; i++) {
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+  }
+  await act(async () => {
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  expect(vi.getTimerCount()).toBe(baseline);
+  // After the year timer fires the chain keeps exactly one timer too.
+  await act(async () => {
+    vi.advanceTimersByTime(5 * 60 * 60 * 1000);
+  });
+  expect(container.innerHTML).toContain("2026年10月21日");
+  expect(vi.getTimerCount()).toBe(baseline);
+  await act(async () => {
+    root.unmount();
+  });
+  container.remove();
+  // Unmount cleans the pending timer up entirely.
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("still rolls over automatically after recalibration re-aims the timer", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 11, 31, 20, 0, 0));
+  const { container, root } = await mountList([
+    itemOf("33333333-3333-4333-8333-333333333336", "2027-01-01", "跨年事项"),
+  ]);
+  expect(container.innerHTML).toContain("2027年1月1日");
+  // First rollover (the fired timer re-aims itself)…
+  await act(async () => {
+    vi.advanceTimersByTime(5 * 60 * 60 * 1000);
+  });
+  expect(container.innerHTML).not.toContain("2027年");
+  // …then a focus recalibration mid-2027 re-aims the timer again…
+  await act(async () => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  // …and the NEXT New Year still arrives automatically (segmented wake-ups
+  // included: ~370 days exceeds the single-timeout ceiling).
+  await act(async () => {
+    vi.advanceTimersByTime(370 * 24 * 60 * 60 * 1000);
+  });
+  expect(container.innerHTML).toContain("2027年1月1日");
+  await act(async () => {
+    root.unmount();
+  });
+  container.remove();
+});
