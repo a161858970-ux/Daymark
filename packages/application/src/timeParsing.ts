@@ -612,6 +612,33 @@ function findSemesterWeekAnchors(
   return { weekAnchors, unresolved };
 }
 
+/**
+ * Longest-match-wins overlap resolution. Full expressions (`2026年10月21日`,
+ * `大后天`) are re-matched by inner patterns (`10月21日`, `后天`); keeping only
+ * the longest non-overlapping spans keeps both the parsed value and the
+ * purification spans faithful to the source instead of letting an inner
+ * fragment corrupt the date or leave a broken title remainder.
+ */
+export function dropOverlappingShorter<T extends { span: SourceSpan }>(
+  candidates: readonly T[],
+): T[] {
+  const ordered = [...candidates].sort(
+    (a, b) =>
+      b.span.end - b.span.start - (a.span.end - a.span.start) ||
+      a.span.start - b.span.start,
+  );
+  const kept: T[] = [];
+  for (const candidate of ordered) {
+    const overlaps = kept.some(
+      (other) =>
+        candidate.span.start < other.span.end &&
+        other.span.start < candidate.span.end,
+    );
+    if (!overlaps) kept.push(candidate);
+  }
+  return kept;
+}
+
 function detectSemantic(
   text: string,
   span: SourceSpan,
@@ -738,9 +765,10 @@ export function parseTimes(input: ParseTimeInput): TimeParseResult {
 
   const dateAnchors = findDateAnchors(text, input, captureLocalDate);
   const relativeAnchors = findRelativeAnchors(text, input, captureLocalDate);
-  const anchors = [...dateAnchors, ...relativeAnchors].sort(
-    (a, b) => a.span.start - b.span.start,
-  );
+  const anchors = dropOverlappingShorter([
+    ...dateAnchors,
+    ...relativeAnchors,
+  ]).sort((a, b) => a.span.start - b.span.start);
 
   // Historical captures without captured_tz: leave relative phrases in text.
   if (!captureLocalDate) {

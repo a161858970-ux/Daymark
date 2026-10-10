@@ -79,7 +79,7 @@ function Row({
   onOpen: (item: Item) => void;
   onComplete: (item: Item) => void;
 }) {
-  const { t, formatDateTime, formatDateOnly } = useI18n();
+  const { t, formatItemDateTime, formatItemDateOnly } = useI18n();
   const course = courses.find((value) => value.id === item.course_id);
   return (
     <li
@@ -122,7 +122,7 @@ function Row({
         <span className="item-title">{item.title}</span>
         <span className="item-meta">
           {course?.name ?? t("item.noCourse")} ·{" "}
-          {timeLabel(item, t, formatDateTime, formatDateOnly)}
+          {timeLabel(item, t, formatItemDateTime, formatItemDateOnly)}
         </span>
       </button>
     </li>

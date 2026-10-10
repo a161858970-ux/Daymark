@@ -1,5 +1,6 @@
 import type { Course, RawCaptureSource } from "@daymark/domain";
 import {
+  dropOverlappingShorter,
   parseTimes,
   timesToItemFields,
   type ParsedTimeValue,
@@ -146,8 +147,15 @@ export function purifyTitle(
   absorbedSpans: { start: number; end: number }[],
 ): { title: string; purified: boolean } {
   if (!absorbedSpans.length) return { title, purified: false };
+  // Overlapping spans collapse to the longest match first: removing an inner
+  // month-day fragment (`10月21日`) before its full expression
+  // (`2026年10月21日`) would leave a broken remainder like `2026年课堂展示`
+  // and then refuse the outer span as ungrammatical.
+  const deduped = dropOverlappingShorter(
+    absorbedSpans.map((span) => ({ span })),
+  ).map((entry) => entry.span);
   // Remove from the end so earlier spans stay valid.
-  const ordered = [...absorbedSpans].sort((a, b) => b.start - a.start);
+  const ordered = [...deduped].sort((a, b) => b.start - a.start);
   let current = title;
   let purified = false;
   for (const span of ordered) {

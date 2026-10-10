@@ -296,3 +296,53 @@ it("keeps course name mid-sentence in course information content", () => {
   expect(parsed.classification).toBe("COURSE_INFORMATION");
   expect(parsed.content === null || parsed.content.length > 0).toBe(true);
 });
+
+it("purifies full date expressions without leaving year fragments", () => {
+  const plain = preprocessCapture({ ...base, rawText: "10月21日课堂展示" });
+  expect(plain.classification).toBe("ITEM");
+  expect(plain.title).toBe("课堂展示");
+  expect(plain.timeFields.occurrence_start_date).toBe("2026-10-21");
+  expect(plain.timeFields.occurrence_start_at).toBeNull();
+
+  const rawText = "2026年10月21日课堂展示";
+  const withYear = preprocessCapture({ ...base, rawText });
+  // Regression: the inner month-day span used to be removed first, leaving
+  // `2026年课堂展示`.
+  expect(withYear.classification).toBe("ITEM");
+  expect(withYear.title).toBe("课堂展示");
+  expect(withYear.timeFields).toEqual(plain.timeFields);
+  expect(withYear.timeFields).toMatchObject({
+    occurrence_start_date: "2026-10-21",
+    occurrence_start_at: null,
+    occurrence_end_date: null,
+    occurrence_end_at: null,
+    due_date: null,
+    due_at: null,
+    start_date: null,
+    start_at: null,
+  });
+  // RawCapture text is never rewritten.
+  expect(rawText).toBe("2026年10月21日课堂展示");
+});
+
+it("purifies a full date with a clock time as DATETIME without breaking precision", () => {
+  const rawText = "2026年10月21日 15:00课堂展示";
+  const result = preprocessCapture({ ...base, rawText });
+  expect(result.classification).toBe("ITEM");
+  expect(result.title).toBe("课堂展示");
+  // 15:00 Asia/Shanghai on 2026-10-21.
+  expect(result.timeFields.occurrence_start_at).toBe(
+    "2026-10-21T07:00:00.000Z",
+  );
+  expect(result.timeFields.occurrence_start_date).toBeNull();
+  expect(rawText).toBe("2026年10月21日 15:00课堂展示");
+});
+
+it("keeps grammatically essential date expressions intact", () => {
+  const rawText = "2026年10月21日的作业";
+  const result = preprocessCapture({ ...base, rawText });
+  // Removing the date would leave `的作业` — destructive purification must
+  // not happen; the whole expression stays.
+  expect(result.title).toContain("2026年10月21日");
+  expect(rawText).toBe("2026年10月21日的作业");
+});

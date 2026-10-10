@@ -320,3 +320,17 @@ it("parses 星期三课堂展示 as the nearest future Wednesday DATE", () => {
   expect(fields.due_date).toBeNull();
   expect(fields.due_at).toBeNull();
 });
+
+it("prefers the longest relative match (大后天 over 后天)", () => {
+  const result = parseTimes({
+    text: "大后天交作业",
+    capturedAt: CAPTURE,
+    timeZone: TZ,
+  });
+  // Capture local 2026-10-09; 大后天 = +3 days. The inner 后天 match (+2)
+  // must not overwrite it.
+  const due = result.resolved.find((t) => t.semantic === "due");
+  expect(due?.date).toBe("2026-10-12");
+  const fields = timesToItemFields(result.resolved);
+  expect(fields.due_date).toBe("2026-10-12");
+});

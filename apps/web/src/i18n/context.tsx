@@ -39,6 +39,13 @@ type I18nValue = {
   ) => string;
   /** DATE calendar body (YYYY-MM-DD) — no timezone shift, no fake clock. */
   formatDateOnly: (value: string) => string;
+  /**
+   * Compact list labels (frozen year rule: show year only when the item's
+   * displayed local year differs from the current local year). `now` is
+   * injectable for deterministic tests.
+   */
+  formatItemDateOnly: (value: string, now?: Date) => string;
+  formatItemDateTime: (value: Date | string | number, now?: Date) => string;
   formatMonthDay: (value: Date | string | number) => string;
   formatWeekday: (
     value: Date | string | number,
@@ -89,6 +96,10 @@ export function I18nProvider({
       formatDateTime: (value, options) =>
         fmt.formatDateTime(value, locale, options),
       formatDateOnly: (value) => fmt.formatDateOnly(value, locale),
+      formatItemDateOnly: (value, now) =>
+        fmt.formatItemDateOnly(value, locale, now),
+      formatItemDateTime: (value, now) =>
+        fmt.formatItemDateTime(value, locale, now),
       formatMonthDay: (value) => fmt.formatMonthDay(value, locale),
       formatWeekday: (value, options) =>
         fmt.formatWeekday(value, locale, options),

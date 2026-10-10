@@ -55,6 +55,55 @@ export function formatDateOnly(value: string, locale: Locale): string {
   }).format(date);
 }
 
+/**
+ * Compact list display for a DATE calendar body. Frozen product rule: the
+ * year shows only when the item's displayed local year differs from the
+ * current local year — same rule for past and future, no rolling window.
+ * `now` is injectable so tests never depend on the real clock. Display only:
+ * the stored calendar body is untouched.
+ */
+export function formatItemDateOnly(
+  value: string,
+  locale: Locale,
+  now: Date = new Date(),
+): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return "";
+  const date = new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+  );
+  if (Number.isNaN(date.getTime())) return "";
+  const showYear = Number(match[1]) !== now.getFullYear();
+  return formatTime(date, locale, {
+    ...(showYear ? { year: "numeric" } : {}),
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/**
+ * Compact list display for a DATETIME instant. The year decision uses the
+ * same local-timezone rendering as the displayed date (local getters), never
+ * the UTC ISO string's year. Same frozen year rule as formatItemDateOnly.
+ */
+export function formatItemDateTime(
+  value: Date | string | number,
+  locale: Locale,
+  now: Date = new Date(),
+): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const showYear = date.getFullYear() !== now.getFullYear();
+  return formatTime(date, locale, {
+    ...(showYear ? { year: "numeric" } : {}),
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function formatWeekday(
   value: Date | string | number,
   locale: Locale,
