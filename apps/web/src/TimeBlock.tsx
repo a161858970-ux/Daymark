@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useI18n } from "./i18n/index.js";
-import { formatMonthDay } from "./i18n/format.js";
+import { formatItemDateOnly } from "./i18n/format.js";
 import { getMessage } from "./i18n/messages/index.js";
 import type { Locale } from "./i18n/locale.js";
 import { DateTimeField } from "./DateTimeField.js";
@@ -25,17 +25,22 @@ interface Props {
   onChange: (next: TimeFields) => void;
 }
 
-/** "2026-09-20" → "9月20日"; "2026-09-20T15:00" keeps the clock. */
+/**
+ * "2026-09-20" → "9月20日" (year only outside the current local year, the
+ * frozen list rule via the shared formatter); "2026-09-20T15:00" keeps the
+ * clock.
+ */
 export function formatStamp(
   local: string,
   locale: Locale,
   forceTime = false,
+  now: Date = new Date(),
 ): string {
   if (!local) return "";
   const [date = "", time = ""] = local.split("T");
   const [year = 0, month = 0, day = 0] = date.split("-").map(Number);
   if (!year || !month || !day) return "";
-  const stamp = formatMonthDay(new Date(year, month - 1, day), locale);
+  const stamp = formatItemDateOnly(date, locale, now);
   return time && (time !== "00:00" || forceTime) ? `${stamp} ${time}` : stamp;
 }
 
@@ -45,23 +50,24 @@ export function formatOccurrence(
   endDate: string,
   endAt: string,
   locale: Locale,
+  now: Date = new Date(),
 ): string {
   if (!startDate && !startAt) return "";
   if (startDate) {
     const span =
       endDate && endDate !== startDate
-        ? `${formatStamp(startDate, locale)}–${formatStamp(endDate, locale)}`
-        : formatStamp(startDate, locale);
+        ? `${formatStamp(startDate, locale, false, now)}–${formatStamp(endDate, locale, false, now)}`
+        : formatStamp(startDate, locale, false, now);
     return getMessage(locale, "item.occurAt", { value: span });
   }
   if (!endAt)
     return getMessage(locale, "item.occurAt", {
-      value: formatStamp(startAt, locale),
+      value: formatStamp(startAt, locale, false, now),
     });
   const sameDay = endAt.slice(0, 10) === startAt.slice(0, 10);
   const span = sameDay
-    ? `${formatStamp(startAt, locale, true)}–${endAt.slice(11, 16)}`
-    : `${formatStamp(startAt, locale)}–${formatStamp(endAt, locale)}`;
+    ? `${formatStamp(startAt, locale, true, now)}–${endAt.slice(11, 16)}`
+    : `${formatStamp(startAt, locale, false, now)}–${formatStamp(endAt, locale, false, now)}`;
   return getMessage(locale, "item.occurAt", { value: span });
 }
 
@@ -74,13 +80,19 @@ export interface TimeSummary {
 export function timeSummaries(
   value: TimeFields,
   locale: Locale,
+  now: Date = new Date(),
 ): TimeSummary[] {
   const summaries: TimeSummary[] = [];
   if (value.startAt || value.startDate)
     summaries.push({
       key: value.startDate ? "startDate" : "startAt",
       text: getMessage(locale, "item.startAt", {
-        value: formatStamp(value.startDate || value.startAt, locale),
+        value: formatStamp(
+          value.startDate || value.startAt,
+          locale,
+          false,
+          now,
+        ),
       }),
     });
   if (value.occurrenceStartAt || value.occurrenceStartDate)
@@ -94,13 +106,14 @@ export function timeSummaries(
         value.occurrenceEndDate,
         value.occurrenceEndAt,
         locale,
+        now,
       ),
     });
   if (value.dueAt || value.dueDate)
     summaries.push({
       key: value.dueDate ? "dueDate" : "dueAt",
       text: getMessage(locale, "item.dueAt", {
-        value: formatStamp(value.dueDate || value.dueAt, locale),
+        value: formatStamp(value.dueDate || value.dueAt, locale, false, now),
       }),
     });
   return summaries;
@@ -117,9 +130,9 @@ export function timeSummaries(
  * stays optional.
  */
 export function TimeBlock({ value, onChange }: Props) {
-  const { t, locale } = useI18n();
+  const { t, locale, now } = useI18n();
   const [open, setOpen] = useState(false);
-  const summaries = timeSummaries(value, locale);
+  const summaries = timeSummaries(value, locale, now);
 
   const clearStart = () => onChange({ ...value, startAt: "", startDate: "" });
   const clearOccurrence = () =>

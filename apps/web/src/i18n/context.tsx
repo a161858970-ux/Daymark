@@ -29,6 +29,12 @@ type I18nValue = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
   t: Translate;
+  /**
+   * Tracked display clock: refreshes at the local New Year rollover and on
+   * window focus / visibility restore, so mounted UIs follow the frozen
+   * year-display rule without polling.
+   */
+  now: Date;
   formatTime: (
     value: Date | string | number,
     options?: Intl.DateTimeFormatOptions,
@@ -60,6 +66,44 @@ type I18nValue = {
 
 const I18nContext = createContext<I18nValue | null>(null);
 
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
+
+/**
+ * A `Date` that stays correct across the local New Year while mounted. One
+ * one-shot timer (chained at most every ~24.8 days — never per-second
+ * polling) fires at the next local year rollover to trigger a single UI
+ * refresh; window focus / visibility restore recalibrate immediately. The
+ * year comparison stays on the device's local calendar (no UTC, no UTC+8).
+ */
+function useDisplayNow(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      const current = new Date();
+      const nextYear = new Date(current.getFullYear() + 1, 0, 1);
+      const delay = Math.min(
+        Math.max(nextYear.getTime() - current.getTime(), 0),
+        MAX_TIMEOUT_MS,
+      );
+      timer = setTimeout(() => {
+        setNow(new Date());
+        schedule();
+      }, delay);
+    };
+    const calibrate = () => setNow(new Date());
+    schedule();
+    window.addEventListener("focus", calibrate);
+    document.addEventListener("visibilitychange", calibrate);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("focus", calibrate);
+      document.removeEventListener("visibilitychange", calibrate);
+    };
+  }, []);
+  return now;
+}
+
 function applyDocumentLocale(locale: Locale) {
   if (typeof document === "undefined") return;
   document.documentElement.lang = bcp47(locale);
@@ -86,20 +130,22 @@ export function I18nProvider({
     setLocaleState(next);
   }, []);
 
+  const now = useDisplayNow();
   const value = useMemo<I18nValue>(() => {
     const t: Translate = (key, params) => getMessage(locale, key, params);
     return {
       locale,
       setLocale,
       t,
+      now,
       formatTime: (value, options) => fmt.formatTime(value, locale, options),
       formatDateTime: (value, options) =>
         fmt.formatDateTime(value, locale, options),
       formatDateOnly: (value) => fmt.formatDateOnly(value, locale),
-      formatItemDateOnly: (value, now) =>
-        fmt.formatItemDateOnly(value, locale, now),
-      formatItemDateTime: (value, now) =>
-        fmt.formatItemDateTime(value, locale, now),
+      formatItemDateOnly: (value, nowOverride) =>
+        fmt.formatItemDateOnly(value, locale, nowOverride ?? now),
+      formatItemDateTime: (value, nowOverride) =>
+        fmt.formatItemDateTime(value, locale, nowOverride ?? now),
       formatMonthDay: (value) => fmt.formatMonthDay(value, locale),
       formatWeekday: (value, options) =>
         fmt.formatWeekday(value, locale, options),
@@ -110,7 +156,7 @@ export function I18nProvider({
         fmt.weekdayLabelsSundayFirst(locale, style),
       monthLabel: (monthIndex) => fmt.monthLabel(monthIndex, locale),
     };
-  }, [locale, setLocale]);
+  }, [locale, setLocale, now]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
